@@ -1,2 +1,2 @@
 # VaporGit
-A Lite GUI Git manager with cross-platform feature
+A lightweight cross-platform GUI Git client built with Tauri + SolidJS.
