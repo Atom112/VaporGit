@@ -1,4 +1,5 @@
-use git2::{DiffOptions, Repository};
+use std::path::Path;
+use git2::{DiffOptions, Repository, Oid};
 use crate::models::diff::{DiffHunk, DiffLine, DiffLineKind, DiffResult};
 
 const MAX_DIFF_SIZE: usize = 1_000_000;
@@ -99,6 +100,41 @@ fn is_binary(repo: &Repository, file_path: &str) -> bool {
         .and_then(|obj| obj.into_blob().ok())
         .map(|b| b.is_binary())
         .unwrap_or(false)
+}
+
+pub fn get_file_content(
+    repo: &Repository,
+    file_path: &str,
+    commit_id: Option<&str>,
+) -> Result<String, String> {
+    match commit_id {
+        Some(id) => {
+            let oid = Oid::from_str(id).map_err(|e| format!("无效的提交 ID: {}", e))?;
+            let commit = repo
+                .find_commit(oid)
+                .map_err(|e| format!("无法找到提交: {}", e))?;
+            let tree = commit
+                .tree()
+                .map_err(|e| format!("无法获取树: {}", e))?;
+            let entry = tree
+                .get_path(Path::new(file_path))
+                .map_err(|e| format!("无法在提交中找到文件: {}", e))?;
+            let blob = entry
+                .to_object(repo)
+                .map_err(|e| format!("无法获取文件对象: {}", e))?
+                .peel_to_blob()
+                .map_err(|e| format!("无法读取文件内容: {}", e))?;
+            Ok(String::from_utf8_lossy(blob.content()).to_string())
+        }
+        None => {
+            let workdir = repo
+                .workdir()
+                .ok_or_else(|| "无法获取工作目录".to_string())?;
+            let full_path = workdir.join(file_path);
+            std::fs::read_to_string(&full_path)
+                .map_err(|e| format!("无法读取文件: {}", e))
+        }
+    }
 }
 
 fn resolve_tree<'a>(

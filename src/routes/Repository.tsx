@@ -330,6 +330,8 @@ const Repository: Component = () => {
                 filePath={
                   diffStore.selectedFile ?? selectedCommit()?.shortId ?? ''
                 }
+                commitId={selectedCommit()?.id}
+                repoPath={repoPath() ?? undefined}
                 onBack={
                   selectedCommit() && selectedCommitFile()
                     ? () => {

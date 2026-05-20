@@ -62,6 +62,18 @@ export async function getFileDiff(
   });
 }
 
+export async function getFileContent(
+  path: string,
+  filePath: string,
+  commitId?: string
+): Promise<string> {
+  return invoke('get_file_content', {
+    path,
+    filePath,
+    commitId: commitId ?? null,
+  });
+}
+
 export async function getBranchList(path: string): Promise<BranchInfo[]> {
   return invoke('get_branch_list', { path });
 }

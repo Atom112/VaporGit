@@ -49,8 +49,8 @@ const Titlebar: Component = () => {
           title={isMaximized() ? "向下还原" : "最大化"}
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {isMaximized() 
-              ? <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4H4v4m16 0V4h-4m-12 16h4m12 0h-4M4 20h16"></path> 
+            {isMaximized()
+              ? <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h9v9H6zM9 9v9h9V9z"></path>
               : <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16v16H4z"></path>}
           </svg>
         </button>

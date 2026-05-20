@@ -16,3 +16,13 @@ pub fn get_file_diff(
         new_commit.as_deref(),
     )
 }
+
+#[tauri::command]
+pub fn get_file_content(
+    path: String,
+    file_path: String,
+    commit_id: Option<String>,
+) -> Result<String, String> {
+    let repo = git::repo::open_repo(&path)?;
+    git::diff::get_file_content(&repo, &file_path, commit_id.as_deref())
+}
