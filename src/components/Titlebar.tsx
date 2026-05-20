@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 const Titlebar: Component = () => {
   const appWindow = getCurrentWindow();
   const [isMaximized, setIsMaximized] = createSignal(false);
+  const windowControlClass = 'h-full px-4 bg-transparent text-gray-100 transition-colors flex items-center justify-center cursor-default border-0 rounded-lg shadow-none';
 
   onMount(() => {
     appWindow.isMaximized().then(setIsMaximized);
@@ -28,29 +29,22 @@ const Titlebar: Component = () => {
 
   return (
     <div 
-      data-tauri-drag-region
       class="h-9 flex select-none items-center justify-between bg-white/5 border-b border-white/10 shrink-0"
-      onPointerDown={async (e) => {
-        const target = e.target as HTMLElement | null;
-
-        if (e.button === 0 && target?.closest('[data-tauri-drag-region]')) {
-          await appWindow.startDragging();
-        }
-      }}
     >
-      <div data-tauri-drag-region class="px-4 text-xs tracking-wider text-gray-300 font-semibold flex-1 flex items-center h-full">
+      <div data-tauri-drag-region class="px-2 text-xs tracking-wider text-gray-300 font-semibold flex-1 flex items-center gap-2 h-full">
+        <img src="/logo/VaporGit.svg" alt="VaporGit Logo" class="w-5 h-5 pointer-events-none" />
         VaporGit
       </div>
       <div class="flex h-full" data-tauri-no-drag>
         <button
-          class="h-full px-4 hover:bg-white/10 text-gray-100 transition-colors flex items-center justify-center cursor-default"
+          class={`${windowControlClass} hover:bg-white/10`}
           onClick={handleMinimize}
           title="最小化"
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
         </button>
         <button
-          class="h-full px-4 hover:bg-white/10 text-gray-100 transition-colors flex items-center justify-center cursor-default"
+          class={`${windowControlClass} hover:bg-white/10`}
           onClick={handleToggleMaximize}
           title={isMaximized() ? "向下还原" : "最大化"}
         >
@@ -61,7 +55,7 @@ const Titlebar: Component = () => {
           </svg>
         </button>
         <button
-          class="h-full px-4 hover:bg-red-500 hover:text-white text-gray-100 transition-colors flex items-center justify-center cursor-default rounded-tr-xl"
+          class={`${windowControlClass} hover:bg-red-600 hover:text-white`}
           onClick={handleClose}
           title="关闭"
         >
