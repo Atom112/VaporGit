@@ -1,9 +1,9 @@
-import { Component, createSignal, onMount, For } from 'solid-js';
+import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { open } from '@tauri-apps/plugin-dialog';
 import { openRepo, getRecentRepos, getStatus } from '../lib/tauriCommands';
 import type { RecentRepo } from '../lib/types';
-import { setRepoStore } from '../stores/repoStore';
+import { repoStore, setRepoStore } from '../stores/repoStore';
 import { setDiffStore } from '../stores/diffStore';
 
 const Home: Component = () => {
@@ -98,18 +98,26 @@ const Home: Component = () => {
 
       <div class="mt-8 grid grid-cols-2 gap-6">
         <div
-          class="p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm"
+          class={`p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm ${
+            repoStore.loading ? 'opacity-50 pointer-events-none' : ''
+          }`}
           onClick={handleOpenRepo}
         >
           <h2 class="text-xl font-bold mb-2">打开仓库</h2>
           <p class="opacity-70 text-sm">浏览本地文件夹并打开一个现有的 Git 仓库</p>
+          <Show when={repoStore.loading}>
+            <div class="mt-3 text-xs text-cyan-400">正在加载...</div>
+          </Show>
         </div>
         <div
-          class="p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm"
+          class={`p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm ${
+            repoStore.loading ? 'opacity-50 pointer-events-none' : ''
+          }`}
           onClick={handleClone}
         >
           <h2 class="text-xl font-bold mb-2">克隆仓库</h2>
           <p class="opacity-70 text-sm">从远程 URL 下载一个新的 Git 仓库到本地</p>
+          <span class="mt-2 inline-block text-xs opacity-40 bg-white/10 px-2 py-0.5 rounded">M3 实现</span>
         </div>
       </div>
 
@@ -120,7 +128,9 @@ const Home: Component = () => {
             <For each={recentRepos()}>
               {(repo) => (
                 <div
-                  class="p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-between"
+                  class={`p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-between ${
+                    repoStore.loading ? 'opacity-50 pointer-events-none' : ''
+                  }`}
                   onClick={() => handleRecentClick(repo)}
                 >
                   <div>

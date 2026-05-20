@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use git2::{Oid, Repository, Sort};
 use crate::models::commit::{CommitInfo, CommitDetail, FileChange};
 
@@ -94,7 +95,7 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
         )
         .map_err(|e| format!("无法生成 diff: {}", e))?;
 
-    let mut changed_files = Vec::new();
+    let changed_files = RefCell::new(Vec::<FileChange>::new());
 
     diff.foreach(
         &mut |delta, _| {
@@ -112,7 +113,7 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            changed_files.push(FileChange {
+            changed_files.borrow_mut().push(FileChange {
                 file_path,
                 status: status.to_string(),
                 additions: 0,
@@ -122,9 +123,21 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
         },
         None,
         None,
-        None,
+        Some(&mut |_delta, _hunk, line| {
+            let mut files = changed_files.borrow_mut();
+            if let Some(last) = files.last_mut() {
+                match line.origin() {
+                    '+' => last.additions += 1,
+                    '-' => last.deletions += 1,
+                    _ => {}
+                }
+            }
+            true
+        }),
     )
     .map_err(|e| format!("遍历 diff 失败: {}", e))?;
+
+    let changed_files = changed_files.into_inner();
 
     let info = commit_to_info(&commit)?;
 

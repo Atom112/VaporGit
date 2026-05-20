@@ -5,6 +5,7 @@ interface DiffViewProps {
   diffResult?: DiffResult;
   loading: boolean;
   filePath: string;
+  onBack?: () => void;
 }
 
 const DiffView: Component<DiffViewProps> = (props) => {
@@ -12,11 +13,23 @@ const DiffView: Component<DiffViewProps> = (props) => {
     <div class="flex flex-col h-full">
       {/* Header */}
       <div class="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/5 shrink-0">
-        <span class="text-sm font-mono opacity-80 truncate">{props.filePath}</span>
+        <div class="flex items-center gap-2 min-w-0">
+          <Show when={props.onBack}>
+            <button
+              class="text-xs opacity-60 hover:opacity-100 transition-opacity shrink-0"
+              onClick={props.onBack}
+            >
+              ← 返回
+            </button>
+          </Show>
+          <span class="text-sm font-mono opacity-80 truncate">{props.filePath}</span>
+        </div>
       </div>
 
       {/* Diff content */}
-      <div class="flex-1 overflow-auto font-mono text-sm">
+      <For each={[props.filePath]}>
+        {() => (
+          <div class="flex-1 overflow-auto font-mono text-sm animate-content-enter">
         <Show when={!props.loading} fallback={
           <div class="flex items-center justify-center h-full opacity-40">加载中...</div>
         }>
@@ -72,7 +85,9 @@ const DiffView: Component<DiffViewProps> = (props) => {
             </For>
           </Show>
         </Show>
-      </div>
+        </div>
+        )}
+      </For>
     </div>
   );
 };
