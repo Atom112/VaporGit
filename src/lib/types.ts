@@ -90,3 +90,25 @@ export interface BranchInfo {
   behind: number;
   lastCommit: string | null;
 }
+
+export interface CommitGraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphNode {
+  id: string;
+  shortId: string;
+  message: string;
+  author: string;
+  timestamp: number;
+  branchLabels: string[];
+  lane: number;
+  color: number;
+  row: number;
+}
+
+export interface GraphEdge {
+  from: string;
+  to: string;
+}
