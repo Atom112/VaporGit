@@ -8,6 +8,9 @@ import type {
   FileStatus,
   DiffResult,
   BranchInfo,
+  RemoteInfo,
+  ConflictEntry,
+  StashInfo,
 } from './types';
 
 export async function openRepo(path: string): Promise<RepoInfo> {
@@ -117,4 +120,48 @@ export async function push(
   branch?: string
 ): Promise<void> {
   return invoke('push', { path, remote: remote ?? null, branch: branch ?? null });
+}
+
+export async function getRemotes(path: string): Promise<RemoteInfo[]> {
+  return invoke('get_remotes', { path });
+}
+
+export async function getConflicts(path: string): Promise<ConflictEntry[]> {
+  return invoke('get_conflicts', { path });
+}
+
+export async function resolveConflict(path: string, file: string, resolution: string): Promise<void> {
+  return invoke('resolve_conflict', { path, file, resolution });
+}
+
+export async function stashSave(path: string, message?: string): Promise<void> {
+  return invoke('stash_save', { path, message: message ?? null });
+}
+
+export async function stashList(path: string): Promise<StashInfo[]> {
+  return invoke('stash_list', { path });
+}
+
+export async function stashPop(path: string, index: number): Promise<void> {
+  return invoke('stash_pop', { path, index });
+}
+
+export async function stashApply(path: string, index: number): Promise<void> {
+  return invoke('stash_apply', { path, index });
+}
+
+export async function stashDrop(path: string, index: number): Promise<void> {
+  return invoke('stash_drop', { path, index });
+}
+
+export async function rebase(path: string, onto: string): Promise<string> {
+  return invoke('rebase', { path, onto });
+}
+
+export async function cherryPick(path: string, commitId: string): Promise<string> {
+  return invoke('cherry_pick', { path, commitId });
+}
+
+export async function cloneRepo(url: string, path: string): Promise<RepoInfo> {
+  return invoke('clone_repo', { url, path });
 }

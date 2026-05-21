@@ -53,6 +53,8 @@ pub struct GraphNode {
     pub lane: u32,
     pub color: u32,
     pub row: u32,
+    #[serde(default)]
+    pub is_head: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

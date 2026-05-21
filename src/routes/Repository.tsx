@@ -3,6 +3,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { repoStore, setRepoStore } from '../stores/repoStore';
 import { diffStore, setDiffStore } from '../stores/diffStore';
 import { commitStore, setCommitStore } from '../stores/commitStore';
+import { settingsStore } from '../stores/settingsStore';
+import { addToast } from '../stores/toastStore';
 import {
   getStatus,
   stageFiles,
@@ -15,6 +17,12 @@ import {
   getBranchList,
   openRepo,
   getRecentRepos,
+  checkoutBranch,
+  createBranch,
+  cherryPick,
+  fetch as fetchRemote,
+  pull as pullRemote,
+  push as pushRemote,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
 import FileList from '../components/FileList';
@@ -23,6 +31,9 @@ import CommitGraph from '../components/CommitGraph';
 import BranchList from '../components/BranchList';
 import DiffView from '../components/DiffView';
 import StatusBar from '../components/StatusBar';
+import StashPanel from '../components/StashPanel';
+import ConflictResolver from '../components/ConflictResolver';
+import InteractiveRebase from '../components/InteractiveRebase';
 
 const Repository: Component = () => {
   // ── State ──
@@ -38,6 +49,12 @@ const Repository: Component = () => {
   const [commitLoading, setCommitLoading] = createSignal(false);
   const [recentRepos, setRecentRepos] = createSignal<RecentRepo[]>([]);
   const [repoError, setRepoError] = createSignal<string | null>(null);
+
+  // M3: Modal & action state
+  const [remoteActionLoading, setRemoteActionLoading] = createSignal(false);
+  const [showStashPanel, setShowStashPanel] = createSignal(false);
+  const [showConflictResolver, setShowConflictResolver] = createSignal(false);
+  const [showRebaseDialog, setShowRebaseDialog] = createSignal(false);
 
   // ── Resizable panels ──
   const [rightWidth, setRightWidth] = createSignal(420);
@@ -78,6 +95,11 @@ const Repository: Component = () => {
     try {
       const statuses = await getStatus(path);
       setDiffStore({ fileStatuses: statuses });
+      // Auto-detect conflicts
+      const hasConflicts = statuses.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        setShowConflictResolver(true);
+      }
     } catch (e) {
       console.error('Failed to refresh status:', e);
     }
@@ -238,6 +260,7 @@ const Repository: Component = () => {
     setCommitError(null);
     try {
       await commit(path, message);
+      addToast('提交成功', 'success');
       setCommitMessage('');
       await refreshAll();
     } catch (e) {
@@ -384,6 +407,103 @@ const Repository: Component = () => {
     }
   };
 
+  // ── M3 Handlers ──
+  const handleFetch = async () => {
+    const path = repoPath();
+    if (!path || remoteActionLoading()) return;
+    setRemoteActionLoading(true);
+    try {
+      await fetchRemote(path, settingsStore.defaultRemoteName);
+      addToast('Fetch 完成', 'success');
+      await refreshGraph(true);
+    } catch (e) {
+      addToast(`Fetch 失败: ${e}`, 'error');
+    } finally {
+      setRemoteActionLoading(false);
+    }
+  };
+
+  const handlePull = async () => {
+    const path = repoPath();
+    if (!path || remoteActionLoading()) return;
+    setRemoteActionLoading(true);
+    try {
+      const result = await pullRemote(path, settingsStore.defaultRemoteName);
+      addToast(result, 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`Pull 失败: ${e}`, 'error');
+    } finally {
+      setRemoteActionLoading(false);
+    }
+  };
+
+  const handlePush = async () => {
+    const path = repoPath();
+    if (!path || remoteActionLoading()) return;
+    setRemoteActionLoading(true);
+    try {
+      await pushRemote(path, settingsStore.defaultRemoteName);
+      addToast('Push 完成', 'success');
+      await refreshGraph(true);
+    } catch (e) {
+      addToast(`Push 失败: ${e}`, 'error');
+    } finally {
+      setRemoteActionLoading(false);
+    }
+  };
+
+  const handleStashRefresh = async () => {
+    await Promise.all([refreshStatus()]);
+  };
+
+  const handleConflictRefresh = async () => {
+    await refreshStatus();
+  };
+
+  const handleRebaseRefresh = async () => {
+    await Promise.all([refreshHistory(), refreshGraph(), refreshBranches(true)]);
+  };
+
+  // ── Commit graph context menu handlers ──
+  const handleGraphCheckout = async (commitId: string) => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      await checkoutBranch(path, commitId);
+      addToast('已检出到提交 ' + commitId.slice(0, 8), 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`检出失败: ${e}`, 'error');
+    }
+  };
+
+  const handleGraphCreateBranch = async (commitId: string) => {
+    const path = repoPath();
+    if (!path) return;
+    const name = prompt('请输入新分支名称:');
+    if (!name || !name.trim()) return;
+    try {
+      await createBranch(path, name.trim(), commitId);
+      addToast(`分支 ${name.trim()} 创建成功`, 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`创建分支失败: ${e}`, 'error');
+    }
+  };
+
+  const handleGraphCherryPick = async (commitId: string) => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      const result = await cherryPick(path, commitId);
+      addToast(result, 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`Cherry-pick 失败: ${e}`, 'error');
+    }
+  };
+
   const stagedFiles = () =>
     diffStore.fileStatuses.filter((f) => f.staged);
   const unstagedFiles = () =>
@@ -469,7 +589,7 @@ const Repository: Component = () => {
               <div class="flex items-center border-b border-white/10 shrink-0">
                 <button
                   class="flex items-center gap-1 px-3 py-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors shrink-0"
-                  onClick={() => {
+                  onClick={async () => {
                     setSelectedCommit(null);
                     setSelectedCommitFile(null);
                     setCommitDetail(null);
@@ -477,6 +597,12 @@ const Repository: Component = () => {
                     setCommitStore({ selectedNode: null, graphData: null, branches: [] });
                     setLeftMode('tree');
                     setRepoStore({ repoPath: null, repoInfo: null });
+                    try {
+                      const repos = await getRecentRepos();
+                      setRecentRepos(repos);
+                    } catch {
+                      // 无最近打开的仓库
+                    }
                   }}
                 >
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -492,7 +618,7 @@ const Repository: Component = () => {
                   }`}
                   onClick={() => setLeftTab('graph')}
                 >
-                  提交图
+                  提交记录
                 </button>
                 <button
                   class={`flex-1 py-2 text-xs font-medium transition-colors ${
@@ -502,7 +628,7 @@ const Repository: Component = () => {
                   }`}
                   onClick={() => setLeftTab('branches')}
                 >
-                  分支
+                  选择分支（checkout）
                 </button>
               </div>
 
@@ -525,6 +651,10 @@ const Repository: Component = () => {
                         graphData={commitStore.graphData!}
                         selectedNodeId={commitStore.selectedNode?.id}
                         onSelectNode={handleSelectGraphNode}
+                        repoPath={repoPath() ?? undefined}
+                        onCheckout={handleGraphCheckout}
+                        onCreateBranch={handleGraphCreateBranch}
+                        onCherryPick={handleGraphCherryPick}
                       />
                     </Show>
                   </Show>
@@ -622,6 +752,47 @@ const Repository: Component = () => {
           class="flex flex-col bg-white/5 overflow-hidden shrink-0"
           style={{ width: `${rightWidth()}px` }}
         >
+          {/* Remote toolbar */}
+          <div class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
+            <div class="flex gap-1.5">
+              <button
+                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                onClick={handleFetch}
+                disabled={remoteActionLoading()}
+              >
+                {remoteActionLoading() ? '...' : 'Fetch'}
+              </button>
+              <button
+                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                onClick={handlePull}
+                disabled={remoteActionLoading()}
+              >
+                {remoteActionLoading() ? '...' : 'Pull'}
+              </button>
+              <button
+                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                onClick={handlePush}
+                disabled={remoteActionLoading()}
+              >
+                {remoteActionLoading() ? '...' : 'Push'}
+              </button>
+            </div>
+            <div class="flex gap-1.5">
+              <button
+                class="flex-1 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                onClick={() => setShowStashPanel(true)}
+              >
+                Stash
+              </button>
+              <button
+                class="flex-1 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                onClick={() => setShowRebaseDialog(true)}
+              >
+                Rebase
+              </button>
+            </div>
+          </div>
+
           {/* Commit input */}
           <div class="p-3 border-b border-white/10 shrink-0">
             <textarea
@@ -660,6 +831,31 @@ const Repository: Component = () => {
         </div>
       </div>
     </Show>
+
+      {/* M3 Modals */}
+      <Show when={showStashPanel() && repoPath()}>
+        <StashPanel
+          repoPath={repoPath()!}
+          onClose={() => setShowStashPanel(false)}
+          onRefresh={handleStashRefresh}
+        />
+      </Show>
+
+      <Show when={showConflictResolver() && repoPath()}>
+        <ConflictResolver
+          repoPath={repoPath()!}
+          onClose={() => setShowConflictResolver(false)}
+          onRefresh={handleConflictRefresh}
+        />
+      </Show>
+
+      <Show when={showRebaseDialog() && repoPath()}>
+        <InteractiveRebase
+          repoPath={repoPath()!}
+          onClose={() => setShowRebaseDialog(false)}
+          onRefresh={handleRebaseRefresh}
+        />
+      </Show>
 
       {/* Status bar */}
       <StatusBar />

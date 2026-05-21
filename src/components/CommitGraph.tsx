@@ -1,4 +1,5 @@
-import { Component, createEffect, createSignal, Show, For } from 'solid-js';
+import { Component, createEffect, createSignal, Show, For, onCleanup } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import type { GraphNode, CommitGraphData } from '../lib/types';
 
 const COLORS = [
@@ -22,6 +23,10 @@ interface CommitGraphProps {
   graphData: CommitGraphData;
   selectedNodeId?: string;
   onSelectNode: (nodeId: string) => void;
+  repoPath?: string;
+  onCheckout?: (commitId: string) => void;
+  onCreateBranch?: (commitId: string) => void;
+  onCherryPick?: (commitId: string) => void;
 }
 
 const CommitGraph: Component<CommitGraphProps> = (props) => {
@@ -32,12 +37,19 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
   const [hoverProgress, setHoverProgress] = createSignal(0);
   const [hoveredLane, setHoveredLane] = createSignal<number | null>(null);
   const [tooltipPos, setTooltipPos] = createSignal({ x: 0, y: 0 });
+
+  // Context menu state with animation phase
+  const [ctxMenu, setCtxMenu] = createSignal<{
+    x: number;
+    y: number;
+    node: GraphNode;
+    phase: 'enter' | 'exit';
+  } | null>(null);
+
   let hoverAnimId: number | null = null;
 
   function animateHover(targetProgress: number) {
-    if (hoverAnimId !== null) {
-      cancelAnimationFrame(hoverAnimId);
-    }
+    if (hoverAnimId !== null) cancelAnimationFrame(hoverAnimId);
     const start = hoverProgress();
     const startTime = performance.now();
     function tick() {
@@ -49,9 +61,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
         hoverAnimId = requestAnimationFrame(tick);
       } else {
         hoverAnimId = null;
-        if (targetProgress === 0) {
-          setHoveredNodeId(null);
-        }
+        if (targetProgress === 0) setHoveredNodeId(null);
       }
     }
     hoverAnimId = requestAnimationFrame(tick);
@@ -203,6 +213,29 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
     }
   }
 
+  /** Draw a golden ring around the HEAD commit node */
+  function drawHeadNode(ctx: CanvasRenderingContext2D) {
+    for (const node of props.graphData.nodes) {
+      if (!node.isHead) continue;
+      const pos = nodePos(node);
+      // Outer glow ring
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, NODE_R + 5, 0, Math.PI * 2);
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 2.5;
+      ctx.globalAlpha = 0.9;
+      ctx.stroke();
+      // Inner subtle glow
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, NODE_R + 8, 0, Math.PI * 2);
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.25;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
   function drawNodeOverlay(ctx: CanvasRenderingContext2D) {
     for (const node of props.graphData.nodes) {
       const isSelected = node.id === props.selectedNodeId;
@@ -253,6 +286,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
       drawEdges(cctx);
       drawDashedLines(cctx);
       drawBaseNodes(cctx);
+      drawHeadNode(cctx); // HEAD highlight in cached layer
     }
 
     // Blit cached static content
@@ -283,9 +317,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
       setHoveredLane(null);
     } else {
       canvasRef.style.cursor = 'default';
-      if (hoveredNodeId() !== null) {
-        animateHover(0);
-      }
+      if (hoveredNodeId() !== null) animateHover(0);
       const lane = hitTestLane(e.clientX, e.clientY);
       if (lane !== null && branchNamesForLane(lane).length > 0) {
         setHoveredLane(lane);
@@ -301,18 +333,91 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
   };
 
   const handleMouseLeave = () => {
-    if (hoveredNodeId() !== null) {
-      animateHover(0);
-    }
+    if (hoveredNodeId() !== null) animateHover(0);
     setHoveredLane(null);
   };
 
   const handleCanvasClick = (e: MouseEvent) => {
     const node = hitTestNode(e.clientX, e.clientY);
     if (node) props.onSelectNode(node.id);
+    closeContextMenu();
   };
 
+  // ── Context menu handlers ──
+  const handleCanvasContextMenu = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const node = hitTestNode(e.clientX, e.clientY);
+    if (node) {
+      setCtxMenu({ x: e.clientX, y: e.clientY, node, phase: 'enter' });
+    }
+  };
+
+  const handleInfoContextMenu = (e: MouseEvent, node: GraphNode) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY, node, phase: 'enter' });
+  };
+
+  const closeContextMenu = () => {
+    const menu = ctxMenu();
+    if (!menu || menu.phase === 'exit') return;
+    setCtxMenu({ ...menu, phase: 'exit' });
+    setTimeout(() => setCtxMenu(null), 120);
+  };
+
+  const handleContextCheckout = () => {
+    const menu = ctxMenu();
+    if (!menu) return;
+    props.onCheckout?.(menu.node.id);
+    closeContextMenu();
+  };
+
+  const handleContextCreateBranch = () => {
+    const menu = ctxMenu();
+    if (!menu) return;
+    props.onCreateBranch?.(menu.node.id);
+    closeContextMenu();
+  };
+
+  const handleContextCherryPick = () => {
+    const menu = ctxMenu();
+    if (!menu) return;
+    props.onCherryPick?.(menu.node.id);
+    closeContextMenu();
+  };
+
+  const handleContextCopySha = async () => {
+    const menu = ctxMenu();
+    if (!menu) return;
+    try {
+      await navigator.clipboard.writeText(menu.node.id);
+    } catch {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = menu.node.id;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    closeContextMenu();
+  };
+
+  // Close context menu on Escape
+  createEffect(() => {
+    if (!ctxMenu()) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeContextMenu();
+    };
+    document.addEventListener('keydown', handler);
+    onCleanup(() => document.removeEventListener('keydown', handler));
+  });
+
   return (
+    <>
     <div ref={containerRef} class="relative h-full overflow-auto">
       <div class="flex items-start" style="min-width: 100%;">
         <canvas
@@ -320,6 +425,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onClick={handleCanvasClick}
+          onContextMenu={handleCanvasContextMenu}
           class="block shrink-0"
         />
 
@@ -358,30 +464,42 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                     overflow: 'hidden',
                     'background-color': isSelected
                       ? `${color}1a`
-                      : 'rgba(255,255,255,0.035)',
+                      : node.isHead
+                        ? 'rgba(251,191,36,0.08)'
+                        : 'rgba(255,255,255,0.035)',
                     border: isSelected
                       ? `1px solid ${color}66`
-                      : '1px solid rgba(255,255,255,0.06)',
+                      : node.isHead
+                        ? '1px solid rgba(251,191,36,0.35)'
+                        : '1px solid rgba(255,255,255,0.06)',
                   }}
                   onMouseEnter={(e) => {
-                    if (!isSelected) {
+                    if (!isSelected && !node.isHead) {
                       e.currentTarget.style.backgroundColor = `${color}0d`;
                       e.currentTarget.style.borderColor = `${color}33`;
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!isSelected) {
+                    if (!isSelected && !node.isHead) {
                       e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.035)';
                       e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
                     }
                   }}
                   onClick={() => props.onSelectNode(node.id)}
+                  onContextMenu={(e) => handleInfoContextMenu(e, node)}
                 >
-                  <div
-                    class="text-xs font-semibold truncate"
-                    style={{ color: isSelected ? color : 'rgba(255,255,255,0.85)' }}
-                  >
-                    {node.message}
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <Show when={node.isHead}>
+                      <span class="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded shrink-0">
+                        HEAD
+                      </span>
+                    </Show>
+                    <div
+                      class="text-xs font-semibold truncate"
+                      style={{ color: isSelected ? color : 'rgba(255,255,255,0.85)' }}
+                    >
+                      {node.message}
+                    </div>
                   </div>
                   <div
                     class="text-[10px]"
@@ -422,7 +540,71 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
           </For>
         </div>
       </Show>
+
     </div>
+
+    <Portal>
+      <Show when={ctxMenu()}>
+        {(menu) => (
+          <div
+            class="fixed inset-0 z-50"
+            onClick={closeContextMenu}
+            onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}
+          >
+            <div
+              class={`fixed w-48 py-1 rounded-xl bg-white/10 backdrop-blur-2xl border border-white/10 shadow-2xl text-sm overflow-hidden ${
+                menu().phase === 'enter'
+                  ? 'animate-context-menu-enter'
+                  : 'animate-context-menu-exit'
+              }`}
+              style={{
+                left: `${menu().x}px`,
+                top: `${menu().y}px`,
+              }}
+            >
+              <button
+                class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                onClick={handleContextCheckout}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                检出到此提交
+              </button>
+              <button
+                class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                onClick={handleContextCreateBranch}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                从此创建分支
+              </button>
+              <button
+                class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                onClick={handleContextCherryPick}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                Cherry-pick 此提交
+              </button>
+              <div class="border-t border-white/10 my-1" />
+              <button
+                class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                onClick={handleContextCopySha}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                复制 SHA
+              </button>
+            </div>
+          </div>
+        )}
+      </Show>
+    </Portal>
+    </>
   );
 };
 

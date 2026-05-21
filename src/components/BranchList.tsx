@@ -1,5 +1,6 @@
 import { Component, For, Show, createSignal } from 'solid-js';
 import { checkoutBranch, createBranch, deleteBranch } from '../lib/tauriCommands';
+import { addToast } from '../stores/toastStore';
 import type { BranchInfo } from '../lib/types';
 
 interface BranchListProps {
@@ -25,8 +26,10 @@ const BranchList: Component<BranchListProps> = (props) => {
     setError(null);
     try {
       await checkoutBranch(props.repoPath, name);
+      addToast(`已切换到分支 ${name}`, 'success');
       await props.onRefresh();
     } catch (e) {
+      addToast(`切换分支失败: ${e}`, 'error');
       setError(String(e));
     } finally {
       setCheckoutBranchName(null);
@@ -40,9 +43,11 @@ const BranchList: Component<BranchListProps> = (props) => {
     setError(null);
     try {
       await createBranch(props.repoPath, name);
+      addToast(`分支 ${name} 创建成功`, 'success');
       setNewName('');
       props.onRefresh();
     } catch (e) {
+      addToast(`创建分支失败: ${e}`, 'error');
       setError(String(e));
     } finally {
       setCreating(false);
@@ -53,9 +58,11 @@ const BranchList: Component<BranchListProps> = (props) => {
     setError(null);
     try {
       await deleteBranch(props.repoPath, name);
+      addToast(`分支 ${name} 已删除`, 'success');
       setConfirmDelete(null);
       props.onRefresh();
     } catch (e) {
+      addToast(`删除分支失败: ${e}`, 'error');
       setError(String(e));
     }
   };

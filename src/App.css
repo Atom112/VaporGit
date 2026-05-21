@@ -81,6 +81,84 @@
   .animate-tree-enter {
     animation: pageEnter_0 0.35s ease-out forwards;
   }
+
+  /* Toast slide-in animation */
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateX(40px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .animate-toast-in {
+    animation: toast-in 0.35s ease-out;
+  }
+
+  /* Context menu enter/exit animations */
+  @keyframes context-menu-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.95) translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  @keyframes context-menu-exit {
+    from {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.95) translateY(-4px);
+    }
+  }
+
+  .animate-context-menu-enter {
+    animation: context-menu-enter 0.15s ease-out;
+  }
+
+  .animate-context-menu-exit {
+    animation: context-menu-exit 0.12s ease-in forwards;
+  }
+
+  /* Modal enter/exit animations */
+  @keyframes modal-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.92) translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  @keyframes modal-exit {
+    from {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.92) translateY(8px);
+    }
+  }
+
+  .animate-modal-enter {
+    animation: modal-enter 0.2s ease-out;
+  }
+
+  .animate-modal-exit {
+    animation: modal-exit 0.12s ease-in forwards;
+  }
 }
 
 .container {

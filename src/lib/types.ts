@@ -106,9 +106,30 @@ export interface GraphNode {
   lane: number;
   color: number;
   row: number;
+  isHead: boolean;
 }
 
 export interface GraphEdge {
   from: string;
   to: string;
+}
+
+export interface RemoteInfo {
+  name: string;
+  url: string;
+  pushUrl: string;
+}
+
+export interface ConflictEntry {
+  filePath: string;
+  ancestorMode: number | null;
+  oursMode: number | null;
+  theirsMode: number | null;
+}
+
+export interface StashInfo {
+  index: number;
+  message: string;
+  commitId: string;
+  timestamp: number;
 }

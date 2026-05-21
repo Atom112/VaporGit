@@ -304,6 +304,9 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
     // Assign row numbers based on walk order
     let order: HashMap<Oid, usize> = walk_oids.iter().enumerate().map(|(i, o)| (*o, i)).collect();
 
+    // Determine HEAD commit for highlighting
+    let head_oid = repo.head().ok().and_then(|h| h.target());
+
     // Build nodes
     let nodes: Vec<GraphNode> = walk_oids
         .iter()
@@ -333,6 +336,7 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
                 lane,
                 color: lane,
                 row,
+                is_head: head_oid == Some(*oid),
             }
         })
         .collect();
@@ -379,4 +383,134 @@ fn commit_to_info(commit: &git2::Commit) -> Result<CommitInfo, String> {
         timestamp,
         parent_ids,
     })
+}
+
+pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
+    let onto_commit = repo
+        .revparse_single(onto)
+        .map_err(|e| format!("无法解析目标 '{}': {}", onto, e))?
+        .peel_to_commit()
+        .map_err(|e| format!("无法获取目标提交: {}", e))?;
+
+    let onto_annotated = repo
+        .find_annotated_commit(onto_commit.id())
+        .map_err(|e| format!("无法创建 annotated commit: {}", e))?;
+
+    let head = repo
+        .head()
+        .map_err(|e| format!("无法获取 HEAD: {}", e))?;
+    let branch_name = head
+        .shorthand()
+        .unwrap_or("HEAD")
+        .to_string();
+
+    let head_commit = head
+        .peel_to_commit()
+        .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+
+    let head_annotated = repo
+        .find_annotated_commit(head_commit.id())
+        .map_err(|e| format!("无法创建 HEAD annotated commit: {}", e))?;
+
+    let mut rebase_opts = git2::RebaseOptions::new();
+    rebase_opts.checkout_options(git2::build::CheckoutBuilder::new());
+
+    let mut rebase = repo
+        .rebase(
+            Some(&head_annotated),
+            Some(&onto_annotated),
+            None,
+            Some(&mut rebase_opts),
+        )
+        .map_err(|e| format!("无法初始化变基: {}", e))?;
+
+    let mut commit_count = 0;
+    loop {
+        let op = rebase.next();
+        match op {
+            Some(Ok(_)) => {
+                commit_count += 1;
+                if let Ok(index) = repo.index() {
+                    if index.has_conflicts() {
+                        rebase.abort().ok();
+                        return Ok(format!("变基过程中出现冲突，已中止。已处理 {} 个提交。请解决冲突后手动继续。", commit_count));
+                    }
+                }
+            }
+            Some(Err(e)) => {
+                rebase.abort().ok();
+                return Err(format!("变基失败: {}", e));
+            }
+            None => break,
+        }
+    }
+
+    rebase
+        .finish(None)
+        .map_err(|e| format!("变基完成失败: {}", e))?;
+
+    Ok(format!("变基完成，共处理 {} 个提交", commit_count))
+}
+
+pub fn cherry_pick(repo: &Repository, commit_id: &str) -> Result<String, String> {
+    let oid = Oid::from_str(commit_id)
+        .map_err(|e| format!("无效的提交 ID: {}", e))?;
+
+    let commit = repo
+        .find_commit(oid)
+        .map_err(|e| format!("无法找到提交: {}", e))?;
+
+    let mut opts = git2::CherrypickOptions::new();
+    opts.checkout_builder(git2::build::CheckoutBuilder::new());
+    repo.cherrypick(&commit, Some(&mut opts))
+        .map_err(|e| format!("Cherry-pick 失败: {}", e))?;
+
+    // Check for conflicts
+    let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    if index.has_conflicts() {
+        repo.cleanup_state().ok();
+        return Ok("Cherry-pick 出现冲突，请手动解决后提交".to_string());
+    }
+    drop(index);
+
+    // Create the commit
+    let signature = repo
+        .signature()
+        .map_err(|e| format!("无法获取签名: {}", e))?;
+
+    let tree_oid = repo
+        .index()
+        .map_err(|e| format!("无法获取索引: {}", e))?
+        .write_tree()
+        .map_err(|e| format!("无法写入树: {}", e))?;
+
+    let tree = repo
+        .find_tree(tree_oid)
+        .map_err(|e| format!("无法找到树: {}", e))?;
+
+    let head_commit = repo
+        .head()
+        .map_err(|e| format!("无法获取 HEAD: {}", e))?
+        .peel_to_commit()
+        .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+
+    let msg = commit
+        .message()
+        .unwrap_or("Cherry-pick")
+        .to_string();
+
+    repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        &format!("cherry-pick: {}", msg.lines().next().unwrap_or(&msg)),
+        &tree,
+        &[&head_commit],
+    )
+    .map_err(|e| format!("Cherry-pick 提交失败: {}", e))?;
+
+    repo.cleanup_state()
+        .map_err(|e| format!("清理状态失败: {}", e))?;
+
+    Ok("Cherry-pick 成功".to_string())
 }

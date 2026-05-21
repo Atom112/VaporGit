@@ -1,4 +1,29 @@
 use git2::{RemoteCallbacks, Repository};
+use crate::models::remote::RemoteInfo;
+
+pub fn get_remotes(repo: &Repository) -> Result<Vec<RemoteInfo>, String> {
+    let remotes = repo
+        .remotes()
+        .map_err(|e| format!("无法获取远程列表: {}", e))?;
+
+    let mut result = Vec::new();
+    for name in remotes.iter().flatten() {
+        let remote = repo
+            .find_remote(name)
+            .map_err(|e| format!("无法找到远程 {}: {}", name, e))?;
+
+        let url = remote.url().unwrap_or("").to_string();
+        let push_url = remote.pushurl().map(|u| u.to_string()).unwrap_or_else(|| url.clone());
+
+        result.push(RemoteInfo {
+            name: name.to_string(),
+            url,
+            push_url,
+        });
+    }
+
+    Ok(result)
+}
 
 pub fn fetch(repo: &Repository, remote_name: Option<&str>) -> Result<(), String> {
     let name = remote_name.unwrap_or("origin");

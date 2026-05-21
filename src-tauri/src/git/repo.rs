@@ -5,6 +5,13 @@ pub fn open_repo(path: &str) -> Result<Repository, String> {
     Repository::open(path).map_err(|e| format!("无法打开仓库: {}", e))
 }
 
+pub fn clone_repo(url: &str, path: &str) -> Result<(Repository, RepoInfo), String> {
+    let repo = Repository::clone(url, path)
+        .map_err(|e| format!("克隆仓库失败: {}", e))?;
+    let info = get_repo_info(&repo, path)?;
+    Ok((repo, info))
+}
+
 pub fn get_repo_info(repo: &Repository, path: &str) -> Result<RepoInfo, String> {
     let head = repo.head().ok();
     let head_branch = head
