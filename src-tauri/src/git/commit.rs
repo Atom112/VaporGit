@@ -399,10 +399,6 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
     let head = repo
         .head()
         .map_err(|e| format!("无法获取 HEAD: {}", e))?;
-    let branch_name = head
-        .shorthand()
-        .unwrap_or("HEAD")
-        .to_string();
 
     let head_commit = head
         .peel_to_commit()

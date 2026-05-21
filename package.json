@@ -1,6 +1,6 @@
 {
   "name": "vaporgit",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "A lightweight cross-platform GUI Git desktop client built with Tauri + SolidJS.",
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "version": "node scripts/bump-version.mjs"
   },
   "license": "MIT",
   "dependencies": {
