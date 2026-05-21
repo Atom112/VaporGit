@@ -28,6 +28,20 @@
 
 ---
 
+## 📥 下载安装
+
+从 [GitHub Releases](https://github.com/Atom112/VaporGit/releases) 页面可直接下载各平台的最新安装包，无需本地构建。
+
+| 平台 | 安装包格式 | 说明 |
+|------|-----------|------|
+| **Windows** | `.msi` / `.exe` | 双击安装即可使用，依赖系统 WebView2 Runtime |
+| **macOS** | `.dmg` | 打开后将 VaporGit 拖入 Applications 文件夹 |
+| **Linux** | `.deb` / `.AppImage` | `.deb` 适用于 Debian/Ubuntu 系；`.AppImage` 通用格式，下载后 `chmod +x` 即可运行 |
+
+> 每次发布新版本时，CI/CD 流水线会自动构建三平台安装包并上传至 Release 页面。
+
+---
+
 ## 🛠️ 构建与本地开发
 
 VaporGit 利用现代 Web 与 Rust 混合架构，在开始之前，请确保您的开发环境齐备：

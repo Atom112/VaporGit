@@ -12,7 +12,18 @@
       "Bash(cargo check *)",
       "Bash(cargo doc *)",
       "WebFetch(domain:docs.rs)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(git add *)",
+      "Bash(git commit -m '添加GitHub Actions CI/CD发布流水线 *)",
+      "Bash(git tag *)",
+      "Bash(git push *)",
+      "Bash(gh run *)",
+      "WebSearch",
+      "Bash(git commit -m 'fix: 修正tauri-action引用版本为@v0 *)",
+      "Bash(cat Cargo.toml)",
+      "Bash(cat src-tauri/Cargo.toml)",
+      "Bash(git commit -m 'fix: 添加GITHUB_TOKEN contents:write权限以创建Release *)",
+      "Bash(git commit -m 'feat: 添加统一版本管理脚本 npm run version *)"
     ]
   }
 }

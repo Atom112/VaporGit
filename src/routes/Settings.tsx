@@ -13,7 +13,6 @@ const Settings: Component = () => {
           <div class="p-4 rounded-xl bg-white/5 border border-white/10">
             <label class="block text-sm font-medium mb-2">默认 Diff 视图</label>
             <CustomSelect
-              class=' bg-white/5 '
               value={settingsStore.defaultDiffView}
               onChange={(v) => updateSettings({ defaultDiffView: v as any })}
               options={[
