@@ -741,10 +741,10 @@ const Repository: Component = () => {
 
         {/* Drag handle */}
         <div
-          class="w-[3px] cursor-col-resize shrink-0 relative bg-white/5 hover:bg-white/15 active:bg-cyan-400/25 transition-colors"
+          class="w-0.75 cursor-col-resize shrink-0 relative bg-white/5 hover:bg-white/15 active:bg-cyan-400/25 transition-colors"
           onMouseDown={() => setDragging(true)}
         >
-          <div class="absolute inset-y-0 -left-[4px] -right-[4px]" />
+          <div class="absolute inset-y-0 -left-1 -right-1" />
         </div>
 
         {/* Right: File changes + commit input (resizable) */}
