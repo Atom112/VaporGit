@@ -11,6 +11,15 @@ import type {
   RemoteInfo,
   ConflictEntry,
   StashInfo,
+  GitHubUser,
+  GitHubRepo,
+  GitHubPullRequest,
+  CreatePullRequest,
+  MergePullRequest,
+  MergePullResult,
+  PullRequestFile,
+  PRComment,
+  AuthStatus,
 } from './types';
 
 export async function openRepo(path: string): Promise<RepoInfo> {
@@ -168,4 +177,99 @@ export async function cherryPick(path: string, commitId: string): Promise<string
 
 export async function cloneRepo(url: string, path: string): Promise<RepoInfo> {
   return invoke('clone_repo', { url, path });
+}
+
+// === GitHub ===
+
+export async function githubLogin(): Promise<GitHubUser> {
+  return invoke('github_login');
+}
+
+export async function githubCheckAuth(): Promise<AuthStatus> {
+  return invoke('github_check_auth');
+}
+
+export async function githubLogout(): Promise<void> {
+  return invoke('github_logout');
+}
+
+export async function githubGetUser(): Promise<GitHubUser> {
+  return invoke('github_get_user');
+}
+
+export async function githubListRepos(page?: number, perPage?: number): Promise<GitHubRepo[]> {
+  return invoke('github_list_repos', { page: page ?? null, perPage: perPage ?? null });
+}
+
+export async function githubGetRepo(owner: string, repo: string): Promise<GitHubRepo> {
+  return invoke('github_get_repo', { owner, repo });
+}
+
+export async function githubListPulls(
+  owner: string,
+  repo: string,
+  state?: string,
+  page?: number,
+  perPage?: number
+): Promise<GitHubPullRequest[]> {
+  return invoke('github_list_pulls', {
+    owner,
+    repo,
+    state: state ?? null,
+    page: page ?? null,
+    perPage: perPage ?? null,
+  });
+}
+
+export async function githubGetPull(owner: string, repo: string, number: number): Promise<GitHubPullRequest> {
+  return invoke('github_get_pull', { owner, repo, number });
+}
+
+export async function githubCreatePull(
+  owner: string,
+  repo: string,
+  request: CreatePullRequest
+): Promise<GitHubPullRequest> {
+  return invoke('github_create_pull', { owner, repo, request });
+}
+
+export async function githubMergePull(
+  owner: string,
+  repo: string,
+  number: number,
+  request: MergePullRequest
+): Promise<MergePullResult> {
+  return invoke('github_merge_pull', { owner, repo, number, request });
+}
+
+export async function githubGetPullFiles(
+  owner: string,
+  repo: string,
+  number: number
+): Promise<PullRequestFile[]> {
+  return invoke('github_get_pull_files', { owner, repo, number });
+}
+
+export async function githubGetPullDiff(owner: string, repo: string, number: number): Promise<string> {
+  return invoke('github_get_pull_diff', { owner, repo, number });
+}
+
+export async function githubListPullComments(
+  owner: string,
+  repo: string,
+  number: number
+): Promise<PRComment[]> {
+  return invoke('github_list_pull_comments', { owner, repo, number });
+}
+
+export async function githubCreatePullComment(
+  owner: string,
+  repo: string,
+  number: number,
+  body: string,
+  commitId: string,
+  path: string,
+  position: number
+): Promise<PRComment> {
+  return invoke('github_create_pull_comment', { owner, repo, number, body, commitId, path, position });
 }

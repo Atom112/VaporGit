@@ -1,3 +1,4 @@
+import { A } from '@solidjs/router';
 import { Component, createSignal, createEffect, onCleanup, onMount, Show, For } from 'solid-js';
 import { open } from '@tauri-apps/plugin-dialog';
 import { repoStore, setRepoStore } from '../stores/repoStore';
@@ -34,6 +35,7 @@ import DiffView from '../components/DiffView';
 import StatusBar from '../components/StatusBar';
 import StashPanel from '../components/StashPanel';
 import ConflictResolver from '../components/ConflictResolver';
+import { githubStore } from '../stores/githubStore';
 import InteractiveRebase from '../components/InteractiveRebase';
 
 const Repository: Component = () => {
@@ -824,6 +826,14 @@ const Repository: Component = () => {
               >
                 {remoteActionLoading() ? '...' : 'Push'}
               </button>
+              {githubStore.authenticated && (
+                <A
+                  class="flex-1 py-1.5 text-xs rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-center transition-colors"
+                  href="/pulls"
+                >
+                  PRs
+                </A>
+              )}
             </div>
             <div class="flex gap-1.5">
               <button

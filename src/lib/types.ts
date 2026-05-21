@@ -133,3 +133,122 @@ export interface StashInfo {
   commitId: string;
   timestamp: number;
 }
+
+// === GitHub types ===
+
+export interface GitHubUser {
+  login: string;
+  id: number;
+  avatarUrl: string;
+  name: string | null;
+  email: string | null;
+  htmlUrl: string;
+  bio: string | null;
+  publicRepos: number;
+  followers: number;
+  following: number;
+  createdAt: string | null;
+}
+
+export interface AuthStatus {
+  authenticated: boolean;
+  user: GitHubUser | null;
+}
+
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  fullName: string;
+  owner: { login: string; id: number; avatarUrl: string };
+  htmlUrl: string;
+  description: string | null;
+  fork: boolean;
+  cloneUrl: string;
+  sshUrl: string;
+  language: string | null;
+  stargazersCount: number;
+  forksCount: number;
+  defaultBranch: string;
+  updatedAt: string;
+  private: boolean;
+}
+
+export interface GitHubPullRequest {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: string;
+  htmlUrl: string;
+  diffUrl: string;
+  head: PRBranchRef;
+  base: PRBranchRef;
+  user: { login: string; id: number; avatarUrl: string };
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+  mergedAt: string | null;
+  merged: boolean;
+  mergeable: boolean | null;
+  draft: boolean;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+}
+
+export interface PRBranchRef {
+  label: string;
+  ref: string;
+  sha: string;
+  repo: {
+    id: number;
+    name: string;
+    fullName: string;
+    owner: { login: string; id: number; avatarUrl: string };
+    htmlUrl: string;
+    cloneUrl: string;
+    defaultBranch: string;
+  } | null;
+}
+
+export interface CreatePullRequest {
+  title: string;
+  head: string;
+  base: string;
+  body?: string | null;
+  draft?: boolean | null;
+}
+
+export interface MergePullRequest {
+  commitTitle?: string | null;
+  commitMessage?: string | null;
+  mergeMethod?: string | null;
+}
+
+export interface MergePullResult {
+  merged: boolean;
+  message: string;
+  sha: string | null;
+}
+
+export interface PullRequestFile {
+  sha: string;
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  rawUrl: string;
+  patch: string | null;
+}
+
+export interface PRComment {
+  id: number;
+  body: string;
+  path: string | null;
+  position: number | null;
+  commitId: string | null;
+  user: { login: string; id: number; avatarUrl: string };
+  createdAt: string;
+  updatedAt: string;
+}
