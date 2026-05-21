@@ -1,4 +1,5 @@
 use crate::git;
+use crate::models::conflict::ConflictEntry;
 use crate::models::repo::{RecentRepo, RepoInfo};
 use std::fs;
 use std::path::PathBuf;
@@ -23,15 +24,22 @@ fn ensure_config_dir() -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn open_repo(path: String) -> Result<RepoInfo, String> {
-    let repo = git::repo::open_repo(&path)?;
-    let info = git::repo::get_repo_info(&repo, &path)?;
-    save_repo_path_inner(&path)?;
-    Ok(info)
+pub async fn open_repo(path: String) -> Result<RepoInfo, String> {
+    let path_clone = path.clone();
+    let info = tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        let info = git::repo::get_repo_info(&repo, &path)?;
+        Ok::<_, String>(info)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?;
+
+    save_repo_path_inner(&path_clone)?;
+    info
 }
 
 #[tauri::command]
-pub fn get_recent_repos() -> Vec<RecentRepo> {
+pub async fn get_recent_repos() -> Vec<RecentRepo> {
     let path = config_dir().join("recent_repos.json");
     if !path.exists() {
         return vec![];
@@ -44,7 +52,7 @@ pub fn get_recent_repos() -> Vec<RecentRepo> {
 }
 
 #[tauri::command]
-pub fn save_repo_path(path: String) -> Result<(), String> {
+pub async fn save_repo_path(path: String) -> Result<(), String> {
     save_repo_path_inner(&path)
 }
 
@@ -89,19 +97,64 @@ fn save_repo_path_inner(path: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_status(path: String) -> Result<Vec<crate::models::status::FileStatus>, String> {
-    let repo = git::repo::open_repo(&path)?;
-    git::status::get_status(&repo)
+pub async fn get_status(path: String) -> Result<Vec<crate::models::status::FileStatus>, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::get_status(&repo)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
 }
 
 #[tauri::command]
-pub fn stage_files(path: String, files: Vec<String>) -> Result<(), String> {
-    let repo = git::repo::open_repo(&path)?;
-    git::status::stage_files(&repo, &files)
+pub async fn stage_files(path: String, files: Vec<String>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::stage_files(&repo, &files)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
 }
 
 #[tauri::command]
-pub fn unstage_files(path: String, files: Vec<String>) -> Result<(), String> {
-    let repo = git::repo::open_repo(&path)?;
-    git::status::unstage_files(&repo, &files)
+pub async fn unstage_files(path: String, files: Vec<String>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::unstage_files(&repo, &files)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn get_conflicts(path: String) -> Result<Vec<ConflictEntry>, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::get_conflicts(&repo)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn resolve_conflict(path: String, file: String, resolution: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::resolve_conflict(&repo, &file, &resolution)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn clone_repo(url: String, path: String) -> Result<RepoInfo, String> {
+    let path_clone = path.clone();
+    let (_, info) = tokio::task::spawn_blocking(move || {
+        git::repo::clone_repo(&url, &path)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))??;
+
+    save_repo_path_inner(&path_clone)?;
+    Ok(info)
 }

@@ -9,7 +9,10 @@
       "Bash(npm show *)",
       "WebFetch(domain:highlightjs.org)",
       "WebFetch(domain:cdn.jsdelivr.net)",
-      "Bash(cargo check *)"
+      "Bash(cargo check *)",
+      "Bash(cargo doc *)",
+      "WebFetch(domain:docs.rs)",
+      "Bash(npx vite *)"
     ]
   }
 }

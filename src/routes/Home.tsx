@@ -1,13 +1,19 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { open } from '@tauri-apps/plugin-dialog';
-import { openRepo, getStatus } from '../lib/tauriCommands';
+import { openRepo, getStatus, cloneRepo } from '../lib/tauriCommands';
 import { repoStore, setRepoStore } from '../stores/repoStore';
 import { setDiffStore } from '../stores/diffStore';
+import { addToast } from '../stores/toastStore';
 
 const Home: Component = () => {
   const navigate = useNavigate();
   const [error, setError] = createSignal<string | null>(null);
+  const [clonePhase, setClonePhase] = createSignal<'closed' | 'enter' | 'exit'>('closed');
+  const [cloneUrl, setCloneUrl] = createSignal('');
+  const [clonePath, setClonePath] = createSignal('');
+  const [cloneLoading, setCloneLoading] = createSignal(false);
+  const [cloneError, setCloneError] = createSignal<string | null>(null);
 
   const handleOpenRepo = async () => {
     try {
@@ -40,7 +46,53 @@ const Home: Component = () => {
   };
 
   const handleClone = async () => {
-    // Clone functionality will be added in M3
+    setClonePhase('enter');
+    setCloneError(null);
+    setCloneUrl('');
+    setClonePath('');
+  };
+
+  const handleCloneClose = () => {
+    setClonePhase('exit');
+    setTimeout(() => setClonePhase('closed'), 120);
+  };
+
+  const handleCloneSelectPath = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: '选择克隆目标目录',
+    });
+    if (selected) {
+      setClonePath(selected);
+    }
+  };
+
+  const handleCloneExecute = async () => {
+    if (!cloneUrl().trim() || !clonePath().trim()) return;
+    setCloneLoading(true);
+    setCloneError(null);
+    try {
+      setRepoStore({ loading: true });
+      const repoInfo = await cloneRepo(cloneUrl().trim(), clonePath().trim());
+      addToast('克隆成功', 'success');
+      setRepoStore({
+        repoPath: clonePath().trim(),
+        repoInfo,
+        loading: false,
+        error: null,
+      });
+      const statuses = await getStatus(clonePath().trim());
+      setDiffStore({ fileStatuses: statuses });
+      setClonePhase('closed');
+      navigate('/repository');
+    } catch (e) {
+      addToast(`克隆失败: ${e}`, 'error');
+      setCloneError(String(e));
+      setRepoStore({ loading: false });
+    } finally {
+      setCloneLoading(false);
+    }
   };
 
   return (
@@ -78,10 +130,70 @@ const Home: Component = () => {
           >
             <h2 class="text-xl font-bold mb-2">克隆仓库</h2>
             <p class="opacity-70 text-sm">从远程 URL 下载一个新的 Git 仓库到本地</p>
-            <span class="mt-2 inline-block text-xs opacity-40 bg-white/10 px-2 py-0.5 rounded">M3 实现</span>
           </div>
         </div>
       </div>
+
+      {/* Clone dialog */}
+      <Show when={clonePhase() !== 'closed'}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div
+            class={`w-[440px] rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
+              clonePhase() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
+            }`}
+          >
+            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <h2 class="text-sm font-bold">克隆仓库</h2>
+              <button
+                class="text-xs opacity-50 hover:text-red-400 transition-colors"
+                onClick={handleCloneClose}
+              >
+                关闭
+              </button>
+            </div>
+            <div class="p-4 space-y-3">
+              <div>
+                <label class="block text-xs font-medium mb-1 opacity-70">仓库 URL</label>
+                <input
+                  class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
+                  placeholder="https://github.com/user/repo.git"
+                  value={cloneUrl()}
+                  onInput={(e) => setCloneUrl(e.currentTarget.value)}
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1 opacity-70">目标目录</label>
+                <div class="flex gap-2">
+                  <input
+                    class="flex-1 p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
+                    placeholder="选择本地目录"
+                    value={clonePath()}
+                    onInput={(e) => setClonePath(e.currentTarget.value)}
+                  />
+                  <button
+                    class="px-3 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors shrink-0"
+                    onClick={handleCloneSelectPath}
+                  >
+                    浏览
+                  </button>
+                </div>
+              </div>
+              <Show when={cloneError()}>
+                <div class="p-2 rounded bg-red-500/20 border border-red-500/30 text-red-200 text-xs">
+                  {cloneError()}
+                </div>
+              </Show>
+              <button
+                class="w-full py-2 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 disabled:opacity-30 text-sm font-medium transition-colors"
+                onClick={handleCloneExecute}
+                disabled={cloneLoading() || !cloneUrl().trim() || !clonePath().trim()}
+              >
+                {cloneLoading() ? '克隆中...' : '开始克隆'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 };
