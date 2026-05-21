@@ -5,7 +5,7 @@ import type { BranchInfo } from '../lib/types';
 interface BranchListProps {
   branches: BranchInfo[];
   repoPath: string;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
 }
 
 const BranchList: Component<BranchListProps> = (props) => {
@@ -13,6 +13,7 @@ const BranchList: Component<BranchListProps> = (props) => {
   const [creating, setCreating] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null);
+  const [checkoutBranchName, setCheckoutBranchName] = createSignal<string | null>(null);
 
   const localBranches = () => props.branches.filter((b) => !b.isRemote);
   const remoteBranches = () => props.branches.filter((b) => b.isRemote);
@@ -20,11 +21,15 @@ const BranchList: Component<BranchListProps> = (props) => {
 
   const handleCheckout = async (name: string) => {
     if (name === currentBranch()?.name) return;
+    setCheckoutBranchName(name);
+    setError(null);
     try {
       await checkoutBranch(props.repoPath, name);
-      props.onRefresh();
+      await props.onRefresh();
     } catch (e) {
       setError(String(e));
+    } finally {
+      setCheckoutBranchName(null);
     }
   };
 
@@ -56,12 +61,12 @@ const BranchList: Component<BranchListProps> = (props) => {
   };
 
   return (
-    <div class="flex flex-col h-full">
+    <div class="flex flex-col h-full relative">
       {/* Create branch */}
       <div class="p-3 border-b border-white/10 shrink-0">
         <div class="flex gap-2">
           <input
-            class="flex-1 px-2 py-1.5 rounded-lg bg-white/10 border border-white/10 text-white text-xs focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
+            class="flex-1 p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
             placeholder="新分支名称..."
             value={newName()}
             onInput={(e) => setNewName(e.currentTarget.value)}
@@ -161,6 +166,23 @@ const BranchList: Component<BranchListProps> = (props) => {
       <Show when={error()}>
         <div class="px-3 py-2 text-xs text-red-400 border-t border-white/10 shrink-0">{error()}</div>
       </Show>
+
+      {/* Checkout toast */}
+      <div
+        class="absolute bottom-4 left-4 right-4 z-20 flex items-center gap-2 px-4 py-3 rounded-lg bg-cyan-900/90 backdrop-blur border border-cyan-500/30 shadow-lg text-sm transition-all duration-150"
+        classList={{
+          'opacity-100 translate-y-0': checkoutBranchName() !== null,
+          'opacity-0 translate-y-2 pointer-events-none': checkoutBranchName() === null,
+        }}
+      >
+        <svg class="w-4 h-4 animate-spin text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <span class="text-cyan-100">
+          正在切换到分支 <span class="font-semibold text-cyan-300">{checkoutBranchName() ?? ''}</span>...
+        </span>
+      </div>
     </div>
   );
 };
