@@ -21,6 +21,10 @@ export async function getRecentRepos(): Promise<RecentRepo[]> {
   return invoke('get_recent_repos');
 }
 
+export async function removeRecentRepo(path: string): Promise<void> {
+  return invoke('remove_recent_repo', { path });
+}
+
 export async function getStatus(path: string): Promise<FileStatus[]> {
   return invoke('get_status', { path });
 }

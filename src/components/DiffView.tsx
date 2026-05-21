@@ -1,8 +1,9 @@
-import { Component, For, Show, createSignal, createResource } from 'solid-js';
+import { Component, For, Show, createSignal, createResource, createEffect } from 'solid-js';
 import type { DiffHunk, DiffResult } from '../lib/types';
 import { getFileContent } from '../lib/tauriCommands';
 import 'highlight.js/styles/github-dark.css';
 import { detectLanguage, highlightLine, highlightFull } from '../lib/syntax';
+import { settingsStore } from '../stores/settingsStore';
 
 interface DiffViewProps {
   diffResult?: DiffResult;
@@ -84,7 +85,11 @@ function buildFullFileLines(
 }
 
 const DiffView: Component<DiffViewProps> = (props) => {
-  const [viewMode, setViewMode] = createSignal<'unified' | 'fullFile' | 'split'>('unified');
+  const [viewMode, setViewMode] = createSignal<'unified' | 'fullFile' | 'split'>(settingsStore.defaultDiffView);
+
+  createEffect(() => {
+    setViewMode(settingsStore.defaultDiffView);
+  });
 
   const [fullContent] = createResource(
     () =>
