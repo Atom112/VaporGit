@@ -3,7 +3,7 @@ mod git;
 mod models;
 
 use commands::branch::{create_branch, checkout_branch, delete_branch, get_branch_list};
-use commands::commit::{commit, get_commit_detail, get_commit_history};
+use commands::commit::{commit, get_commit_detail, get_commit_graph, get_commit_history};
 use commands::diff::{get_file_content, get_file_diff};
 use commands::remote::{fetch, pull, push};
 use commands::repo::{get_recent_repos, get_status, open_repo, save_repo_path, stage_files, unstage_files};
@@ -25,6 +25,7 @@ pub fn run() {
             commit,
             get_commit_history,
             get_commit_detail,
+            get_commit_graph,
             // diff
             get_file_diff,
             get_file_content,

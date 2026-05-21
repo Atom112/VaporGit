@@ -1,6 +1,7 @@
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use git2::{Oid, Repository, Sort};
-use crate::models::commit::{CommitInfo, CommitDetail, FileChange};
+use crate::models::commit::{CommitInfo, CommitDetail, FileChange, CommitGraphData, GraphNode, GraphEdge};
 
 pub fn commit(repo: &Repository, message: &str) -> Result<CommitInfo, String> {
     let signature = repo
@@ -151,6 +152,207 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
         parent_ids: info.parent_ids,
         changed_files,
     })
+}
+
+pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
+    let mut revwalk = repo
+        .revwalk()
+        .map_err(|e| format!("无法创建 revwalk: {}", e))?;
+    revwalk
+        .set_sorting(Sort::TOPOLOGICAL)
+        .map_err(|e| format!("无法设置排序: {}", e))?;
+    revwalk
+        .push_head()
+        .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+
+    let walk_oids: Vec<Oid> = revwalk.filter_map(|r| r.ok()).collect();
+
+    if walk_oids.is_empty() {
+        return Ok(CommitGraphData { nodes: vec![], edges: vec![] });
+    }
+
+    // Collect branch labels per commit OID
+    let mut branch_labels: HashMap<Oid, Vec<String>> = HashMap::new();
+    if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
+        for branch_result in branches.flatten() {
+            if let Some(oid) = branch_result.0.get().target() {
+                let name = branch_result.0.name().ok().flatten().unwrap_or("").to_string();
+                branch_labels.entry(oid).or_default().push(name);
+            }
+        }
+    }
+
+    // ── Phase 1: Collect and sort local branch tips ──
+    // main/master always get lane 0; remaining branches sorted alphabetically.
+    let walk_set: HashSet<Oid> = walk_oids.iter().copied().collect();
+    let mut branch_refs: Vec<(Oid, String)> = Vec::new();
+    if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
+        for branch_result in branches.flatten() {
+            if let Some(oid) = branch_result.0.get().target() {
+                let name = branch_result.0.name().ok().flatten().unwrap_or("").to_string();
+                if !name.is_empty() && walk_set.contains(&oid) {
+                    branch_refs.push((oid, name));
+                }
+            }
+        }
+    }
+    branch_refs.sort_by(|a, b| {
+        let a_main = a.1 == "main" || a.1 == "master";
+        let b_main = b.1 == "main" || b.1 == "master";
+        match (a_main, b_main) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.1.cmp(&b.1),
+        }
+    });
+
+    // ── Phase 2: First-parent walk from each branch tip ──
+    // Assigns commits to their branch's lane. Stops when hitting an already-assigned
+    // commit (the fork point where it rejoins another branch's first-parent chain).
+    let mut commit_lane: HashMap<Oid, u32> = HashMap::new();
+    for (i, (tip_oid, _)) in branch_refs.iter().enumerate() {
+        let lane = i as u32;
+        let mut oid = *tip_oid;
+        loop {
+            if !walk_set.contains(&oid) || commit_lane.contains_key(&oid) {
+                break;
+            }
+            commit_lane.insert(oid, lane);
+            match repo.find_commit(oid).ok().and_then(|c| c.parent_ids().next()) {
+                Some(p) => oid = p,
+                None => break,
+            }
+        }
+    }
+
+    // ── Phase 3: Active-columns fallback for remaining commits ──
+    // Handles commits only reachable via non-first-parent paths (e.g. commits on a
+    // branch that has since been deleted).
+    let mut columns: Vec<(Oid, u32)> = Vec::new();
+
+    /// Find the smallest available lane number not currently in use.
+    fn next_free_lane(columns: &[(Oid, u32)]) -> u32 {
+        let mut used: Vec<u32> = columns.iter().map(|(_, l)| *l).collect();
+        used.sort();
+        let mut c = 0u32;
+        for &u in &used {
+            if u > c {
+                break;
+            }
+            c = u + 1;
+        }
+        c
+    }
+
+    for oid in &walk_oids {
+        if commit_lane.contains_key(oid) {
+            // Already assigned by branch walk. Update frontier for first parent.
+            if let Ok(commit) = repo.find_commit(*oid) {
+                let parents: Vec<Oid> = commit.parent_ids().collect();
+                if let Some(&fp) = parents.first() {
+                    if walk_set.contains(&fp) && commit_lane.contains_key(&fp) {
+                        columns.retain(|(c, _)| *c != fp);
+                        columns.push((fp, commit_lane[&fp]));
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Find in active frontier or assign a lane
+        let col_idx = columns.iter().position(|(c, _)| *c == *oid);
+        let lane = match col_idx {
+            Some(idx) => {
+                let (_, lane) = columns.remove(idx);
+                lane
+            }
+            None => {
+                if columns.is_empty() {
+                    0
+                } else {
+                    // Try to use parent's lane for continuity
+                    repo.find_commit(*oid).ok()
+                        .and_then(|c| c.parent_ids().next())
+                        .and_then(|p| commit_lane.get(&p))
+                        .copied()
+                        .unwrap_or_else(|| next_free_lane(&columns))
+                }
+            }
+        };
+        commit_lane.insert(*oid, lane);
+
+        // Add parents to frontier
+        if let Ok(commit) = repo.find_commit(*oid) {
+            let parents: Vec<Oid> = commit.parent_ids().collect();
+            if !parents.is_empty() {
+                if !commit_lane.contains_key(&parents[0]) {
+                    columns.retain(|(c, _)| *c != parents[0]);
+                    columns.push((parents[0], lane));
+                }
+                // Additional parents get new lanes if not already in frontier
+                for parent in parents.iter().skip(1) {
+                    if !commit_lane.contains_key(parent)
+                        && !columns.iter().any(|(c, _)| *c == *parent)
+                    {
+                        columns.push((*parent, next_free_lane(&columns)));
+                    }
+                }
+            }
+        }
+    }
+
+    // Assign row numbers based on walk order
+    let order: HashMap<Oid, usize> = walk_oids.iter().enumerate().map(|(i, o)| (*o, i)).collect();
+
+    // Build nodes
+    let nodes: Vec<GraphNode> = walk_oids
+        .iter()
+        .map(|oid| {
+            let row = *order.get(oid).unwrap_or(&0) as u32;
+            let lane = *commit_lane.get(oid).unwrap_or(&0);
+
+            let (id, short_id, message, author, timestamp) = repo
+                .find_commit(*oid)
+                .ok()
+                .map(|c| {
+                    let id_str = c.id().to_string();
+                    let sid = id_str[..8.min(id_str.len())].to_string();
+                    let msg = c.message().unwrap_or("").lines().next().unwrap_or("").to_string();
+                    let author_name = c.author().name().unwrap_or("Unknown").to_string();
+                    (id_str, sid, msg, author_name, c.time().seconds())
+                })
+                .unwrap_or_else(|| (oid.to_string(), oid.to_string(), String::new(), "Unknown".to_string(), 0));
+
+            GraphNode {
+                id,
+                short_id,
+                message,
+                author,
+                timestamp,
+                branch_labels: branch_labels.get(oid).cloned().unwrap_or_default(),
+                lane,
+                color: lane,
+                row,
+            }
+        })
+        .collect();
+
+    // Build edges (only between nodes in the walk)
+    let mut edges = Vec::new();
+    for oid in &walk_oids {
+        if let Ok(commit) = repo.find_commit(*oid) {
+            for parent in commit.parent_ids() {
+                if walk_set.contains(&parent) {
+                    edges.push(GraphEdge {
+                        from: oid.to_string(),
+                        to: parent.to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(CommitGraphData { nodes, edges })
 }
 
 fn commit_to_info(commit: &git2::Commit) -> Result<CommitInfo, String> {

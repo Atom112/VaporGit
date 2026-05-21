@@ -4,6 +4,7 @@ import type {
   RecentRepo,
   CommitInfo,
   CommitDetail,
+  CommitGraphData,
   FileStatus,
   DiffResult,
   BranchInfo,
@@ -72,6 +73,10 @@ export async function getFileContent(
     filePath,
     commitId: commitId ?? null,
   });
+}
+
+export async function getCommitGraph(path: string): Promise<CommitGraphData> {
+  return invoke('get_commit_graph', { path });
 }
 
 export async function getBranchList(path: string): Promise<BranchInfo[]> {

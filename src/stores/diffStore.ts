@@ -6,7 +6,7 @@ export interface DiffState {
   selectedFile: string | null;
   diffResult: DiffResult | null;
   diffLoading: boolean;
-  viewMode: 'unified' | 'fullFile';
+  viewMode: 'unified' | 'fullFile' | 'split';
 }
 
 const [diffStore, setDiffStore] = createStore<DiffState>({

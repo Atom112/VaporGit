@@ -33,3 +33,30 @@ pub struct FileChange {
     pub additions: u32,
     pub deletions: u32,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitGraphData {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphNode {
+    pub id: String,
+    pub short_id: String,
+    pub message: String,
+    pub author: String,
+    pub timestamp: i64,
+    pub branch_labels: Vec<String>,
+    pub lane: u32,
+    pub color: u32,
+    pub row: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphEdge {
+    pub from: String,
+    pub to: String,
+}

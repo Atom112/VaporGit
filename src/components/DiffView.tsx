@@ -84,7 +84,7 @@ function buildFullFileLines(
 }
 
 const DiffView: Component<DiffViewProps> = (props) => {
-  const [viewMode, setViewMode] = createSignal<'unified' | 'fullFile'>('unified');
+  const [viewMode, setViewMode] = createSignal<'unified' | 'fullFile' | 'split'>('unified');
 
   const [fullContent] = createResource(
     () =>
@@ -132,6 +132,16 @@ const DiffView: Component<DiffViewProps> = (props) => {
             </button>
             <button
               class={`text-xs px-2 py-1 rounded transition-colors ${
+                viewMode() === 'split'
+                  ? 'bg-cyan-500/30 text-cyan-300'
+                  : 'opacity-50 hover:opacity-80'
+              }`}
+              onClick={() => setViewMode('split')}
+            >
+              Split
+            </button>
+            <button
+              class={`text-xs px-2 py-1 rounded transition-colors ${
                 viewMode() === 'fullFile'
                   ? 'bg-cyan-500/30 text-cyan-300'
                   : 'opacity-50 hover:opacity-80'
@@ -165,6 +175,8 @@ const DiffView: Component<DiffViewProps> = (props) => {
               >
                 {viewMode() === 'unified' ? (
                   <UnifiedView diffResult={props.diffResult!} lang={lang()} />
+                ) : viewMode() === 'split' ? (
+                  <SplitView diffResult={props.diffResult!} lang={lang()} />
                 ) : (
                   <Show when={fullContent() !== undefined} fallback={
                     <div class="flex items-center justify-center h-full opacity-40">加载完整文件...</div>
@@ -279,6 +291,101 @@ const FullFileView: Component<{ diffResult: DiffResult; fullContent: string; lan
           );
         }}
       </For>
+    </div>
+  );
+};
+
+/* ── Side-by-side Split view ── */
+interface SplitRow {
+  left: { content: string; kind: string; lineNum: number | null } | null;
+  right: { content: string; kind: string; lineNum: number | null } | null;
+}
+
+const SplitView: Component<{ diffResult: DiffResult; lang: string | null }> = (props) => {
+  let leftRef!: HTMLDivElement;
+  let rightRef!: HTMLDivElement;
+
+  const splitRows = (): SplitRow[] => {
+    const rows: SplitRow[] = [];
+    for (const hunk of props.diffResult.hunks) {
+      let oldLine = hunk.oldStart;
+      let newLine = hunk.newStart;
+      for (const line of hunk.lines) {
+        if (line.kind === 'context') {
+          rows.push({
+            left: { content: line.content, kind: 'context', lineNum: oldLine },
+            right: { content: line.content, kind: 'context', lineNum: newLine },
+          });
+          oldLine++;
+          newLine++;
+        } else if (line.kind === 'deletion') {
+          rows.push({
+            left: { content: line.content, kind: 'deletion', lineNum: oldLine },
+            right: null,
+          });
+          oldLine++;
+        } else if (line.kind === 'addition') {
+          rows.push({
+            left: null,
+            right: { content: line.content, kind: 'addition', lineNum: newLine },
+          });
+          newLine++;
+        }
+      }
+    }
+    return rows;
+  };
+
+  const handleScroll = (source: 'left' | 'right') => {
+    if (source === 'left' && rightRef) rightRef.scrollTop = leftRef.scrollTop;
+    if (source === 'right' && leftRef) leftRef.scrollTop = rightRef.scrollTop;
+  };
+
+  return (
+    <div class="flex h-full">
+      {/* Left: old */}
+      <div ref={leftRef} class="w-1/2 overflow-auto border-r border-white/10" onScroll={() => handleScroll('left')}>
+        <div class="bg-white/5 px-3 py-1 text-xs text-red-400 font-semibold sticky top-0 z-10">旧版本</div>
+        <For each={splitRows()}>
+          {(row) => {
+            const seg = row.left;
+            if (!seg) {
+              return <div class="flex h-5 bg-black/20"><div class="w-12 shrink-0" /><span class="opacity-25">│</span><div class="w-12 shrink-0" /></div>;
+            }
+            return (
+              <div class={`flex items-stretch ${seg.kind === 'deletion' ? 'bg-red-500/10' : ''}`}>
+                <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
+                  {seg.lineNum ?? ''}
+                </div>
+                <span class="opacity-25 select-none leading-normal">│</span>
+                <span class="whitespace-pre-wrap break-all leading-normal" innerHTML={highlightLine(seg.content, props.lang)} />
+              </div>
+            );
+          }}
+        </For>
+      </div>
+
+      {/* Right: new */}
+      <div ref={rightRef} class="w-1/2 overflow-auto" onScroll={() => handleScroll('right')}>
+        <div class="bg-white/5 px-3 py-1 text-xs text-green-400 font-semibold sticky top-0 z-10">新版本</div>
+        <For each={splitRows()}>
+          {(row) => {
+            const seg = row.right;
+            if (!seg) {
+              return <div class="flex h-5 bg-black/20"><div class="w-12 shrink-0" /><span class="opacity-25">│</span><div class="w-12 shrink-0" /></div>;
+            }
+            return (
+              <div class={`flex items-stretch ${seg.kind === 'addition' ? 'bg-green-500/10' : ''}`}>
+                <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
+                  {seg.lineNum ?? ''}
+                </div>
+                <span class="opacity-25 select-none leading-normal">│</span>
+                <span class="whitespace-pre-wrap break-all leading-normal" innerHTML={highlightLine(seg.content, props.lang)} />
+              </div>
+            );
+          }}
+        </For>
+      </div>
     </div>
   );
 };

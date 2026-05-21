@@ -1,5 +1,5 @@
 use crate::git;
-use crate::models::commit::{CommitDetail, CommitInfo};
+use crate::models::commit::{CommitDetail, CommitGraphData, CommitInfo};
 
 #[tauri::command]
 pub fn commit(path: String, message: String) -> Result<CommitInfo, String> {
@@ -21,4 +21,10 @@ pub fn get_commit_history(
 pub fn get_commit_detail(path: String, commit_id: String) -> Result<CommitDetail, String> {
     let repo = git::repo::open_repo(&path)?;
     git::commit::get_commit_detail(&repo, &commit_id)
+}
+
+#[tauri::command]
+pub fn get_commit_graph(path: String) -> Result<CommitGraphData, String> {
+    let repo = git::repo::open_repo(&path)?;
+    git::commit::get_commit_graph(&repo)
 }
