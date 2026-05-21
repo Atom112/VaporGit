@@ -77,12 +77,12 @@ const Home: Component = () => {
       const repoInfo = await cloneRepo(cloneUrl().trim(), clonePath().trim());
       addToast('克隆成功', 'success');
       setRepoStore({
-        repoPath: clonePath().trim(),
+        repoPath: repoInfo.path,
         repoInfo,
         loading: false,
         error: null,
       });
-      const statuses = await getStatus(clonePath().trim());
+      const statuses = await getStatus(repoInfo.path);
       setDiffStore({ fileStatuses: statuses });
       setClonePhase('closed');
       navigate('/repository');

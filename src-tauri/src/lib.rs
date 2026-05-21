@@ -6,7 +6,7 @@ use commands::branch::{create_branch, checkout_branch, delete_branch, get_branch
 use commands::commit::{cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, rebase};
 use commands::diff::{get_file_content, get_file_diff};
 use commands::remote::{fetch, get_remotes, pull, push};
-use commands::repo::{clone_repo, get_conflicts, get_recent_repos, get_status, open_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
+use commands::repo::{clone_repo, get_conflicts, get_recent_repos, get_status, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
 use commands::stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_save};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,6 +19,7 @@ pub fn run() {
             open_repo,
             clone_repo,
             get_recent_repos,
+            remove_recent_repo,
             save_repo_path,
             get_status,
             stage_files,

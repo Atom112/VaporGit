@@ -159,6 +159,37 @@
   .animate-modal-exit {
     animation: modal-exit 0.12s ease-in forwards;
   }
+
+  /* Error slide enter/exit animations */
+  @keyframes error-slide-enter {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes error-slide-exit {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+  }
+
+  .animate-error-enter {
+    animation: error-slide-enter 0.2s ease-out;
+  }
+
+  .animate-error-exit {
+    animation: error-slide-exit 0.12s ease-in forwards;
+  }
 }
 
 .container {

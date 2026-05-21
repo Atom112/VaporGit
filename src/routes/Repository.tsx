@@ -17,6 +17,7 @@ import {
   getBranchList,
   openRepo,
   getRecentRepos,
+  removeRecentRepo,
   checkoutBranch,
   createBranch,
   cherryPick,
@@ -49,6 +50,25 @@ const Repository: Component = () => {
   const [commitLoading, setCommitLoading] = createSignal(false);
   const [recentRepos, setRecentRepos] = createSignal<RecentRepo[]>([]);
   const [repoError, setRepoError] = createSignal<string | null>(null);
+  const [failedRepoPath, setFailedRepoPath] = createSignal<string | null>(null);
+  const [repoErrorPhase, setRepoErrorPhase] = createSignal<'closed' | 'enter' | 'exit'>('closed');
+
+  const showRepoError = (msg: string, failedPath?: string) => {
+    setRepoError(msg);
+    setFailedRepoPath(failedPath ?? null);
+    setRepoErrorPhase('enter');
+  };
+
+  const clearRepoErrorAnimated = (afterClear?: () => void) => {
+    if (repoErrorPhase() === 'closed') return;
+    setRepoErrorPhase('exit');
+    setTimeout(() => {
+      setRepoErrorPhase('closed');
+      setRepoError(null);
+      setFailedRepoPath(null);
+      afterClear?.();
+    }, 120);
+  };
 
   // M3: Modal & action state
   const [remoteActionLoading, setRemoteActionLoading] = createSignal(false);
@@ -161,7 +181,9 @@ const Repository: Component = () => {
 
   const handleOpenRepo = async () => {
     try {
+      setRepoErrorPhase('closed');
       setRepoError(null);
+      setFailedRepoPath(null);
       const selected = await open({
         directory: true,
         multiple: false,
@@ -178,13 +200,15 @@ const Repository: Component = () => {
       refreshAll();
     } catch (e) {
       setRepoStore({ loading: false });
-      setRepoError(String(e));
+      showRepoError(String(e));
     }
   };
 
   const handleRecentClick = async (repo: RecentRepo) => {
     try {
+      setRepoErrorPhase('closed');
       setRepoError(null);
+      setFailedRepoPath(null);
       setRepoStore({ loading: true });
       const repoInfo = await openRepo(repo.path);
       setRepoStore({ repoPath: repo.path, repoInfo, loading: false, error: null });
@@ -195,8 +219,22 @@ const Repository: Component = () => {
       refreshAll();
     } catch (e) {
       setRepoStore({ loading: false });
-      setRepoError(String(e));
+      showRepoError(String(e), repo.path);
     }
+  };
+
+  const handleRemoveFailedRepo = () => {
+    const path = failedRepoPath();
+    if (!path) return;
+    clearRepoErrorAnimated(async () => {
+      try {
+        await removeRecentRepo(path);
+        const repos = await getRecentRepos();
+        setRecentRepos(repos);
+      } catch {
+        // ignore remove errors
+      }
+    });
   };
 
   // ── Handlers ──
@@ -517,9 +555,19 @@ const Repository: Component = () => {
           <div class="max-w-xl w-full">
             <h1 class="text-2xl font-bold mb-6 text-center">选择仓库</h1>
 
-            <Show when={repoError()}>
-              <div class="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm">
-                {repoError()}
+            <Show when={repoErrorPhase() !== 'closed'}>
+              <div class={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm space-y-2 ${
+                repoErrorPhase() === 'enter' ? 'animate-error-enter' : 'animate-error-exit'
+              }`}>
+                <p>{repoError()}</p>
+                <Show when={failedRepoPath()}>
+                  <button
+                    class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
+                    onClick={handleRemoveFailedRepo}
+                  >
+                    从仓库列表中移除
+                  </button>
+                </Show>
               </div>
             </Show>
 
@@ -547,11 +595,11 @@ const Repository: Component = () => {
                       }`}
                       onClick={() => handleRecentClick(repo)}
                     >
-                      <div>
+                      <div class="flex-1 min-w-0">
                         <span class="font-medium">{repo.name}</span>
-                        <span class="ml-3 text-xs opacity-50">{repo.path}</span>
+                        <span class="ml-3 text-xs opacity-50 truncate align-middle">{repo.path}</span>
                       </div>
-                      <span class="text-xs opacity-40">{repo.lastOpened}</span>
+                      <span class="text-xs opacity-40 shrink-0">{repo.lastOpened}</span>
                     </div>
                   )}
                 </For>

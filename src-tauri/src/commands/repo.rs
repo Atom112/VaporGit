@@ -56,6 +56,28 @@ pub async fn save_repo_path(path: String) -> Result<(), String> {
     save_repo_path_inner(&path)
 }
 
+#[tauri::command]
+pub async fn remove_recent_repo(path: String) -> Result<(), String> {
+    let config_dir = ensure_config_dir()?;
+    let file_path = config_dir.join("recent_repos.json");
+
+    let mut repos: Vec<RecentRepo> = if file_path.exists() {
+        let content =
+            fs::read_to_string(&file_path).map_err(|e| format!("读取配置失败: {}", e))?;
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    repos.retain(|r| r.path != path);
+
+    let content =
+        serde_json::to_string_pretty(&repos).map_err(|e| format!("序列化配置失败: {}", e))?;
+    fs::write(&file_path, content).map_err(|e| format!("写入配置失败: {}", e))?;
+
+    Ok(())
+}
+
 fn save_repo_path_inner(path: &str) -> Result<(), String> {
     let config_dir = ensure_config_dir()?;
     let file_path = config_dir.join("recent_repos.json");
@@ -148,13 +170,12 @@ pub async fn resolve_conflict(path: String, file: String, resolution: String) ->
 
 #[tauri::command]
 pub async fn clone_repo(url: String, path: String) -> Result<RepoInfo, String> {
-    let path_clone = path.clone();
     let (_, info) = tokio::task::spawn_blocking(move || {
         git::repo::clone_repo(&url, &path)
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))??;
 
-    save_repo_path_inner(&path_clone)?;
+    save_repo_path_inner(&info.path)?;
     Ok(info)
 }
