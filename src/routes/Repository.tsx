@@ -885,7 +885,7 @@ const Repository: Component = () => {
                 disabled={remoteActionLoading()}
               >
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
                 </svg>
                 {remoteActionLoading() ? '...' : 'Pull'}
               </button>
@@ -895,13 +895,13 @@ const Repository: Component = () => {
                 disabled={remoteActionLoading()}
               >
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4-4m0 0l-4-4m4 4H3" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2" />
                 </svg>
                 {remoteActionLoading() ? '...' : 'Push'}
               </button>
               {githubStore.authenticated && (
                 <A
-                  class="flex-1 py-2 text-xs rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-center transition-colors flex items-center justify-center gap-1"
+                  class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors flex items-center justify-center gap-1"
                   href="/pulls"
                 >
                   <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
