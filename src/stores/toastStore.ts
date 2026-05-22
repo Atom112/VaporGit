@@ -3,15 +3,20 @@ import { createStore } from 'solid-js/store';
 export interface ToastItem {
   id: number;
   message: string;
-  type: 'success' | 'error';
+  type: 'success' | 'error' | 'info';
+  onClick?: () => void;
 }
 
 let nextId = 0;
 const [toasts, setToasts] = createStore<{ items: ToastItem[] }>({ items: [] });
 
-export function addToast(message: string, type: 'success' | 'error') {
+export function addToast(
+  message: string,
+  type: 'success' | 'error' | 'info',
+  onClick?: () => void
+) {
   const id = nextId++;
-  setToasts('items', (items) => [...items, { id, message, type }]);
+  setToasts('items', (items) => [...items, { id, message, type, onClick }]);
   setTimeout(() => removeToast(id), 5000);
 }
 

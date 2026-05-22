@@ -7,6 +7,7 @@ import ToastContainer from "./components/ToastContainer";
 import { githubCheckAuth, checkUpdate } from "./lib/tauriCommands";
 import { setAuthenticated } from "./stores/githubStore";
 import { addToast } from "./stores/toastStore";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 export default function App(props: { children?: any }) {
   onMount(() => {
@@ -30,7 +31,11 @@ export default function App(props: { children?: any }) {
     try {
       const update = await checkUpdate();
       if (update) {
-        addToast(`新版本 ${update.tagName} 已发布 — 点击前往下载`, "success");
+        addToast(
+          `新版本 ${update.tagName} 已发布 — 点击下载`,
+          "info",
+          () => openUrl(update.htmlUrl)
+        );
       }
     } catch {
       // Silently ignore (offline, rate-limited, etc.)
