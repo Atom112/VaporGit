@@ -2,6 +2,8 @@ use crate::github::parse_github_response;
 use crate::models::github::{AuthStatus, GitHubUser};
 use keyring::Entry;
 use reqwest::Client;
+use std::fs;
+use std::path::PathBuf;
 use tokio::sync::oneshot;
 use url::Url;
 
@@ -209,65 +211,103 @@ fn memory_token() -> &'static std::sync::Mutex<Option<String>> {
     MEMORY_TOKEN.get_or_init(|| std::sync::Mutex::new(None))
 }
 
+// ── File-based token path (reliable fallback) ────────────────
+
+fn token_file_path() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(appdata).join("VaporGit").join("github_token")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(home).join(".config").join("VaporGit").join("github_token")
+    }
+}
+
+fn ensure_token_dir() -> Result<(), String> {
+    if let Some(parent) = token_file_path().parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create token directory: {e}"))
+    } else {
+        Ok(())
+    }
+}
+
 // ── Token persistence ─────────────────────────────────────────
 
-/// Save token to both OS keychain and in-memory cache.
+/// Save token to OS keychain, file fallback, and in-memory cache.
 pub fn save_token(token: &str) -> Result<(), String> {
     // Always cache in memory first
     *memory_token().lock().unwrap() = Some(token.to_string());
 
-    // Persist to OS keychain (best-effort, in-memory cache is the fallback)
-    match Entry::new(KEYRING_SERVICE, KEYRING_USER) {
-        Ok(entry) => {
-            let _ = entry.set_password(token);
-        }
-        Err(e) => {
-            eprintln!("Keyring entry creation failed (non-fatal): {e}");
-        }
+    // Persist to OS keychain (best-effort)
+    if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_USER) {
+        let _ = entry.set_password(token);
     }
+
+    // Persist to file as reliable fallback (same pattern as recent_repos.json)
+    let _ = ensure_token_dir();
+    let _ = fs::write(token_file_path(), token);
+
     Ok(())
 }
 
-/// Load token from in-memory cache first, then OS keychain.
+/// Load token from in-memory cache first, then OS keychain, then file.
 pub fn load_token() -> Result<Option<String>, String> {
     // Check in-memory cache first (fast path, survives Tauri command boundary)
     if let Some(token) = memory_token().lock().unwrap().clone() {
         return Ok(Some(token));
     }
 
-    // Fallback to OS keychain
-    match Entry::new(KEYRING_SERVICE, KEYRING_USER) {
-        Ok(entry) => match entry.get_password() {
+    // Try OS keychain
+    if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_USER) {
+        match entry.get_password() {
             Ok(token) => {
-                // Re-populate memory cache
                 *memory_token().lock().unwrap() = Some(token.clone());
-                Ok(Some(token))
+                return Ok(Some(token));
             }
-            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(keyring::Error::NoEntry) => { /* fall through to file */ }
             Err(e) => {
                 eprintln!("Failed to load token from keychain (non-fatal): {e}");
-                Ok(None)
             }
-        },
-        Err(e) => {
-            eprintln!("Keyring entry creation failed (non-fatal): {e}");
-            Ok(None)
         }
     }
+
+    // Final fallback: file storage (reliable across restarts on Windows)
+    let file_path = token_file_path();
+    if file_path.exists() {
+        match fs::read_to_string(&file_path) {
+            Ok(token) => {
+                let token = token.trim().to_string();
+                if !token.is_empty() {
+                    *memory_token().lock().unwrap() = Some(token.clone());
+                    return Ok(Some(token));
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read token file (non-fatal): {e}");
+            }
+        }
+    }
+
+    Ok(None)
 }
 
-/// Clear token from both OS keychain and in-memory cache.
+/// Clear token from OS keychain, file, and in-memory cache.
 pub fn clear_token() -> Result<(), String> {
     *memory_token().lock().unwrap() = None;
 
-    match Entry::new(KEYRING_SERVICE, KEYRING_USER) {
-        Ok(entry) => {
-            let _ = entry.delete_credential();
-        }
-        Err(e) => {
-            eprintln!("Keyring entry creation failed (non-fatal): {e}");
-        }
+    if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_USER) {
+        let _ = entry.delete_credential();
     }
+
+    // Also remove the file
+    let file_path = token_file_path();
+    if file_path.exists() {
+        let _ = fs::remove_file(&file_path);
+    }
+
     Ok(())
 }
 

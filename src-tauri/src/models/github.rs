@@ -189,11 +189,22 @@ pub struct PRReview {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitHubReleaseAsset {
+    pub name: String,
+    pub browser_download_url: String,
+    pub content_type: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitHubRelease {
     pub tag_name: String,
     pub name: Option<String>,
     pub body: Option<String>,
     pub html_url: String,
+    #[serde(default)]
+    pub assets: Vec<GitHubReleaseAsset>,
     pub published_at: Option<String>,
     #[serde(default)]
     pub prerelease: bool,

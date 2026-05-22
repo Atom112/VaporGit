@@ -21,6 +21,7 @@ import type {
   PullRequestFile,
   PRComment,
   AuthStatus,
+  GitHubReleaseAsset,
   UpdateInfo,
 } from './types';
 
@@ -294,4 +295,16 @@ export async function githubCreatePullComment(
   position: number
 ): Promise<PRComment> {
   return invoke('github_create_pull_comment', { owner, repo, number, body, commitId, path, position });
+}
+
+export async function githubGetAsset(release: UpdateInfo): Promise<GitHubReleaseAsset | null> {
+  return invoke('github_get_asset', { release });
+}
+
+export async function githubStartDownload(asset: GitHubReleaseAsset): Promise<string> {
+  return invoke('github_start_download', { asset });
+}
+
+export async function githubInstallUpdate(installerPath: string): Promise<void> {
+  return invoke('github_install_update', { installerPath });
 }

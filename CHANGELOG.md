@@ -1,6 +1,27 @@
 # Changelog / 已实现功能
 
-## v1.0.6
+## v1.0.7
+
+### 自动下载更新 & 一键升级
+
+**后端（Rust）：**
+- `github_get_asset`：从 GitHub Release 资源中自动匹配当前平台安装包（Windows → .msi, macOS → .dmg, Linux → 运行时检测 dpkg/rpm 选择 .deb/.rpm，回退 .AppImage）
+- `github_start_download`：流式下载安装包，每 256KB 通过 Tauri Event 发送下载进度
+- `github_install_update`：下载完成后启动安装器（Windows: msiexec 原地升级，macOS: open, Linux: pkexec dpkg/rpm），500ms 后自动退出应用
+- `update` 模块：统一封装平台匹配、进度下载、安装启动逻辑
+- 新增数据模型：`GitHubReleaseAsset`
+
+**前端：**
+- 更新通知增加下载进度条（实时显示已下载/总大小）
+- 下载完成后显示"安装更新"按钮，点击后启动安装器并退出应用
+- `updateStore` 新增四阶段状态管理：idle → downloading → downloaded → installing
+
+### Token 持久化可靠性改进
+
+**后端（Rust）：**
+- `save_token` / `load_token` / `clear_token`：在原有钥匙串（keyring）基础上增加 `%APPDATA%/VaporGit/github_token` 文件持久化
+- `load_token` 读取顺序：内存缓存 → 钥匙串 → 文件，取到即止
+- 解决部分 Windows 环境下 keyring 凭据无法跨会话保持的问题
 
 ### 更新通知 UI 优化
 

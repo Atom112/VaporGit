@@ -2,6 +2,7 @@ pub mod api;
 pub mod auth;
 pub mod pulls;
 pub mod repos;
+pub mod update;
 
 /// Convert a snake_case string to camelCase.
 fn snake_to_camel(s: &str) -> String {

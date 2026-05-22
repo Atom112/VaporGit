@@ -247,14 +247,27 @@ export interface PullRequestFile {
   patch: string | null;
 }
 
+export interface GitHubReleaseAsset {
+  name: string;
+  browserDownloadUrl: string;
+  contentType: string;
+  size: number;
+}
+
 export interface UpdateInfo {
   tagName: string;
   name: string | null;
   body: string | null;
   htmlUrl: string;
+  assets: GitHubReleaseAsset[];
   publishedAt: string | null;
   prerelease: boolean;
   draft: boolean;
+}
+
+export interface DownloadProgress {
+  bytesDownloaded: number;
+  totalBytes: number;
 }
 
 export interface PRComment {

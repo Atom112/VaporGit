@@ -1,7 +1,8 @@
-use crate::github::{api::GitHubClient, auth, parse_github_response};
+use crate::github::{api::GitHubClient, auth, parse_github_response, update};
 use crate::models::github::{
-    AuthStatus, CreatePullRequest, GitHubBranch, GitHubPullRequest, GitHubRelease, GitHubRepo,
-    GitHubUser, MergePullRequest, MergePullResult, PullRequestFile, PRComment,
+    AuthStatus, CreatePullRequest, GitHubBranch, GitHubPullRequest, GitHubRelease,
+    GitHubReleaseAsset, GitHubRepo, GitHubUser, MergePullRequest, MergePullResult, PullRequestFile,
+    PRComment,
 };
 
 /// Load token and create an authenticated GitHub client.
@@ -206,4 +207,28 @@ pub async fn check_update() -> Result<Option<GitHubRelease>, String> {
     } else {
         Ok(None)
     }
+}
+
+/// Find the asset matching the current platform from a release.
+#[tauri::command]
+pub async fn github_get_asset(release: GitHubRelease) -> Result<Option<GitHubReleaseAsset>, String> {
+    Ok(update::find_matching_asset(&release.assets))
+}
+
+/// Download the update asset with progress events.
+#[tauri::command]
+pub async fn github_start_download(
+    app: tauri::AppHandle,
+    asset: GitHubReleaseAsset,
+) -> Result<String, String> {
+    update::download_update(&app, &asset).await
+}
+
+/// Launch the installer and exit the app.
+#[tauri::command]
+pub async fn github_install_update(
+    app: tauri::AppHandle,
+    installer_path: String,
+) -> Result<(), String> {
+    update::install_update(&installer_path, &app)
 }

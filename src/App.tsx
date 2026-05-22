@@ -31,7 +31,7 @@ export default function App(props: { children?: any }) {
     try {
       const update = await checkUpdate();
       if (update) {
-        showUpdate(update.tagName, update.htmlUrl);
+        showUpdate(update);
       }
     } catch {
       // Silently ignore (offline, rate-limited, etc.)
