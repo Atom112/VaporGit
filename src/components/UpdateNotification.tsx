@@ -1,4 +1,4 @@
-import { onMount, onCleanup, Show } from 'solid-js';
+import { onMount, onCleanup, createEffect, Show } from 'solid-js';
 import { listen } from '@tauri-apps/api/event';
 import {
   updateStore,
@@ -20,15 +20,15 @@ function formatSize(bytes: number): string {
 }
 
 export default function UpdateNotification() {
-  onMount(async () => {
-    // Resolve the platform-matching asset from the release
-    if (updateStore.release && !updateStore.asset) {
-      try {
-        const asset = await githubGetAsset(updateStore.release);
+  createEffect(() => {
+    // Resolve the platform-matching asset from the release reactively
+    const release = updateStore.release;
+    if (release && !updateStore.asset) {
+      githubGetAsset(release).then((asset) => {
         if (asset) setDownloadAsset(asset);
-      } catch {
+      }).catch(() => {
         // Fallback: user can still click to open the release page
-      }
+      });
     }
   });
 
@@ -68,7 +68,7 @@ export default function UpdateNotification() {
 
   return (
     <Show when={updateStore.available}>
-      <div class="fixed bottom-4 left-4 z-[100] max-w-sm animate-toast-in">
+      <div class="fixed bottom-4 left-4 z-100 max-w-sm animate-toast-in">
         <div class="bg-amber-500/15 border border-amber-500/40 rounded-xl shadow-lg backdrop-blur p-4">
           {/* Title */}
           <p class="text-sm font-medium text-amber-200">

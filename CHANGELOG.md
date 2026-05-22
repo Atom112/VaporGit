@@ -1,5 +1,12 @@
 # Changelog / 已实现功能
 
+## v1.0.8
+
+### 修复
+
+**前端：**
+- 修复更新通知确认下载和忽略按钮不显示的问题：`onMount` 在异步 `checkUpdate()` 完成前已执行，导致 `asset` 始终为空；改用 `createEffect` 响应式监听 `release` 变更后自动解析 asset
+
 ## v1.0.7
 
 ### 自动下载更新 & 一键升级
