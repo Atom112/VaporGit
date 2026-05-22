@@ -23,7 +23,22 @@
       "Bash(cat Cargo.toml)",
       "Bash(cat src-tauri/Cargo.toml)",
       "Bash(git commit -m 'fix: 添加GITHUB_TOKEN contents:write权限以创建Release *)",
-      "Bash(git commit -m 'feat: 添加统一版本管理脚本 npm run version *)"
+      "Bash(git commit -m 'feat: 添加统一版本管理脚本 npm run version *)",
+      "Bash(gh issue *)",
+      "WebFetch(domain:github.com)",
+      "Bash(git checkout *)",
+      "Bash(gh --version)",
+      "Bash(git commit -m ' *)",
+      "Bash(curl *)",
+      "Bash(git config *)",
+      "Bash(Select-String -Pattern \"^warning\")",
+      "Bash(cargo clippy *)",
+      "Bash(rustc *)",
+      "Bash(node *)",
+      "Bash(git check-ignore *)",
+      "Bash(git commit *)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(git *)"
     ]
   }
 }

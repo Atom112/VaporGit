@@ -67,7 +67,7 @@ const PRDetail: Component<Props> = (props) => {
             class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
             onClick={props.onBack}
           >
-            &larr; Back
+            &larr; 返回
           </button>
         </div>
         <h2 class="text-base font-bold text-white leading-snug">{pr().title}</h2>

@@ -161,9 +161,25 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
     revwalk
         .set_sorting(Sort::TOPOLOGICAL)
         .map_err(|e| format!("无法设置排序: {}", e))?;
-    revwalk
-        .push_head()
-        .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+
+    // Push all local + remote-tracking branch tips so the commit graph
+    // shows every branch, regardless of which one is checked out.
+    let mut pushed_any = false;
+    for branch_type in [Some(git2::BranchType::Local), Some(git2::BranchType::Remote)] {
+        if let Ok(branches) = repo.branches(branch_type) {
+            for branch_result in branches.flatten() {
+                if let Some(oid) = branch_result.0.get().target() {
+                    revwalk.push(oid).map_err(|e| format!("无法推送分支: {}", e))?;
+                    pushed_any = true;
+                }
+            }
+        }
+    }
+    if !pushed_any {
+        revwalk
+            .push_head()
+            .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+    }
 
     let walk_oids: Vec<Oid> = revwalk.filter_map(|r| r.ok()).collect();
 
@@ -171,27 +187,32 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         return Ok(CommitGraphData { nodes: vec![], edges: vec![] });
     }
 
-    // Collect branch labels per commit OID
+    // Collect branch labels per commit OID (local + remote)
     let mut branch_labels: HashMap<Oid, Vec<String>> = HashMap::new();
-    if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
-        for branch_result in branches.flatten() {
-            if let Some(oid) = branch_result.0.get().target() {
-                let name = branch_result.0.name().ok().flatten().unwrap_or("").to_string();
-                branch_labels.entry(oid).or_default().push(name);
+    for branch_type in [Some(git2::BranchType::Local), Some(git2::BranchType::Remote)] {
+        if let Ok(branches) = repo.branches(branch_type) {
+            for branch_result in branches.flatten() {
+                if let Some(oid) = branch_result.0.get().target() {
+                    let name = branch_result.0.name().ok().flatten().unwrap_or("").to_string();
+                    if !name.is_empty() {
+                        branch_labels.entry(oid).or_default().push(name);
+                    }
+                }
             }
         }
     }
 
-    // ── Phase 1: Collect and sort local branch tips ──
-    // main/master always get lane 0; remaining branches sorted alphabetically.
+    // ── Phase 1: Collect and sort local + remote branch tips ──
     let walk_set: HashSet<Oid> = walk_oids.iter().copied().collect();
     let mut branch_refs: Vec<(Oid, String)> = Vec::new();
-    if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
-        for branch_result in branches.flatten() {
-            if let Some(oid) = branch_result.0.get().target() {
-                let name = branch_result.0.name().ok().flatten().unwrap_or("").to_string();
-                if !name.is_empty() && walk_set.contains(&oid) {
-                    branch_refs.push((oid, name));
+    for branch_type in [Some(git2::BranchType::Local), Some(git2::BranchType::Remote)] {
+        if let Ok(branches) = repo.branches(branch_type) {
+            for branch_result in branches.flatten() {
+                if let Some(oid) = branch_result.0.get().target() {
+                    let name = branch_result.0.name().ok().flatten().unwrap_or("").to_string();
+                    if !name.is_empty() && walk_set.contains(&oid) {
+                        branch_refs.push((oid, name));
+                    }
                 }
             }
         }
@@ -207,19 +228,27 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
     });
 
     // ── Phase 2: First-parent walk from each branch tip ──
-    // Assigns commits to their branch's lane. Stops when hitting an already-assigned
-    // commit (the fork point where it rejoins another branch's first-parent chain).
+    // Each branch tip forces its own lane so branches on the same linear
+    // chain (fast-forward) still get distinct lanes for the tip commit.
+    // The walk then continues down the first-parent chain until hitting a
+    // commit already claimed by another lane (the fork point).
     let mut commit_lane: HashMap<Oid, u32> = HashMap::new();
     for (i, (tip_oid, _)) in branch_refs.iter().enumerate() {
         let lane = i as u32;
+        // Always assign the tip to its own lane
+        if walk_set.contains(tip_oid) {
+            commit_lane.insert(*tip_oid, lane);
+        }
         let mut oid = *tip_oid;
         loop {
-            if !walk_set.contains(&oid) || commit_lane.contains_key(&oid) {
-                break;
-            }
-            commit_lane.insert(oid, lane);
             match repo.find_commit(oid).ok().and_then(|c| c.parent_ids().next()) {
-                Some(p) => oid = p,
+                Some(p) => {
+                    if !walk_set.contains(&p) || commit_lane.contains_key(&p) {
+                        break;
+                    }
+                    commit_lane.insert(p, lane);
+                    oid = p;
+                }
                 None => break,
             }
         }

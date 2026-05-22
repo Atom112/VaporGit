@@ -191,9 +191,9 @@ export interface GitHubPullRequest {
   merged: boolean;
   mergeable: boolean | null;
   draft: boolean;
-  additions: number;
-  deletions: number;
-  changedFiles: number;
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
 }
 
 export interface PRBranchRef {
@@ -209,6 +209,11 @@ export interface PRBranchRef {
     cloneUrl: string;
     defaultBranch: string;
   } | null;
+}
+
+export interface GitHubBranch {
+  name: string;
+  commit: { sha: string };
 }
 
 export interface CreatePullRequest {

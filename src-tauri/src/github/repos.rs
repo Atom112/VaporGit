@@ -1,4 +1,4 @@
-use crate::models::github::GitHubRepo;
+use crate::models::github::{GitHubBranch, GitHubRepo};
 use crate::github::api::GitHubClient;
 
 impl GitHubClient {
@@ -18,6 +18,12 @@ impl GitHubClient {
     /// Get a single repository by owner and name.
     pub async fn get_repo(&self, owner: &str, repo: &str) -> Result<GitHubRepo, String> {
         let path = format!("/repos/{}/{}", owner, repo);
+        self.get_json(&path).await
+    }
+
+    /// List branches for a repository.
+    pub async fn list_branches(&self, owner: &str, repo: &str) -> Result<Vec<GitHubBranch>, String> {
+        let path = format!("/repos/{}/{}/branches?per_page=100", owner, repo);
         self.get_json(&path).await
     }
 }

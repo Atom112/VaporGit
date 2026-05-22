@@ -27,6 +27,7 @@ interface CommitGraphProps {
   onCheckout?: (commitId: string) => void;
   onCreateBranch?: (commitId: string) => void;
   onCherryPick?: (commitId: string) => void;
+  onCreatePullRequest?: (commitId: string) => void;
 }
 
 const CommitGraph: Component<CommitGraphProps> = (props) => {
@@ -406,6 +407,13 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
     closeContextMenu();
   };
 
+  const handleContextCreatePullRequest = () => {
+    const menu = ctxMenu();
+    if (!menu) return;
+    props.onCreatePullRequest?.(menu.node.id);
+    closeContextMenu();
+  };
+
   // Close context menu on Escape
   createEffect(() => {
     if (!ctxMenu()) return;
@@ -588,6 +596,15 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
                 Cherry-pick 此提交
+              </button>
+              <button
+                class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                onClick={handleContextCreatePullRequest}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                从此发起 Pull Request
               </button>
               <div class="border-t border-white/10 my-1" />
               <button

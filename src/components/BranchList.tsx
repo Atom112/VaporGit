@@ -1,5 +1,5 @@
 import { Component, For, Show, createSignal } from 'solid-js';
-import { checkoutBranch, createBranch, deleteBranch } from '../lib/tauriCommands';
+import { checkoutBranch, checkoutRemoteBranch, createBranch, deleteBranch } from '../lib/tauriCommands';
 import { addToast } from '../stores/toastStore';
 import type { BranchInfo } from '../lib/types';
 
@@ -26,6 +26,21 @@ const BranchList: Component<BranchListProps> = (props) => {
     setError(null);
     try {
       await checkoutBranch(props.repoPath, name);
+      addToast(`已切换到分支 ${name}`, 'success');
+      await props.onRefresh();
+    } catch (e) {
+      addToast(`切换分支失败: ${e}`, 'error');
+      setError(String(e));
+    } finally {
+      setCheckoutBranchName(null);
+    }
+  };
+
+  const handleCheckoutRemote = async (name: string) => {
+    setCheckoutBranchName(name);
+    setError(null);
+    try {
+      await checkoutRemoteBranch(props.repoPath, name);
       addToast(`已切换到分支 ${name}`, 'success');
       await props.onRefresh();
     } catch (e) {
@@ -157,7 +172,10 @@ const BranchList: Component<BranchListProps> = (props) => {
             <div class="px-3 py-2 text-[10px] font-semibold opacity-40 uppercase tracking-wider border-t border-white/5">远程分支</div>
             <For each={remoteBranches()}>
               {(branch) => (
-                <div class="flex items-center gap-2 px-3 py-2 text-sm opacity-60">
+                <div
+                  class="flex items-center gap-2 px-3 py-2 text-sm opacity-60 hover:opacity-100 hover:bg-white/5 cursor-pointer transition-colors"
+                  onClick={() => handleCheckoutRemote(branch.name)}
+                >
                   <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                   </svg>

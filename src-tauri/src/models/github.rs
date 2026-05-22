@@ -101,8 +101,10 @@ pub struct GitHubPullRequest {
     pub updated_at: String,
     pub closed_at: Option<String>,
     pub merged_at: Option<String>,
+    #[serde(default)]
     pub merged: bool,
     pub mergeable: Option<bool>,
+    #[serde(default)]
     pub draft: bool,
     pub additions: Option<u32>,
     pub deletions: Option<u32>,
@@ -159,6 +161,19 @@ pub struct PRComment {
     pub user: GitHubUserMinimal,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubBranch {
+    pub name: String,
+    pub commit: BranchCommitRef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchCommitRef {
+    pub sha: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 use crate::github::{api::GitHubClient, auth};
 use crate::models::github::{
-    AuthStatus, CreatePullRequest, GitHubPullRequest, GitHubRepo, GitHubUser, MergePullRequest,
-    MergePullResult, PullRequestFile, PRComment,
+    AuthStatus, CreatePullRequest, GitHubBranch, GitHubPullRequest, GitHubRepo, GitHubUser,
+    MergePullRequest, MergePullResult, PullRequestFile, PRComment,
 };
 
 /// Load token and create an authenticated GitHub client.
@@ -49,6 +49,13 @@ pub async fn github_list_repos(page: Option<u32>, per_page: Option<u32>) -> Resu
 pub async fn github_get_repo(owner: String, repo: String) -> Result<GitHubRepo, String> {
     let client = authenticated_client()?;
     client.get_repo(&owner, &repo).await
+}
+
+/// List branches for a repository.
+#[tauri::command]
+pub async fn github_list_branches(owner: String, repo: String) -> Result<Vec<GitHubBranch>, String> {
+    let client = authenticated_client()?;
+    client.list_branches(&owner, &repo).await
 }
 
 /// List pull requests for a repository.

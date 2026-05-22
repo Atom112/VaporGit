@@ -13,6 +13,7 @@ import type {
   StashInfo,
   GitHubUser,
   GitHubRepo,
+  GitHubBranch,
   GitHubPullRequest,
   CreatePullRequest,
   MergePullRequest,
@@ -111,6 +112,10 @@ export async function checkoutBranch(path: string, name: string): Promise<void> 
   return invoke('checkout_branch', { path, name });
 }
 
+export async function checkoutRemoteBranch(path: string, name: string): Promise<void> {
+  return invoke('checkout_remote_branch', { path, name });
+}
+
 export async function deleteBranch(path: string, name: string): Promise<void> {
   return invoke('delete_branch', { path, name });
 }
@@ -203,6 +208,10 @@ export async function githubListRepos(page?: number, perPage?: number): Promise<
 
 export async function githubGetRepo(owner: string, repo: string): Promise<GitHubRepo> {
   return invoke('github_get_repo', { owner, repo });
+}
+
+export async function githubListBranches(owner: string, repo: string): Promise<GitHubBranch[]> {
+  return invoke('github_list_branches', { owner, repo });
 }
 
 export async function githubListPulls(

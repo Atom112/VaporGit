@@ -32,6 +32,16 @@ pub async fn checkout_branch(path: String, name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn checkout_remote_branch(path: String, name: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::branch::checkout_remote_branch(&repo, &name)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
 pub async fn delete_branch(path: String, name: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;

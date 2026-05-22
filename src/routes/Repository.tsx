@@ -25,6 +25,7 @@ import {
   fetch as fetchRemote,
   pull as pullRemote,
   push as pushRemote,
+  getRemotes,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
 import FileList from '../components/FileList';
@@ -35,6 +36,7 @@ import DiffView from '../components/DiffView';
 import StatusBar from '../components/StatusBar';
 import StashPanel from '../components/StashPanel';
 import ConflictResolver from '../components/ConflictResolver';
+import PRCreateDialog from '../components/PRCreateDialog';
 import { githubStore } from '../stores/githubStore';
 import InteractiveRebase from '../components/InteractiveRebase';
 
@@ -77,6 +79,10 @@ const Repository: Component = () => {
   const [showStashPanel, setShowStashPanel] = createSignal(false);
   const [showConflictResolver, setShowConflictResolver] = createSignal(false);
   const [showRebaseDialog, setShowRebaseDialog] = createSignal(false);
+
+  // PR creation from commit detail context menu
+  const [prCreateInfo, setPrCreateInfo] = createSignal<{owner: string; repo: string} | null>(null);
+  const [showPRCreate, setShowPRCreate] = createSignal(false);
 
   // ── Resizable panels ──
   const [rightWidth, setRightWidth] = createSignal(420);
@@ -505,6 +511,29 @@ const Repository: Component = () => {
     await Promise.all([refreshHistory(), refreshGraph(), refreshBranches(true)]);
   };
 
+  // ── PR creation from commit detail ──
+  const handleCreatePullRequest = async () => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      const remotes = await getRemotes(path);
+      const origin = remotes.find((r) => r.name === 'origin');
+      if (!origin) {
+        addToast('未找到 origin 远程仓库', 'error');
+        return;
+      }
+      const match = origin.url.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+      if (!match) {
+        addToast('远程仓库不是 GitHub 地址', 'error');
+        return;
+      }
+      setPrCreateInfo({ owner: match[1], repo: match[2].replace(/\.git$/, '') });
+      setShowPRCreate(true);
+    } catch (e) {
+      addToast(`获取远程仓库信息失败: ${e}`, 'error');
+    }
+  };
+
   // ── Commit graph context menu handlers ──
   const handleGraphCheckout = async (commitId: string) => {
     const path = repoPath();
@@ -705,6 +734,7 @@ const Repository: Component = () => {
                         onCheckout={handleGraphCheckout}
                         onCreateBranch={handleGraphCreateBranch}
                         onCherryPick={handleGraphCherryPick}
+                        onCreatePullRequest={handleCreatePullRequest}
                       />
                     </Show>
                   </Show>
@@ -760,6 +790,7 @@ const Repository: Component = () => {
                     selectedFile={selectedCommitFile()}
                     onSelectFile={handleSelectCommitFile}
                     onNavigateCommit={handleNavigateCommit}
+                    onCreatePullRequest={handleCreatePullRequest}
                   />
                 </Show>
               </Show>
@@ -912,6 +943,20 @@ const Repository: Component = () => {
           repoPath={repoPath()!}
           onClose={() => setShowRebaseDialog(false)}
           onRefresh={handleRebaseRefresh}
+        />
+      </Show>
+
+      {/* PR Create Dialog */}
+      <Show when={showPRCreate() && prCreateInfo() && githubStore.authenticated}>
+        <PRCreateDialog
+          owner={prCreateInfo()!.owner}
+          repo={prCreateInfo()!.repo}
+          defaultBase="main"
+          onClose={() => setShowPRCreate(false)}
+          onCreated={() => {
+            setShowPRCreate(false);
+            addToast('Pull Request 创建成功', 'success');
+          }}
         />
       </Show>
 

@@ -9,16 +9,41 @@ interface Props {
   onCreateNew: () => void;
 }
 
+const PR_LIST_TIMEOUT = 20000;
+
+/** Fetch helper with timeout */
+async function fetchPulls(owner: string, repo: string, state: string, page: number): Promise<GitHubPullRequest[]> {
+  const result = await Promise.race([
+    githubListPulls(owner, repo, state, page, 30),
+    new Promise<GitHubPullRequest[]>((_, reject) =>
+      setTimeout(() => reject(new Error('请求超时，请检查网络连接或 GitHub API 状态')), PR_LIST_TIMEOUT)
+    ),
+  ]);
+  return result;
+}
+
 const PRList: Component<Props> = (props) => {
   const [state, setState] = createSignal<'open' | 'closed'>('open');
-  const [page, setPage] = createSignal(1);
+  const [openPage, setOpenPage] = createSignal(1);
+  const [closedPage, setClosedPage] = createSignal(1);
 
-  const [pulls] = createResource(
-    () => ({ state: state(), page: page() }),
-    async ({ state: s, page: p }) => {
-      return githubListPulls(props.owner, props.repo, s, p, 30);
-    }
+  // Separate resources for open / closed — each keeps its own cache independently
+  const [openPulls, { refetch: refetchOpen }] = createResource(
+    () => openPage(),
+    (page) => fetchPulls(props.owner, props.repo, 'open', page)
   );
+
+  const [closedPulls, { refetch: refetchClosed }] = createResource(
+    () => closedPage(),
+    (page) => fetchPulls(props.owner, props.repo, 'closed', page)
+  );
+
+  const currentPage = () => (state() === 'open' ? openPage() : closedPage());
+
+  const handleRefresh = () => {
+    refetchOpen();
+    refetchClosed();
+  };
 
   const stateColor = (pr: GitHubPullRequest) => {
     if (pr.merged) return 'text-purple-400';
@@ -50,35 +75,10 @@ const PRList: Component<Props> = (props) => {
     );
   };
 
-  return (
-    <div class="space-y-2">
-      {/* State tabs */}
-      <div class="flex gap-1 border-b border-white/10 pb-2">
-        <button
-          class={`px-3 py-1 text-xs rounded-lg transition-colors ${
-            state() === 'open' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white'
-          }`}
-          onClick={() => { setState('open'); setPage(1); }}
-        >
-          Open
-        </button>
-        <button
-          class={`px-3 py-1 text-xs rounded-lg transition-colors ${
-            state() === 'closed' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white'
-          }`}
-          onClick={() => { setState('closed'); setPage(1); }}
-        >
-          Closed
-        </button>
-        <div class="flex-1" />
-        <button
-          onClick={props.onCreateNew}
-          class="px-3 py-1 text-xs rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
-        >
-          New PR
-        </button>
-      </div>
+  // ── Shared sub-template ──
 
+  const ListContent = (pulls: typeof openPulls) => (
+    <>
       {/* Loading */}
       <Show when={pulls.loading}>
         <div class="flex items-center justify-center py-8">
@@ -124,8 +124,8 @@ const PRList: Component<Props> = (props) => {
                 </div>
               </div>
               <div class="text-xs text-gray-500 shrink-0">
-                {pr.additions > 0 && <span class="text-green-400">+{pr.additions}</span>}
-                {pr.deletions > 0 && <span class="text-red-400 ml-1">-{pr.deletions}</span>}
+                {(pr.additions ?? 0) > 0 && <span class="text-green-400">+{pr.additions}</span>}
+                {(pr.deletions ?? 0) > 0 && <span class="text-red-400 ml-1">-{pr.deletions}</span>}
               </div>
             </div>
           )}
@@ -137,19 +137,70 @@ const PRList: Component<Props> = (props) => {
         <div class="flex justify-center gap-2 pt-1">
           <button
             class="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors"
-            disabled={page() <= 1}
-            onClick={() => setPage((p) => p - 1)}
+            disabled={currentPage() <= 1}
+            onClick={() => (state() === 'open' ? setOpenPage((p) => p - 1) : setClosedPage((p) => p - 1))}
           >
             上一页
           </button>
-          <span class="px-2 py-1 text-xs text-gray-400">第 {page()} 页</span>
+          <span class="px-2 py-1 text-xs text-gray-400">第 {currentPage()} 页</span>
           <button
             class="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors"
             disabled={pulls() && pulls()!.length < 30}
-            onClick={() => setPage((p) => p + 1)}
+            onClick={() => (state() === 'open' ? setOpenPage((p) => p + 1) : setClosedPage((p) => p + 1))}
           >
             下一页
           </button>
+        </div>
+      </Show>
+    </>
+  );
+
+  return (
+    <div class="space-y-2">
+      {/* State tabs + refresh */}
+      <div class="flex gap-1 border-b border-white/10 pb-2">
+        <button
+          class={`px-3 py-1 text-xs rounded-lg transition-colors ${
+            state() === 'open' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white'
+          }`}
+          onClick={() => setState('open')}
+        >
+          Open
+        </button>
+        <button
+          class={`px-3 py-1 text-xs rounded-lg transition-colors ${
+            state() === 'closed' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white'
+          }`}
+          onClick={() => setState('closed')}
+        >
+          Closed
+        </button>
+        <div class="flex-1" />
+        <button
+          onClick={handleRefresh}
+          class="px-2 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white transition-colors"
+          title="刷新列表"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+        <button
+          onClick={props.onCreateNew}
+          class="px-3 py-1 text-xs rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
+        >
+          New PR
+        </button>
+      </div>
+
+      {/* Separate branches for open / closed — Show unmounts + remounts so animate-content-enter plays on switch */}
+      <Show when={state() === 'open'} fallback={
+        <div class="animate-content-enter">
+          {ListContent(closedPulls)}
+        </div>
+      }>
+        <div class="animate-content-enter">
+          {ListContent(openPulls)}
         </div>
       </Show>
     </div>

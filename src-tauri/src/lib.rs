@@ -3,7 +3,7 @@ mod git;
 mod github;
 mod models;
 
-use commands::branch::{create_branch, checkout_branch, delete_branch, get_branch_list};
+use commands::branch::{checkout_branch, checkout_remote_branch, create_branch, delete_branch, get_branch_list};
 use commands::commit::{cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, rebase};
 use commands::diff::{get_file_content, get_file_diff};
 use commands::remote::{fetch, get_remotes, pull, push};
@@ -12,8 +12,8 @@ use commands::stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_save
 use commands::github::{
     github_check_auth, github_create_pull, github_create_pull_comment, github_get_pull,
     github_get_pull_diff, github_get_pull_files, github_get_repo, github_get_user,
-    github_list_pull_comments, github_list_pulls, github_list_repos, github_login,
-    github_logout, github_merge_pull,
+    github_list_branches, github_list_pull_comments, github_list_pulls, github_list_repos,
+    github_login, github_logout, github_merge_pull,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -45,6 +45,7 @@ pub fn run() {
             get_branch_list,
             create_branch,
             checkout_branch,
+            checkout_remote_branch,
             delete_branch,
             // remote
             fetch,
@@ -67,6 +68,7 @@ pub fn run() {
             github_get_user,
             github_list_repos,
             github_get_repo,
+            github_list_branches,
             github_list_pulls,
             github_get_pull,
             github_create_pull,

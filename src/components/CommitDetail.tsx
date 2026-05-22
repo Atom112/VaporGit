@@ -1,4 +1,5 @@
-import { Component, For, Show } from 'solid-js';
+import { Component, createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import type { CommitDetail as CommitDetailType } from '../lib/types';
 
 interface CommitDetailProps {
@@ -6,6 +7,7 @@ interface CommitDetailProps {
   selectedFile: string | null;
   onSelectFile: (filePath: string) => void;
   onNavigateCommit?: (commitId: string) => void;
+  onCreatePullRequest?: (detail: CommitDetailType) => void;
 }
 
 const statusLabels: Record<string, string> = {
@@ -23,8 +25,48 @@ const statusColors: Record<string, string> = {
 };
 
 const CommitDetail: Component<CommitDetailProps> = (props) => {
+  // ── Context menu ──
+  const [ctxMenu, setCtxMenu] = createSignal<{
+    x: number;
+    y: number;
+    phase: 'enter' | 'exit';
+  } | null>(null);
+
+  const handleContextMenu = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY, phase: 'enter' });
+  };
+
+  const closeContextMenu = () => {
+    const menu = ctxMenu();
+    if (!menu || menu.phase === 'exit') return;
+    setCtxMenu({ ...menu, phase: 'exit' });
+    setTimeout(() => setCtxMenu(null), 120);
+  };
+
+  const handleCreatePullRequest = () => {
+    closeContextMenu();
+    props.onCreatePullRequest?.(props.detail);
+  };
+
+  const handleCopySha = () => {
+    closeContextMenu();
+    navigator.clipboard.writeText(props.detail.id).catch(() => {});
+  };
+
+  // Close context menu on Escape
+  createEffect(() => {
+    if (!ctxMenu()) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeContextMenu();
+    };
+    document.addEventListener('keydown', handler);
+    onCleanup(() => document.removeEventListener('keydown', handler));
+  });
+
   return (
-    <div class="flex flex-col h-full">
+    <div class="flex flex-col h-full" onContextMenu={handleContextMenu}>
       {/* Metadata header */}
       <div class="px-4 py-3 border-b border-white/10 bg-white/5 shrink-0 space-y-1.5">
         <div class="text-sm font-semibold text-white break-words">{props.detail.message}</div>
@@ -89,6 +131,51 @@ const CommitDetail: Component<CommitDetailProps> = (props) => {
           }}
         </For>
       </div>
+
+      {/* Context menu */}
+      <Portal>
+        <Show when={ctxMenu()}>
+          {(menu) => (
+            <div
+              class="fixed inset-0 z-50"
+              onClick={closeContextMenu}
+              onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}
+            >
+              <div
+                class={`fixed w-48 py-1 rounded-xl bg-white/10 backdrop-blur-2xl border border-white/10 shadow-2xl text-sm overflow-hidden ${
+                  menu().phase === 'enter'
+                    ? 'animate-context-menu-enter'
+                    : 'animate-context-menu-exit'
+                }`}
+                style={{
+                  left: `${menu().x}px`,
+                  top: `${menu().y}px`,
+                }}
+              >
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                  onClick={handleCreatePullRequest}
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  从此发起 Pull Request
+                </button>
+                <div class="border-t border-white/10 my-1" />
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                  onClick={handleCopySha}
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  复制 SHA
+                </button>
+              </div>
+            </div>
+          )}
+        </Show>
+      </Portal>
     </div>
   );
 };
