@@ -39,7 +39,7 @@ const GitHubLogin = () => {
 
       {githubStore.loginPhase === 'error' && (
         <div class="space-y-2">
-          <p class="text-sm text-red-400">{githubStore.error}</p>
+          <p class="text-sm text-red-400 rounded-xl bg-red-500/10 border border-red-500/30 p-3">{githubStore.error}</p>
           <button
             onClick={resetLogin}
             class="p-2 rounded-lg bg-white/5 text-gray-300 text-sm hover:bg-white/10 transition-colors"

@@ -1,4 +1,4 @@
-import { Component, createEffect, createSignal, Show, For, onCleanup } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, Show, For, onCleanup } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import type { GraphNode, CommitGraphData } from '../lib/types';
 
@@ -10,14 +10,13 @@ const COLORS = [
 const H_SPACE = 28;
 const V_SPACE = 52;
 const NODE_R = 5;
-const CORNER_R = 8;
+const CORNER_R = 10;
 const MARGIN_LEFT = 24;
 const MARGIN_TOP = 40;
 const GRAPH_RIGHT_PAD = 10;
 const DASH_LEN = 20;
 const INFO_GAP = 6;
 const INFO_HEIGHT = 42;
-const HALF_H = H_SPACE / 2;
 
 interface CommitGraphProps {
   graphData: CommitGraphData;
@@ -36,8 +35,6 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
 
   const [hoveredNodeId, setHoveredNodeId] = createSignal<string | null>(null);
   const [hoverProgress, setHoverProgress] = createSignal(0);
-  const [hoveredLane, setHoveredLane] = createSignal<number | null>(null);
-  const [tooltipPos, setTooltipPos] = createSignal({ x: 0, y: 0 });
 
   // Context menu state with animation phase
   const [ctxMenu, setCtxMenu] = createSignal<{
@@ -74,6 +71,40 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
   const canvasWidth = () => graphWidth() + DASH_LEN + INFO_GAP;
   const totalHeight = () => props.graphData.nodes.length * V_SPACE + MARGIN_TOP * 2;
 
+  // Infer branch names for commits without explicit labels by walking the
+  // graph from newest → oldest, propagating along same-lane parent chains.
+  const inferredLabels = createMemo(() => {
+    // Build children lookup: parent ID → child nodes
+    const childrenOf = new Map<string, GraphNode[]>();
+    for (const edge of props.graphData.edges) {
+      const child = props.graphData.nodes.find((n) => n.id === edge.from);
+      if (!child) continue;
+      const arr = childrenOf.get(edge.to);
+      if (arr) arr.push(child);
+      else childrenOf.set(edge.to, [child]);
+    }
+
+    const sorted = [...props.graphData.nodes].sort((a, b) => a.row - b.row);
+    const result = new Map<string, string[]>();
+
+    for (const node of sorted) {
+      if (node.branchLabels.length > 0) {
+        result.set(node.id, [...node.branchLabels]);
+      } else {
+        const children = childrenOf.get(node.id);
+        if (!children || children.length === 0) continue;
+        // Prefer same-lane child (main lineage), fall back to any child
+        const source = children.find((c) => c.lane === node.lane) || children[0];
+        const labels = result.get(source.id);
+        if (labels && labels.length > 0) {
+          result.set(node.id, [labels[0]]);
+        }
+      }
+    }
+
+    return result;
+  });
+
   function nodePos(node: GraphNode) {
     return {
       x: node.lane * H_SPACE + MARGIN_LEFT,
@@ -95,66 +126,16 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
     return null;
   }
 
-  function hitTestLane(mx: number, my: number): number | null {
-    const rect = canvasRef.getBoundingClientRect();
-    const px = mx - rect.left;
-    const py = my - rect.top;
-    const graphRight = graphWidth();
-    if (px < 0 || px > graphRight) return null;
-    for (let lane = 0; lane <= maxLane(); lane++) {
-      const cx = lane * H_SPACE + MARGIN_LEFT;
-      if (px < cx - HALF_H || px >= cx + HALF_H) continue;
-      const ranges: { minY: number; maxY: number }[] = [];
-      for (const node of props.graphData.nodes) {
-        if (node.lane !== lane) continue;
-        const pos = nodePos(node);
-        ranges.push({ minY: pos.y - V_SPACE / 2, maxY: pos.y + V_SPACE / 2 });
-      }
-      for (const edge of props.graphData.edges) {
-        const fromNode = props.graphData.nodes.find((n) => n.id === edge.from);
-        const toNode = props.graphData.nodes.find((n) => n.id === edge.to);
-        if (!fromNode || !toNode) continue;
-        if (fromNode.lane !== lane || toNode.lane !== lane) continue;
-        const fp = nodePos(fromNode);
-        const tp = nodePos(toNode);
-        ranges.push({ minY: Math.min(fp.y, tp.y), maxY: Math.max(fp.y, tp.y) });
-      }
-      if (ranges.length === 0) continue;
-      ranges.sort((a, b) => a.minY - b.minY);
-      const merged = [ranges[0]];
-      for (let i = 1; i < ranges.length; i++) {
-        if (ranges[i].minY <= merged[merged.length - 1].maxY) {
-          merged[merged.length - 1].maxY = Math.max(merged[merged.length - 1].maxY, ranges[i].maxY);
-        } else {
-          merged.push(ranges[i]);
-        }
-      }
-      if (merged.some((r) => py >= r.minY && py <= r.maxY)) return lane;
-    }
-    return null;
-  }
-
-  function branchNamesForLane(lane: number): string[] {
-    const names = new Set<string>();
-    for (const node of props.graphData.nodes) {
-      if (node.lane === lane) {
-        for (const label of node.branchLabels) {
-          names.add(label);
-        }
-      }
-    }
-    return Array.from(names);
-  }
-
   let cacheCanvas: HTMLCanvasElement | null = null;
   let cacheKey = '';
 
   function drawEdges(ctx: CanvasRenderingContext2D) {
-    const mergeSet = new Set<string>();
+    // Build a lookup for merge commits (nodes with multiple outgoing parent edges)
+    const mergeFrom = new Set<string>();
     for (const e of props.graphData.edges) {
-      if (mergeSet.has(e.from)) continue;
+      if (mergeFrom.has(e.from)) continue;
       const count = props.graphData.edges.filter((ee) => ee.from === e.from).length;
-      if (count > 1) mergeSet.add(e.from);
+      if (count > 1) mergeFrom.add(e.from);
     }
 
     for (const edge of props.graphData.edges) {
@@ -162,28 +143,47 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
       const toNode = props.graphData.nodes.find((n) => n.id === edge.to);
       if (!fromNode || !toNode) continue;
 
-      const from = nodePos(fromNode);
-      const to = nodePos(toNode);
-      const colorLane = mergeSet.has(edge.from) ? toNode.lane : fromNode.lane;
+      const from = nodePos(fromNode); // child (newer commit)
+      const to = nodePos(toNode);     // parent (older commit)
+
+      // GitKraken colour rule: merge edges take the colour of the
+      // *destination* lane (the branch being merged into); regular edges
+      // take the colour of the *source* lane.
+      const colorLane = mergeFrom.has(edge.from) ? toNode.lane : fromNode.lane;
       const color = COLORS[colorLane % COLORS.length];
 
       ctx.beginPath();
       if (fromNode.lane === toNode.lane) {
+        // Same-lane: straight vertical line
         ctx.moveTo(from.x, from.y + NODE_R);
         ctx.lineTo(to.x, to.y - NODE_R);
-      } else {
-        const midY = (from.y + to.y) / 2;
+      } else if (mergeFrom.has(edge.from)) {
+        // Merge edge (child has multiple parents, this is the extra parent):
+        // draw in reverse — from parent (below) toward child (above).
+        // vertical in parent's lane up to child's row, then rounded corner,
+        // then horizontal into child's lane.
         const dir = from.x < to.x ? 1 : -1;
-        ctx.moveTo(from.x, from.y + NODE_R);
-        ctx.lineTo(from.x, midY - CORNER_R);
-        ctx.quadraticCurveTo(from.x, midY, from.x + dir * CORNER_R, midY);
-        ctx.lineTo(to.x - dir * CORNER_R, midY);
-        ctx.quadraticCurveTo(to.x, midY, to.x, midY + CORNER_R);
-        ctx.lineTo(to.x, to.y - NODE_R);
+        const cornerY = from.y; // horizontal segment sits at child's row height
+        ctx.moveTo(to.x, to.y - NODE_R);
+        ctx.lineTo(to.x, cornerY + CORNER_R);
+        ctx.quadraticCurveTo(to.x, cornerY, to.x - dir * CORNER_R, cornerY);
+        ctx.lineTo(from.x + dir * NODE_R, cornerY);
+      } else {
+        // Branch/fork edge (child has one parent, different lane):
+        // draw from PARENT (fork point) — horizontal to child's lane,
+        // then rounded corner, then vertical to child.
+        // The horizontal sits at the parent's row height (the fork point),
+        // matching GitKraken's branch rendering.
+        const dir = from.x < to.x ? 1 : -1;
+        const startY = to.y;
+        ctx.moveTo(to.x, startY);
+        ctx.lineTo(from.x + dir * CORNER_R, startY);
+        ctx.quadraticCurveTo(from.x, startY, from.x, startY - CORNER_R);
+        ctx.lineTo(from.x, from.y + NODE_R);
       }
       ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.35;
-      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.45;
+      ctx.lineWidth = 2.5;
       ctx.stroke();
       ctx.globalAlpha = 1.0;
     }
@@ -315,27 +315,14 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
         setHoveredNodeId(node.id);
         animateHover(1);
       }
-      setHoveredLane(null);
     } else {
       canvasRef.style.cursor = 'default';
       if (hoveredNodeId() !== null) animateHover(0);
-      const lane = hitTestLane(e.clientX, e.clientY);
-      if (lane !== null && branchNamesForLane(lane).length > 0) {
-        setHoveredLane(lane);
-        const rect = containerRef.getBoundingClientRect();
-        setTooltipPos({
-          x: e.clientX - rect.left + containerRef.scrollLeft,
-          y: e.clientY - rect.top + containerRef.scrollTop,
-        });
-      } else {
-        setHoveredLane(null);
-      }
     }
   };
 
   const handleMouseLeave = () => {
     if (hoveredNodeId() !== null) animateHover(0);
-    setHoveredLane(null);
   };
 
   const handleCanvasClick = (e: MouseEvent) => {
@@ -455,6 +442,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
               const dtStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString();
               const author =
                 node.author.length > 24 ? node.author.slice(0, 24) + '…' : node.author;
+              const branchLabels = inferredLabels().get(node.id) || [];
 
               return (
                 <div
@@ -508,6 +496,23 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                     >
                       {node.message}
                     </div>
+                    <Show when={branchLabels.length > 0}>
+                      <div class="flex items-center gap-1 ml-auto shrink-0 overflow-hidden">
+                        <For each={branchLabels}>
+                          {(label) => (
+                            <span
+                              class="text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap"
+                              style={{
+                                color: color,
+                                'background-color': `${color}20`,
+                              }}
+                            >
+                              {label}
+                            </span>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
                   </div>
                   <div
                     class="text-[10px]"
@@ -521,33 +526,6 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
           </For>
         </div>
       </div>
-
-      {/* Lane tooltip */}
-      <Show when={hoveredLane() !== null}>
-        <div
-          class="absolute z-10 px-3 py-2 rounded-lg bg-black/85 backdrop-blur border text-xs shadow-xl pointer-events-none"
-          style={{
-            left: `${tooltipPos().x + 14}px`,
-            top: `${tooltipPos().y - 10}px`,
-            'border-color': COLORS[hoveredLane()! % COLORS.length] + '55',
-          } as any}
-        >
-          <For each={branchNamesForLane(hoveredLane()!)}>
-            {(label) => {
-              const laneColor = COLORS[hoveredLane()! % COLORS.length];
-              return (
-                <div class="flex items-center gap-2 whitespace-nowrap">
-                  <span
-                    class="w-2 h-2 rounded-full shrink-0"
-                    style={{ 'background-color': laneColor } as any}
-                  />
-                  <span style={{ color: laneColor }} class="font-medium">{label}</span>
-                </div>
-              );
-            }}
-          </For>
-        </div>
-      </Show>
 
     </div>
 

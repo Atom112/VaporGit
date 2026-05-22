@@ -180,6 +180,14 @@ export async function cherryPick(path: string, commitId: string): Promise<string
   return invoke('cherry_pick', { path, commitId });
 }
 
+export async function undo(path: string): Promise<string> {
+  return invoke('undo', { path });
+}
+
+export async function redo(path: string): Promise<string> {
+  return invoke('redo', { path });
+}
+
 export async function cloneRepo(url: string, path: string): Promise<RepoInfo> {
   return invoke('clone_repo', { url, path });
 }

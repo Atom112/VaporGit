@@ -22,6 +22,8 @@ import {
   checkoutBranch,
   createBranch,
   cherryPick,
+  undo as undoLast,
+  redo as redoLast,
   fetch as fetchRemote,
   pull as pullRemote,
   push as pushRemote,
@@ -76,6 +78,7 @@ const Repository: Component = () => {
 
   // M3: Modal & action state
   const [remoteActionLoading, setRemoteActionLoading] = createSignal(false);
+  const [undoLoading, setUndoLoading] = createSignal(false);
   const [showStashPanel, setShowStashPanel] = createSignal(false);
   const [showConflictResolver, setShowConflictResolver] = createSignal(false);
   const [showRebaseDialog, setShowRebaseDialog] = createSignal(false);
@@ -499,6 +502,36 @@ const Repository: Component = () => {
     }
   };
 
+  const handleUndo = async () => {
+    const path = repoPath();
+    if (!path || undoLoading()) return;
+    setUndoLoading(true);
+    try {
+      const msg = await undoLast(path);
+      addToast(`已撤销提交: ${msg.slice(0, 50)}`, 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`撤销失败: ${e}`, 'error');
+    } finally {
+      setUndoLoading(false);
+    }
+  };
+
+  const handleRedo = async () => {
+    const path = repoPath();
+    if (!path || undoLoading()) return;
+    setUndoLoading(true);
+    try {
+      const msg = await redoLast(path);
+      addToast(`已重做提交: ${msg.slice(0, 50)}`, 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`重做失败: ${e}`, 'error');
+    } finally {
+      setUndoLoading(false);
+    }
+  };
+
   const handleStashRefresh = async () => {
     await Promise.all([refreshStatus()]);
   };
@@ -837,46 +870,84 @@ const Repository: Component = () => {
           <div class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
             <div class="flex gap-1.5">
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handleFetch}
                 disabled={remoteActionLoading()}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
                 {remoteActionLoading() ? '...' : 'Fetch'}
               </button>
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handlePull}
                 disabled={remoteActionLoading()}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                </svg>
                 {remoteActionLoading() ? '...' : 'Pull'}
               </button>
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handlePush}
                 disabled={remoteActionLoading()}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4-4m0 0l-4-4m4 4H3" />
+                </svg>
                 {remoteActionLoading() ? '...' : 'Push'}
               </button>
               {githubStore.authenticated && (
                 <A
-                  class="flex-1 py-1.5 text-xs rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-center transition-colors"
+                  class="flex-1 py-2 text-xs rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-center transition-colors flex items-center justify-center gap-1"
                   href="/pulls"
                 >
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
                   PRs
                 </A>
               )}
             </div>
             <div class="flex gap-1.5">
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-30"
+                onClick={handleUndo}
+                disabled={undoLoading()}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a7 7 0 017 7v2M3 10l4-4m-4 4l4 4" />
+                </svg>
+                {undoLoading() ? '...' : 'Undo'}
+              </button>
+              <button
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-30"
+                onClick={handleRedo}
+                disabled={undoLoading()}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 10H11a7 7 0 00-7 7v2m17-9l-4-4m4 4l-4 4" />
+                </svg>
+                {undoLoading() ? '...' : 'Redo'}
+              </button>
+              <button
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
                 onClick={() => setShowStashPanel(true)}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
                 Stash
               </button>
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
                 onClick={() => setShowRebaseDialog(true)}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
                 Rebase
               </button>
             </div>

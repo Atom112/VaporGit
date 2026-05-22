@@ -4,7 +4,7 @@ mod github;
 mod models;
 
 use commands::branch::{checkout_branch, checkout_remote_branch, create_branch, delete_branch, get_branch_list};
-use commands::commit::{cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, rebase};
+use commands::commit::{cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, rebase, undo, redo};
 use commands::diff::{get_file_content, get_file_diff};
 use commands::remote::{fetch, get_remotes, pull, push};
 use commands::repo::{clone_repo, get_conflicts, get_recent_repos, get_status, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
@@ -38,6 +38,9 @@ pub fn run() {
             get_commit_graph,
             rebase,
             cherry_pick,
+            // undo/redo
+            undo,
+            redo,
             // diff
             get_file_diff,
             get_file_content,
