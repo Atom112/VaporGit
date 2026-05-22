@@ -4,5 +4,6 @@ pub mod conflict;
 pub mod diff;
 pub mod remote;
 pub mod repo;
+pub mod github;
 pub mod stash;
 pub mod status;

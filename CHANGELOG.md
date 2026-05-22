@@ -1,5 +1,111 @@
 # Changelog / 已实现功能
 
+## v1.0.7
+
+### 自动下载更新 & 一键升级
+
+**后端（Rust）：**
+- `github_get_asset`：从 GitHub Release 资源中自动匹配当前平台安装包（Windows → .msi, macOS → .dmg, Linux → 运行时检测 dpkg/rpm 选择 .deb/.rpm，回退 .AppImage）
+- `github_start_download`：流式下载安装包，每 256KB 通过 Tauri Event 发送下载进度
+- `github_install_update`：下载完成后启动安装器（Windows: msiexec 原地升级，macOS: open, Linux: pkexec dpkg/rpm），500ms 后自动退出应用
+- `update` 模块：统一封装平台匹配、进度下载、安装启动逻辑
+- 新增数据模型：`GitHubReleaseAsset`
+
+**前端：**
+- 更新通知增加下载进度条（实时显示已下载/总大小）
+- 下载完成后显示"安装更新"按钮，点击后启动安装器并退出应用
+- `updateStore` 新增四阶段状态管理：idle → downloading → downloaded → installing
+
+### Token 持久化可靠性改进
+
+**后端（Rust）：**
+- `save_token` / `load_token` / `clear_token`：在原有钥匙串（keyring）基础上增加 `%APPDATA%/VaporGit/github_token` 文件持久化
+- `load_token` 读取顺序：内存缓存 → 钥匙串 → 文件，取到即止
+- 解决部分 Windows 环境下 keyring 凭据无法跨会话保持的问题
+
+### 更新通知 UI 优化
+
+**前端：**
+- 通知位置移至左下角，琥珀色样式
+- 新增"确认下载"按钮（打开 GitHub Releases 页面）和"忽略"按钮
+- 通知不会自动消失，需用户明确操作
+
+## v1.0.5
+
+### 应用内更新通知
+
+**后端（Rust）：**
+- `check_update`：启动时查询 GitHub Releases API，自动检测新版本
+- 新增数据模型：`GitHubRelease`
+- 版本号三段式逐段数值比较，正确处理 `1.0.9` → `1.0.10`
+- 使用 GitHub 公开 API，无需登录即可检查更新（网络不可用时静默忽略）
+
+**前端：**
+- 启动时自动调用 `checkUpdate()` 检测新版本
+- 发现新版本时通过 Toast 通知 `新版本 vX.X.X 已发布`
+
+## v1.0.4
+
+### 提交图渲染优化与 PR/分支管理增强
+
+**后端（Rust）：**
+- 重写 `get_commit_graph` 车道分配算法，修复多分支场景下节点 lane 错位问题
+- 新增 `get_branch_list` 返回 ahead/behind 追踪信息、上游分支名
+- `checkout_remote_branch` 支持自动创建本地追踪分支
+
+**前端：**
+- 提交图节点旁显示分支标签，无标签节点通过拓扑推断分支名
+- 提交详情面板显示文件变更统计
+- PR 列表支持全屏查看/评论 PR、创建 PR 弹窗
+- 分支列表显示 ahead/behind 状态、上游分支
+- 仓库列表缓存跨路由保持
+
+## v1.0.3
+
+### GitHub OAuth 集成 — 仓库浏览与 PR 管理
+
+**后端（Rust）：**
+- `github_login`：Tauri WebView 内嵌浏览器 PKCE 授权码流程
+- `github_check_auth` / `github_logout` / `github_get_user`：认证状态管理
+- `github_list_repos` / `github_get_repo`：仓库列表查询（分页）
+- `github_list_branches`：仓库分支列表
+- `github_list_pulls` / `github_get_pull` / `github_create_pull` / `github_merge_pull`：PR 完整 CRUD
+- `github_get_pull_files` / `github_get_pull_diff` / `github_list_pull_comments` / `github_create_pull_comment`：PR 详情与审查
+- Token 存入系统钥匙串 + 内存缓存，跨命令一致访问
+- 新增数据模型：`GitHubUser`、`GitHubRepo`、`GitHubBranch`、`GitHubPullRequest`、`PRComment` 等
+
+**前端：**
+- GitHub 登录弹窗（`GitHubLogin.tsx`）：WebView 内嵌授权、自动关闭
+- 用户菜单（`GitHubUserMenu.tsx`）：头像、用户名、退出登录
+- 仓库列表（`GitHubRepoList.tsx`）：分页、搜索过滤、语言颜色标识、一键克隆
+- PR 列表（`PRList.tsx`）：按状态筛选、查看/创建/合并 PR
+- PR 详情（`PRDetail.tsx`）：文件变更、Diff 查看、评论列表与创建
+- 创建 PR 弹窗（`PRCreateDialog.tsx`）：选择分支、填写标题描述
+- `githubStore`：仓库缓存跨路由保持
+
+## v1.0.2
+
+### 修复与改进
+
+**后端（Rust）：**
+- 克隆时目标目录非空则自动创建子目录，避免克隆失败
+- 失效仓库路径在打开时检测并提供清理能力
+
+**前端：**
+- 仓库列表中长路径截断显示，防止 UI 溢出
+- Diff 视图跟随设置变更即时生效，无需刷新
+- 失效仓库支持"从列表中移除"并添加删除动画
+- Tailwind CSS 写法一致性改进
+- 精简 README 核心特性介绍
+
+## v1.0.1
+
+### 版本管理
+
+- 添加统一版本管理脚本 `npm run version -- <semver>`
+- 自动更新 package.json / tauri.conf.json / Cargo.toml 并创建 git commit + tag
+- CHANGELOG 与 README 更新
+
 ## v1.0.0
 
 ### M3：进阶协作版 — 远程同步 + 冲突处理 + 扩展功能

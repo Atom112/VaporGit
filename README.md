@@ -34,9 +34,7 @@
 |------|-----------|------|
 | **Windows** | `.msi` / `.exe` | 双击安装即可使用，依赖系统 WebView2 Runtime |
 | **macOS** | `.dmg` | 打开后将 VaporGit 拖入 Applications 文件夹 |
-| **Linux** | `.deb` / `.AppImage` | `.deb` 适用于 Debian/Ubuntu 系；`.AppImage` 通用格式，下载后 `chmod +x` 即可运行 |
-
-> 每次发布新版本时，CI/CD 流水线会自动构建三平台安装包并上传至 Release 页面。
+| **Linux** | `.deb` / `.AppImage` / `.rpm` | `.deb` 适用于 Debian/Ubuntu 系；`.rpm` 适用于 RedHat 系；`.AppImage` 通用格式，下载后 `chmod +x` 即可运行 |
 
 ---
 

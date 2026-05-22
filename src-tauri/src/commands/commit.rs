@@ -64,3 +64,23 @@ pub async fn cherry_pick(path: String, commit_id: String) -> Result<String, Stri
     .await
     .map_err(|e| format!("内部错误: {}", e))?
 }
+
+#[tauri::command]
+pub async fn undo(path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::commit::undo(&repo)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn redo(path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::commit::redo(&repo)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}

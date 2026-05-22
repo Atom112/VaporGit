@@ -1,7 +1,27 @@
-import { Component } from 'solid-js';
+import { Component, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
+import { githubStore, setGithubStore, setAuthenticated } from '../stores/githubStore';
+import { githubCheckAuth } from '../lib/tauriCommands';
+import GitHubUserMenu from './GitHubUserMenu';
+import { repoStore } from '../stores/repoStore';
 
 const Navbar: Component = () => {
+  onMount(async () => {
+    if (!githubStore.authenticated && !githubStore.loading) {
+      setGithubStore({ loading: true });
+      try {
+        const status = await githubCheckAuth();
+        if (status.authenticated && status.user) {
+          setAuthenticated(status.user);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setGithubStore({ loading: false });
+      }
+    }
+  });
+
   return (
     <nav class="flex items-center justify-center pl-4 pr-4 pb-1 pt-1 bg-transparent">
       <ul class="flex items-center gap-1" data-tauri-no-drag>
@@ -44,7 +64,28 @@ const Navbar: Component = () => {
             </svg>
           </A>
         </li>
+        {githubStore.authenticated && repoStore.repoPath && (
+          <li>
+            <A
+              class="flex items-center justify-center w-9 h-9 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-all"
+              activeClass="!text-cyan-400 !bg-cyan-400/15"
+              href="/pulls"
+              title="Pull Requests"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+              </svg>
+            </A>
+          </li>
+        )}
       </ul>
+
+      {/* Right side: GitHub user menu */}
+      <div class="flex items-center absolute right-4" data-tauri-no-drag>
+        {githubStore.authenticated && githubStore.user && (
+          <GitHubUserMenu />
+        )}
+      </div>
     </nav>
   );
 };

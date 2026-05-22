@@ -1,3 +1,4 @@
+import { A } from '@solidjs/router';
 import { Component, createSignal, createEffect, onCleanup, onMount, Show, For } from 'solid-js';
 import { open } from '@tauri-apps/plugin-dialog';
 import { repoStore, setRepoStore } from '../stores/repoStore';
@@ -21,9 +22,12 @@ import {
   checkoutBranch,
   createBranch,
   cherryPick,
+  undo as undoLast,
+  redo as redoLast,
   fetch as fetchRemote,
   pull as pullRemote,
   push as pushRemote,
+  getRemotes,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
 import FileList from '../components/FileList';
@@ -34,6 +38,8 @@ import DiffView from '../components/DiffView';
 import StatusBar from '../components/StatusBar';
 import StashPanel from '../components/StashPanel';
 import ConflictResolver from '../components/ConflictResolver';
+import PRCreateDialog from '../components/PRCreateDialog';
+import { githubStore } from '../stores/githubStore';
 import InteractiveRebase from '../components/InteractiveRebase';
 
 const Repository: Component = () => {
@@ -72,9 +78,14 @@ const Repository: Component = () => {
 
   // M3: Modal & action state
   const [remoteActionLoading, setRemoteActionLoading] = createSignal(false);
+  const [undoLoading, setUndoLoading] = createSignal(false);
   const [showStashPanel, setShowStashPanel] = createSignal(false);
   const [showConflictResolver, setShowConflictResolver] = createSignal(false);
   const [showRebaseDialog, setShowRebaseDialog] = createSignal(false);
+
+  // PR creation from commit detail context menu
+  const [prCreateInfo, setPrCreateInfo] = createSignal<{owner: string; repo: string} | null>(null);
+  const [showPRCreate, setShowPRCreate] = createSignal(false);
 
   // ── Resizable panels ──
   const [rightWidth, setRightWidth] = createSignal(420);
@@ -491,6 +502,36 @@ const Repository: Component = () => {
     }
   };
 
+  const handleUndo = async () => {
+    const path = repoPath();
+    if (!path || undoLoading()) return;
+    setUndoLoading(true);
+    try {
+      const msg = await undoLast(path);
+      addToast(`已撤销提交: ${msg.slice(0, 50)}`, 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`撤销失败: ${e}`, 'error');
+    } finally {
+      setUndoLoading(false);
+    }
+  };
+
+  const handleRedo = async () => {
+    const path = repoPath();
+    if (!path || undoLoading()) return;
+    setUndoLoading(true);
+    try {
+      const msg = await redoLast(path);
+      addToast(`已重做提交: ${msg.slice(0, 50)}`, 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`重做失败: ${e}`, 'error');
+    } finally {
+      setUndoLoading(false);
+    }
+  };
+
   const handleStashRefresh = async () => {
     await Promise.all([refreshStatus()]);
   };
@@ -501,6 +542,29 @@ const Repository: Component = () => {
 
   const handleRebaseRefresh = async () => {
     await Promise.all([refreshHistory(), refreshGraph(), refreshBranches(true)]);
+  };
+
+  // ── PR creation from commit detail ──
+  const handleCreatePullRequest = async () => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      const remotes = await getRemotes(path);
+      const origin = remotes.find((r) => r.name === 'origin');
+      if (!origin) {
+        addToast('未找到 origin 远程仓库', 'error');
+        return;
+      }
+      const match = origin.url.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+      if (!match) {
+        addToast('远程仓库不是 GitHub 地址', 'error');
+        return;
+      }
+      setPrCreateInfo({ owner: match[1], repo: match[2].replace(/\.git$/, '') });
+      setShowPRCreate(true);
+    } catch (e) {
+      addToast(`获取远程仓库信息失败: ${e}`, 'error');
+    }
   };
 
   // ── Commit graph context menu handlers ──
@@ -703,6 +767,7 @@ const Repository: Component = () => {
                         onCheckout={handleGraphCheckout}
                         onCreateBranch={handleGraphCreateBranch}
                         onCherryPick={handleGraphCherryPick}
+                        onCreatePullRequest={handleCreatePullRequest}
                       />
                     </Show>
                   </Show>
@@ -758,6 +823,7 @@ const Repository: Component = () => {
                     selectedFile={selectedCommitFile()}
                     onSelectFile={handleSelectCommitFile}
                     onNavigateCommit={handleNavigateCommit}
+                    onCreatePullRequest={handleCreatePullRequest}
                   />
                 </Show>
               </Show>
@@ -804,38 +870,84 @@ const Repository: Component = () => {
           <div class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
             <div class="flex gap-1.5">
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handleFetch}
                 disabled={remoteActionLoading()}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
                 {remoteActionLoading() ? '...' : 'Fetch'}
               </button>
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handlePull}
                 disabled={remoteActionLoading()}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                </svg>
                 {remoteActionLoading() ? '...' : 'Pull'}
               </button>
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handlePush}
                 disabled={remoteActionLoading()}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2" />
+                </svg>
                 {remoteActionLoading() ? '...' : 'Push'}
               </button>
+              {githubStore.authenticated && (
+                <A
+                  class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors flex items-center justify-center gap-1"
+                  href="/pulls"
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  PRs
+                </A>
+              )}
             </div>
             <div class="flex gap-1.5">
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-30"
+                onClick={handleUndo}
+                disabled={undoLoading()}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a7 7 0 017 7v2M3 10l4-4m-4 4l4 4" />
+                </svg>
+                {undoLoading() ? '...' : 'Undo'}
+              </button>
+              <button
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-30"
+                onClick={handleRedo}
+                disabled={undoLoading()}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 10H11a7 7 0 00-7 7v2m17-9l-4-4m4 4l-4 4" />
+                </svg>
+                {undoLoading() ? '...' : 'Redo'}
+              </button>
+              <button
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
                 onClick={() => setShowStashPanel(true)}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
                 Stash
               </button>
               <button
-                class="flex-1 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
                 onClick={() => setShowRebaseDialog(true)}
               >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
                 Rebase
               </button>
             </div>
@@ -902,6 +1014,20 @@ const Repository: Component = () => {
           repoPath={repoPath()!}
           onClose={() => setShowRebaseDialog(false)}
           onRefresh={handleRebaseRefresh}
+        />
+      </Show>
+
+      {/* PR Create Dialog */}
+      <Show when={showPRCreate() && prCreateInfo() && githubStore.authenticated}>
+        <PRCreateDialog
+          owner={prCreateInfo()!.owner}
+          repo={prCreateInfo()!.repo}
+          defaultBase="main"
+          onClose={() => setShowPRCreate(false)}
+          onCreated={() => {
+            setShowPRCreate(false);
+            addToast('Pull Request 创建成功', 'success');
+          }}
         />
       </Show>
 
