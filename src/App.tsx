@@ -4,10 +4,10 @@ import Navbar from "./components/Navbar";
 import Titlebar from "./components/Titlebar";
 import PageTransition from "./components/PageTransition";
 import ToastContainer from "./components/ToastContainer";
+import UpdateNotification from "./components/UpdateNotification";
 import { githubCheckAuth, checkUpdate } from "./lib/tauriCommands";
 import { setAuthenticated } from "./stores/githubStore";
-import { addToast } from "./stores/toastStore";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { showUpdate } from "./stores/updateStore";
 
 export default function App(props: { children?: any }) {
   onMount(() => {
@@ -31,11 +31,7 @@ export default function App(props: { children?: any }) {
     try {
       const update = await checkUpdate();
       if (update) {
-        addToast(
-          `新版本 ${update.tagName} 已发布 — 点击下载`,
-          "info",
-          () => openUrl(update.htmlUrl)
-        );
+        showUpdate(update.tagName, update.htmlUrl);
       }
     } catch {
       // Silently ignore (offline, rate-limited, etc.)
@@ -52,6 +48,7 @@ export default function App(props: { children?: any }) {
         </PageTransition>
       </div>
       <ToastContainer />
+      <UpdateNotification />
     </div>
   );
 }
