@@ -247,6 +247,16 @@ export interface PullRequestFile {
   patch: string | null;
 }
 
+export interface UpdateInfo {
+  tagName: string;
+  name: string | null;
+  body: string | null;
+  htmlUrl: string;
+  publishedAt: string | null;
+  prerelease: boolean;
+  draft: boolean;
+}
+
 export interface PRComment {
   id: number;
   body: string;

@@ -4,8 +4,9 @@ import Navbar from "./components/Navbar";
 import Titlebar from "./components/Titlebar";
 import PageTransition from "./components/PageTransition";
 import ToastContainer from "./components/ToastContainer";
-import { githubCheckAuth } from "./lib/tauriCommands";
+import { githubCheckAuth, checkUpdate } from "./lib/tauriCommands";
 import { setAuthenticated } from "./stores/githubStore";
+import { addToast } from "./stores/toastStore";
 
 export default function App(props: { children?: any }) {
   onMount(() => {
@@ -22,6 +23,17 @@ export default function App(props: { children?: any }) {
       }
     } catch {
       // No stored session — not authenticated, that's fine
+    }
+  });
+
+  onMount(async () => {
+    try {
+      const update = await checkUpdate();
+      if (update) {
+        addToast(`新版本 ${update.tagName} 已发布 — 点击前往下载`, "success");
+      }
+    } catch {
+      // Silently ignore (offline, rate-limited, etc.)
     }
   });
 

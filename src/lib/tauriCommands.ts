@@ -21,6 +21,7 @@ import type {
   PullRequestFile,
   PRComment,
   AuthStatus,
+  UpdateInfo,
 } from './types';
 
 export async function openRepo(path: string): Promise<RepoInfo> {
@@ -277,6 +278,10 @@ export async function githubListPullComments(
   number: number
 ): Promise<PRComment[]> {
   return invoke('github_list_pull_comments', { owner, repo, number });
+}
+
+export async function checkUpdate(): Promise<UpdateInfo | null> {
+  return invoke('check_update');
 }
 
 export async function githubCreatePullComment(

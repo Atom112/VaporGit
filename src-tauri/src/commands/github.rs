@@ -1,7 +1,7 @@
-use crate::github::{api::GitHubClient, auth};
+use crate::github::{api::GitHubClient, auth, parse_github_response};
 use crate::models::github::{
-    AuthStatus, CreatePullRequest, GitHubBranch, GitHubPullRequest, GitHubRepo, GitHubUser,
-    MergePullRequest, MergePullResult, PullRequestFile, PRComment,
+    AuthStatus, CreatePullRequest, GitHubBranch, GitHubPullRequest, GitHubRelease, GitHubRepo,
+    GitHubUser, MergePullRequest, MergePullResult, PullRequestFile, PRComment,
 };
 
 /// Load token and create an authenticated GitHub client.
@@ -147,4 +147,63 @@ pub async fn github_create_pull_comment(
     client
         .create_pull_comment(&owner, &repo, number, &body, &commit_id, &path, position)
         .await
+}
+
+/// Compare two semver strings (e.g. "1.0.4" vs "1.0.5").
+/// Returns true if `latest` is strictly greater than `current`.
+fn is_newer_version(latest: &str, current: &str) -> bool {
+    let latest_parts: Vec<u32> = latest
+        .split('.')
+        .filter_map(|s| s.parse::<u32>().ok())
+        .collect();
+    let current_parts: Vec<u32> = current
+        .split('.')
+        .filter_map(|s| s.parse::<u32>().ok())
+        .collect();
+
+    let max_len = latest_parts.len().max(current_parts.len());
+    for i in 0..max_len {
+        let l = latest_parts.get(i).copied().unwrap_or(0);
+        let c = current_parts.get(i).copied().unwrap_or(0);
+        if l > c {
+            return true;
+        } else if l < c {
+            return false;
+        }
+    }
+    false
+}
+
+/// Check if a newer version of VaporGit is available on GitHub.
+/// Uses the public GitHub Releases API (no authentication required).
+#[tauri::command]
+pub async fn check_update() -> Result<Option<GitHubRelease>, String> {
+    let current_version = env!("CARGO_PKG_VERSION");
+
+    let client = reqwest::Client::builder()
+        .user_agent("VaporGit/1.0")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    let resp = client
+        .get("https://api.github.com/repos/Atom112/VaporGit/releases/latest")
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    // Silently return None on any HTTP error (no network, rate-limited, etc.)
+    if !resp.status().is_success() {
+        return Ok(None);
+    }
+
+    let release: GitHubRelease = parse_github_response(resp).await?;
+
+    let latest_tag = release.tag_name.trim_start_matches('v');
+    if is_newer_version(latest_tag, current_version) {
+        Ok(Some(release))
+    } else {
+        Ok(None)
+    }
 }
