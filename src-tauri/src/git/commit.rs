@@ -159,14 +159,15 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         .revwalk()
         .map_err(|e| format!("无法创建 revwalk: {}", e))?;
     revwalk
-        .set_sorting(Sort::TOPOLOGICAL)
+        .set_sorting(Sort::TIME)
         .map_err(|e| format!("无法设置排序: {}", e))?;
 
-    // Push all local branch tips so the commit graph
-    // shows the current branch topology clearly, without
-    // PR merge commits from remote-tracking branches.
+    // Push all local + remote-tracking branch tips so the commit graph
+    // shows every branch. Use TIME sort so commits appear newest-first,
+    // preventing remote PR merge commits from jumping to the front
+    // purely due to topological ordering.
     let mut pushed_any = false;
-    for branch_type in [Some(git2::BranchType::Local)] {
+    for branch_type in [Some(git2::BranchType::Local), Some(git2::BranchType::Remote)] {
         if let Ok(branches) = repo.branches(branch_type) {
             for branch_result in branches.flatten() {
                 if let Some(oid) = branch_result.0.get().target() {
@@ -193,9 +194,9 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         return Ok(CommitGraphData { nodes: vec![], edges: vec![], truncated: false });
     }
 
-    // Collect branch labels per commit OID (local only)
+    // Collect branch labels per commit OID (local + remote)
     let mut branch_labels: HashMap<Oid, Vec<String>> = HashMap::new();
-    for branch_type in [Some(git2::BranchType::Local)] {
+    for branch_type in [Some(git2::BranchType::Local), Some(git2::BranchType::Remote)] {
         if let Ok(branches) = repo.branches(branch_type) {
             for branch_result in branches.flatten() {
                 if let Some(oid) = branch_result.0.get().target() {
