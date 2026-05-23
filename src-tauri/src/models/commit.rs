@@ -39,6 +39,8 @@ pub struct FileChange {
 pub struct CommitGraphData {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

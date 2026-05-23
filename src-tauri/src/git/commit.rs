@@ -183,8 +183,13 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
 
     let walk_oids: Vec<Oid> = revwalk.filter_map(|r| r.ok()).collect();
 
+    // Limit to max 2000 commits for performance on large repos
+    const MAX_GRAPH_COMMITS: usize = 2000;
+    let truncated = walk_oids.len() > MAX_GRAPH_COMMITS;
+    let walk_oids: Vec<Oid> = walk_oids.into_iter().take(MAX_GRAPH_COMMITS).collect();
+
     if walk_oids.is_empty() {
-        return Ok(CommitGraphData { nodes: vec![], edges: vec![] });
+        return Ok(CommitGraphData { nodes: vec![], edges: vec![], truncated: false });
     }
 
     // Collect branch labels per commit OID (local + remote)
@@ -333,7 +338,7 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         }
     }
 
-    Ok(CommitGraphData { nodes, edges })
+    Ok(CommitGraphData { nodes, edges, truncated })
 }
 
 fn commit_to_info(commit: &git2::Commit) -> Result<CommitInfo, String> {

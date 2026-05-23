@@ -1,4 +1,5 @@
 use crate::github::{api::GitHubClient, auth, parse_github_response, update};
+use crate::git;
 use crate::models::github::{
     AuthStatus, CreatePullRequest, GitHubBranch, GitHubPullRequest, GitHubRelease,
     GitHubReleaseAsset, GitHubRepo, GitHubUser, MergePullRequest, MergePullResult, PullRequestFile,
@@ -57,6 +58,37 @@ pub async fn github_get_repo(owner: String, repo: String) -> Result<GitHubRepo, 
 pub async fn github_list_branches(owner: String, repo: String) -> Result<Vec<GitHubBranch>, String> {
     let client = authenticated_client()?;
     client.list_branches(&owner, &repo).await
+}
+
+/// Create a repository on GitHub for the authenticated user.
+#[tauri::command]
+pub async fn github_create_repo(
+    name: String,
+    description: Option<String>,
+    private: bool,
+) -> Result<GitHubRepo, String> {
+    let client = authenticated_client()?;
+    client.create_repo(&name, description.as_deref(), private).await
+}
+
+/// Push a local repository's branch to a GitHub remote using token authentication.
+/// Creates or updates the "origin" remote and pushes the branch.
+#[tauri::command]
+pub async fn push_to_github(
+    repo_path: String,
+    owner: String,
+    repo_name: String,
+    branch: String,
+) -> Result<(), String> {
+    let token = auth::load_token()?.ok_or("not_authenticated")?;
+    let remote_url = format!("https://github.com/{}/{}.git", owner, repo_name);
+
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&repo_path)?;
+        git::remote::push_with_github_token(&repo, "origin", &remote_url, &token, &branch)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
 }
 
 /// List pull requests for a repository.

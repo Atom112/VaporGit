@@ -28,6 +28,7 @@ import {
   pull as pullRemote,
   push as pushRemote,
   getRemotes,
+  checkSubmodules,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
 import FileList from '../components/FileList';
@@ -41,12 +42,16 @@ import ConflictResolver from '../components/ConflictResolver';
 import PRCreateDialog from '../components/PRCreateDialog';
 import { githubStore } from '../stores/githubStore';
 import InteractiveRebase from '../components/InteractiveRebase';
+import KeyboardShortcuts from '../components/KeyboardShortcuts';
+import { tt } from '../i18n';
 
 const Repository: Component = () => {
   // ── State ──
   const [leftTab, setLeftTab] = createSignal<'graph' | 'branches'>('graph');
   const [leftMode, setLeftMode] = createSignal<'tree' | 'detail' | 'diff'>('tree');
   const [commits, setCommits] = createSignal<CommitInfo[]>([]);
+  const [commitPage, setCommitPage] = createSignal(0);
+  const COMMIT_PAGE_SIZE = 200;
   const [commitMessage, setCommitMessage] = createSignal('');
   const [selectedCommit, setSelectedCommit] = createSignal<CommitInfo | null>(null);
   const [commitDetail, setCommitDetail] = createSignal<CommitDetailType | null>(null);
@@ -54,6 +59,9 @@ const Repository: Component = () => {
   const [staging, setStaging] = createSignal(false);
   const [commitError, setCommitError] = createSignal<string | null>(null);
   const [commitLoading, setCommitLoading] = createSignal(false);
+  const [createBranchDialog, setCreateBranchDialog] = createSignal<{ commitId: string } | null>(null);
+  const [createBranchName, setCreateBranchName] = createSignal('');
+  const [createBranchLoading, setCreateBranchLoading] = createSignal(false);
   const [recentRepos, setRecentRepos] = createSignal<RecentRepo[]>([]);
   const [repoError, setRepoError] = createSignal<string | null>(null);
   const [failedRepoPath, setFailedRepoPath] = createSignal<string | null>(null);
@@ -136,12 +144,18 @@ const Repository: Component = () => {
     }
   };
 
-  const refreshHistory = async () => {
+  const refreshHistory = async (reset = true) => {
     const path = repoPath();
     if (!path) return;
     try {
-      const history = await getCommitHistory(path, 0, 50);
-      setCommits(history);
+      const page = reset ? 0 : commitPage();
+      const history = await getCommitHistory(path, page, COMMIT_PAGE_SIZE);
+      if (reset) {
+        setCommits(history);
+      } else {
+        setCommits([...commits(), ...history]);
+      }
+      setCommitPage(reset ? 1 : page + 1);
     } catch (e) {
       console.error('Failed to load history:', e);
     }
@@ -175,6 +189,16 @@ const Repository: Component = () => {
 
   const refreshAll = async () => {
     await Promise.all([refreshStatus(), refreshHistory(), refreshGraph(), refreshBranches()]);
+    // Check for submodules
+    const path = repoPath();
+    if (path) {
+      try {
+        const subs = await checkSubmodules(path);
+        if (subs.length > 0) {
+          addToast(`检测到 ${subs.length} 个子模块：${subs.join(', ')}。请在子模块目录中单独操作。`, 'info');
+        }
+      } catch { /* ignore */ }
+    }
   };
 
   onMount(async () => {
@@ -271,7 +295,10 @@ const Repository: Component = () => {
     const path = repoPath();
     if (!path || staging()) return;
     const unstaged = diffStore.fileStatuses.filter((f) => !f.staged);
-    if (unstaged.length === 0) return;
+    if (unstaged.length === 0) {
+      addToast('没有未暂存的文件', 'info');
+      return;
+    }
     setStaging(true);
     try {
       await stageFiles(
@@ -279,6 +306,10 @@ const Repository: Component = () => {
         unstaged.map((f) => f.path)
       );
       await refreshStatus();
+      addToast(`已暂存 ${unstaged.length} 个文件`, 'success');
+    } catch (e) {
+      console.error('Stage all failed:', e);
+      addToast(`暂存失败: ${e}`, 'error');
     } finally {
       setStaging(false);
     }
@@ -296,6 +327,9 @@ const Repository: Component = () => {
         staged.map((f) => f.path)
       );
       await refreshStatus();
+    } catch (e) {
+      console.error('Unstage all failed:', e);
+      addToast(`取消暂存失败: ${e}`, 'error');
     } finally {
       setStaging(false);
     }
@@ -580,17 +614,28 @@ const Repository: Component = () => {
     }
   };
 
-  const handleGraphCreateBranch = async (commitId: string) => {
+  const handleGraphCreateBranch = (commitId: string) => {
+    setCreateBranchDialog({ commitId });
+    setCreateBranchName('');
+    setCreateBranchLoading(false);
+  };
+
+  const handleCreateBranchSubmit = async () => {
+    const dialog = createBranchDialog();
+    if (!dialog) return;
     const path = repoPath();
-    if (!path) return;
-    const name = prompt('请输入新分支名称:');
-    if (!name || !name.trim()) return;
+    const name = createBranchName().trim();
+    if (!path || !name) return;
+    setCreateBranchLoading(true);
     try {
-      await createBranch(path, name.trim(), commitId);
-      addToast(`分支 ${name.trim()} 创建成功`, 'success');
+      await createBranch(path, name, dialog.commitId);
+      addToast(`分支 ${name} 创建成功`, 'success');
+      setCreateBranchDialog(null);
       await refreshAll();
     } catch (e) {
       addToast(`创建分支失败: ${e}`, 'error');
+    } finally {
+      setCreateBranchLoading(false);
     }
   };
 
@@ -617,7 +662,7 @@ const Repository: Component = () => {
       <Show when={repoPath()} fallback={
         <div class="flex-1 flex flex-col items-center justify-center p-8 overflow-auto animate-tree-enter">
           <div class="max-w-xl w-full">
-            <h1 class="text-2xl font-bold mb-6 text-center">选择仓库</h1>
+            <h1 class="text-2xl font-bold mb-6 text-center">{tt('repo.noRepoOpen')}</h1>
 
             <Show when={repoErrorPhase() !== 'closed'}>
               <div class={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm space-y-2 ${
@@ -629,7 +674,7 @@ const Repository: Component = () => {
                     class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
                     onClick={handleRemoveFailedRepo}
                   >
-                    从仓库列表中移除
+                    {tt('common.delete')}
                   </button>
                 </Show>
               </div>
@@ -641,15 +686,15 @@ const Repository: Component = () => {
               }`}
               onClick={handleOpenRepo}
             >
-              <h2 class="text-lg font-bold mb-1">打开仓库</h2>
-              <p class="opacity-70 text-sm">浏览本地文件夹并打开一个 Git 仓库</p>
+              <h2 class="text-lg font-bold mb-1">{tt('home.openRepo')}</h2>
+              <p class="opacity-70 text-sm">{tt('home.openDesc')}</p>
               <Show when={repoStore.loading}>
-                <div class="mt-2 text-xs text-cyan-400">正在加载...</div>
+                <div class="mt-2 text-xs text-cyan-400">{tt('common.loading')}</div>
               </Show>
             </div>
 
             <Show when={recentRepos().length > 0}>
-              <h2 class="text-sm font-semibold mb-3 opacity-60 uppercase tracking-wider text-center">最近打开的仓库</h2>
+              <h2 class="text-sm font-semibold mb-3 opacity-60 uppercase tracking-wider text-center">{tt('home.recentRepos')}</h2>
               <div class="space-y-2">
                 <For each={recentRepos()}>
                   {(repo) => (
@@ -686,10 +731,10 @@ const Repository: Component = () => {
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-                返回
+{tt('repo.back')}
               </button>
               <Show when={leftMode() === 'detail'}>
-                <span class="text-xs opacity-40">提交详情</span>
+                <span class="text-xs opacity-40">{tt('repo.commitDetail')}</span>
               </Show>
             </div>
           </Show>
@@ -720,7 +765,7 @@ const Repository: Component = () => {
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
-                  返回
+  {tt('repo.back')}
                 </button>
                 <button
                   class={`flex-1 py-2 text-xs font-medium transition-colors ${
@@ -730,7 +775,7 @@ const Repository: Component = () => {
                   }`}
                   onClick={() => setLeftTab('graph')}
                 >
-                  提交记录
+                  {tt('repo.commitGraph')}
                 </button>
                 <button
                   class={`flex-1 py-2 text-xs font-medium transition-colors ${
@@ -740,7 +785,7 @@ const Repository: Component = () => {
                   }`}
                   onClick={() => setLeftTab('branches')}
                 >
-                  选择分支（checkout）
+                  {tt('repo.branches')}
                 </button>
               </div>
 
@@ -750,25 +795,34 @@ const Repository: Component = () => {
                   <Show
                     when={!commitStore.graphLoading}
                     fallback={
-                      <div class="flex-1 flex items-center justify-center text-sm opacity-40">加载中...</div>
+                      <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('common.loading')}</div>
                     }
                   >
                     <Show
                       when={commitStore.graphData && commitStore.graphData.nodes.length > 0}
                       fallback={
-                        <div class="flex-1 flex items-center justify-center text-sm opacity-40">暂无提交记录</div>
+                        <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('repo.noCommits')}</div>
                       }
                     >
-                      <CommitGraph
-                        graphData={commitStore.graphData!}
-                        selectedNodeId={commitStore.selectedNode?.id}
-                        onSelectNode={handleSelectGraphNode}
-                        repoPath={repoPath() ?? undefined}
-                        onCheckout={handleGraphCheckout}
-                        onCreateBranch={handleGraphCreateBranch}
-                        onCherryPick={handleGraphCherryPick}
-                        onCreatePullRequest={handleCreatePullRequest}
-                      />
+                      <div class="flex flex-col h-full">
+                        <div class="flex-1 min-h-0">
+                          <CommitGraph
+                            graphData={commitStore.graphData!}
+                            selectedNodeId={commitStore.selectedNode?.id}
+                            onSelectNode={handleSelectGraphNode}
+                            repoPath={repoPath() ?? undefined}
+                            onCheckout={handleGraphCheckout}
+                            onCreateBranch={handleGraphCreateBranch}
+                            onCherryPick={handleGraphCherryPick}
+                            onCreatePullRequest={handleCreatePullRequest}
+                          />
+                        </div>
+                        <Show when={commitStore.graphData?.truncated}>
+                          <div class="shrink-0 px-3 py-1.5 text-xs text-yellow-400/70 bg-yellow-400/5 border-t border-yellow-400/10 text-center">
+                            {tt('repo.graphTruncated')}
+                          </div>
+                        </Show>
+                      </div>
                     </Show>
                   </Show>
                 </div>
@@ -779,13 +833,13 @@ const Repository: Component = () => {
                   <Show
                     when={!commitStore.branchesLoading}
                     fallback={
-                      <div class="flex-1 flex items-center justify-center text-sm opacity-40">加载中...</div>
+                      <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('common.loading')}</div>
                     }
                   >
                     <Show
                       when={commitStore.branches.length > 0}
                       fallback={
-                        <div class="flex-1 flex items-center justify-center text-sm opacity-40">无分支</div>
+                        <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('repo.noBranches')}</div>
                       }
                     >
                       <BranchList
@@ -813,7 +867,7 @@ const Repository: Component = () => {
                 when={!commitLoading()}
                 fallback={
                   <div class="flex-1 h-full flex items-center justify-center opacity-40 text-sm">
-                    加载中...
+                    {tt('common.loading')}
                   </div>
                 }
               >
@@ -837,7 +891,7 @@ const Repository: Component = () => {
                 when={diffStore.diffResult || diffStore.diffLoading}
                 fallback={
                   <div class="flex-1 h-full flex items-center justify-center opacity-40 text-sm">
-                    无差异内容
+                    {tt('repo.noDiff')}
                   </div>
                 }
               >
@@ -877,7 +931,7 @@ const Repository: Component = () => {
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                {remoteActionLoading() ? '...' : 'Fetch'}
+                {remoteActionLoading() ? tt('repo.fetching') : tt('repo.fetch')}
               </button>
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
@@ -887,7 +941,7 @@ const Repository: Component = () => {
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
                 </svg>
-                {remoteActionLoading() ? '...' : 'Pull'}
+                {remoteActionLoading() ? tt('repo.pulling') : tt('repo.pull')}
               </button>
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
@@ -897,7 +951,7 @@ const Repository: Component = () => {
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2" />
                 </svg>
-                {remoteActionLoading() ? '...' : 'Push'}
+                {remoteActionLoading() ? tt('repo.pushing') : tt('repo.push')}
               </button>
               {githubStore.authenticated && (
                 <A
@@ -907,7 +961,7 @@ const Repository: Component = () => {
                   <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                   </svg>
-                  PRs
+                  {tt('repo.prs')}
                 </A>
               )}
             </div>
@@ -920,7 +974,7 @@ const Repository: Component = () => {
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a7 7 0 017 7v2M3 10l4-4m-4 4l4 4" />
                 </svg>
-                {undoLoading() ? '...' : 'Undo'}
+                {undoLoading() ? '...' : tt('repo.undo')}
               </button>
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-30"
@@ -930,7 +984,7 @@ const Repository: Component = () => {
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M21 10H11a7 7 0 00-7 7v2m17-9l-4-4m4 4l-4 4" />
                 </svg>
-                {undoLoading() ? '...' : 'Redo'}
+                {undoLoading() ? '...' : tt('repo.redo')}
               </button>
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
@@ -939,7 +993,7 @@ const Repository: Component = () => {
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
-                Stash
+                {tt('repo.stash')}
               </button>
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
@@ -948,7 +1002,7 @@ const Repository: Component = () => {
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                Rebase
+                {tt('repo.rebase')}
               </button>
             </div>
           </div>
@@ -958,7 +1012,7 @@ const Repository: Component = () => {
             <textarea
               class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm resize-none focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
               rows={3}
-              placeholder="输入提交信息..."
+              placeholder={tt('repo.commitPlaceholder')}
               value={commitMessage()}
               onInput={(e) => setCommitMessage(e.currentTarget.value)}
             />
@@ -968,7 +1022,7 @@ const Repository: Component = () => {
                 onClick={handleCommit}
                 disabled={!commitMessage().trim() || stagedFiles().length === 0}
               >
-                提交
+                {tt('repo.commit')}
               </button>
             </div>
             {commitError() && (
@@ -1030,6 +1084,71 @@ const Repository: Component = () => {
           }}
         />
       </Show>
+
+      {/* Create branch from commit dialog */}
+      <Show when={createBranchDialog()}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div class="w-80 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <h2 class="text-sm font-bold">{tt('commit.createBranchFrom')}</h2>
+              <button
+                class="text-xs opacity-50 hover:text-red-400 transition-colors"
+                onClick={() => setCreateBranchDialog(null)}
+              >
+                {tt('common.close')}
+              </button>
+            </div>
+            <div class="p-4 space-y-3">
+              <div>
+                <label class="block text-xs font-medium mb-1 opacity-70">{tt('repo.branchName')}</label>
+                <input
+                  class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
+                  placeholder={tt('repo.branchNamePlaceholder')}
+                  value={createBranchName()}
+                  onInput={(e) => setCreateBranchName(e.currentTarget.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateBranchSubmit()}
+                  disabled={createBranchLoading()}
+                  autofocus
+                />
+              </div>
+              <div class="flex gap-2">
+                <button
+                  class="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-xs transition-colors"
+                  onClick={() => setCreateBranchDialog(null)}
+                  disabled={createBranchLoading()}
+                >
+                  {tt('common.cancel')}
+                </button>
+                <button
+                  class="flex-1 py-2 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 disabled:opacity-30 text-xs font-medium transition-colors"
+                  onClick={handleCreateBranchSubmit}
+                  disabled={!createBranchName().trim() || createBranchLoading()}
+                >
+                  {createBranchLoading() ? tt('repo.creatingBranch') : tt('common.create')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Keyboard shortcuts */}
+      <KeyboardShortcuts
+        disabled={!repoPath()}
+        onFetch={handleFetch}
+        onPull={handlePull}
+        onPush={handlePush}
+        onCommit={handleCommit}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onStash={() => setShowStashPanel(true)}
+        onRebase={() => setShowRebaseDialog(true)}
+        onStageAll={handleStageAll}
+        onUnstageAll={handleUnstageAll}
+        onBack={handleBack}
+        onRefresh={refreshAll}
+        onBranchTab={() => setLeftTab('branches')}
+      />
 
       {/* Status bar */}
       <StatusBar />

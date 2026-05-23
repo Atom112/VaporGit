@@ -190,6 +190,7 @@
   .animate-error-exit {
     animation: error-slide-exit 0.12s ease-in forwards;
   }
+
 }
 
 .container {

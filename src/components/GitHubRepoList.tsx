@@ -2,6 +2,7 @@ import { Component, createSignal, createEffect, Show, For } from 'solid-js';
 import { githubListRepos } from '../lib/tauriCommands';
 import { githubStore, cacheRepos } from '../stores/githubStore';
 import type { GitHubRepo } from '../lib/types';
+import { tt, ttf } from '../i18n';
 
 interface Props {
   onClone: (url: string) => void;
@@ -67,7 +68,7 @@ const GitHubRepoList: Component<Props> = (props) => {
       {/* Search bar */}
       <input
         class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
-        placeholder="搜索仓库..."
+        placeholder={tt('github.searchRepos')}
         value={search()}
         onInput={(e) => { setSearch(e.currentTarget.value); setPage(1); }}
       />
@@ -76,7 +77,7 @@ const GitHubRepoList: Component<Props> = (props) => {
       <Show when={loading() && !error()}>
         <div class="flex items-center justify-center py-8">
           <div class="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-          <span class="ml-2 text-sm text-gray-400">加载仓库列表...</span>
+          <span class="ml-2 text-sm text-gray-400">{tt('github.loadingRepos')}</span>
         </div>
       </Show>
 
@@ -90,7 +91,7 @@ const GitHubRepoList: Component<Props> = (props) => {
       {/* Empty state */}
       <Show when={!loading() && !error() && filtered()?.length === 0}>
         <div class="text-center py-8 text-sm text-gray-500">
-          {search() ? '没有匹配的仓库' : '暂无仓库'}
+          {search() ? tt('github.noMatchRepos') : tt('github.noRepos')}
         </div>
       </Show>
 
@@ -111,15 +112,15 @@ const GitHubRepoList: Component<Props> = (props) => {
             disabled={page() <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            上一页
+            {tt('github.prevPage')}
           </button>
-          <span class="px-2 py-1 text-xs text-gray-400">第 {page()} 页</span>
+          <span class="px-2 py-1 text-xs text-gray-400">{ttf('github.page', page())}</span>
           <button
             class="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors"
             disabled={repos().length < 50}
             onClick={() => setPage((p) => p + 1)}
           >
-            下一页
+            {tt('github.nextPage')}
           </button>
         </div>
       </Show>
@@ -133,12 +134,12 @@ const RepoCard: Component<{ repo: GitHubRepo; onClone: (url: string) => void }> 
     const d = new Date(r().updatedAt);
     const diff = Date.now() - d.getTime();
     const hours = Math.floor(diff / 3600000);
-    if (hours < 1) return '刚刚';
-    if (hours < 24) return `${hours} 小时前`;
+    if (hours < 1) return tt('github.justNow');
+    if (hours < 24) return ttf('github.hoursAgo', hours);
     const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} 天前`;
+    if (days < 30) return ttf('github.daysAgo', days);
     const months = Math.floor(days / 30);
-    return `${months} 个月前`;
+    return ttf('github.monthsAgo', months);
   };
 
   return (
@@ -182,14 +183,14 @@ const RepoCard: Component<{ repo: GitHubRepo; onClone: (url: string) => void }> 
               </svg>
               {r().forksCount}
             </span>
-            <span>更新于 {timeAgo()}</span>
+            <span>{tt('github.updatedAt')} {timeAgo()}</span>
           </div>
         </div>
         <button
           onClick={() => props.onClone(r().cloneUrl)}
           class="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
         >
-          克隆
+          {tt('github.clone')}
         </button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { Component, createSignal, onCleanup } from 'solid-js';
 import { githubStore, clearAuth } from '../stores/githubStore';
 import { githubLogout } from '../lib/tauriCommands';
+import { tt } from '../i18n';
 
 const GitHubUserMenu: Component = () => {
   const [open, setOpen] = createSignal(false);
@@ -52,7 +53,7 @@ const GitHubUserMenu: Component = () => {
       </button>
 
       {open() && (
-        <div class="absolute right-0 top-full mt-1 w-52 p-2 rounded-xl bg-[#1a1b1e] border border-white/10 shadow-xl z-50">
+        <div class="absolute right-0 top-full mt-1 w-52 p-2 rounded-xl bg-[#505054]/95 backdrop-blur-xl border border-white/15 shadow-2xl z-50 animate-context-menu-enter">
           <div class="px-2 py-1.5 border-b border-white/10 mb-1">
             <p class="text-sm text-white font-medium truncate">{user()?.name ?? user()?.login}</p>
             <p class="text-xs text-gray-400 truncate">{user()?.login}</p>
@@ -64,7 +65,7 @@ const GitHubUserMenu: Component = () => {
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            退出登录
+            {tt('github.logout')}
           </button>
         </div>
       )}

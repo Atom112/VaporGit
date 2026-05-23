@@ -2,6 +2,7 @@ import { Component, createSignal, createResource, Show, For } from 'solid-js';
 import type { GitHubPullRequest, PullRequestFile } from '../lib/types';
 import { githubGetPullFiles, githubListPullComments, githubMergePull } from '../lib/tauriCommands';
 import { addToast } from '../stores/toastStore';
+import { tt, ttf } from '../i18n';
 import DiffView from './DiffView';
 import { parseGitHubPatch } from '../lib/diffParser';
 
@@ -20,6 +21,7 @@ const PRDetail: Component<Props> = (props) => {
   const [showMergeConfirm, setShowMergeConfirm] = createSignal(false);
 
   const pr = () => props.pr;
+  const isMerged = () => pr().mergedAt !== null;
 
   // Fetch PR files
   const [files] = createResource(
@@ -44,12 +46,12 @@ const PRDetail: Component<Props> = (props) => {
         mergeMethod: mergeMethod(),
       });
       if (result.merged) {
-        addToast(`PR #${pr().number} 合并成功`, 'success');
+        addToast(`PR #${pr().number} ${tt('common.success')}`, 'success');
       } else {
-        addToast(`合并失败: ${result.message}`, 'error');
+        addToast(`${tt('common.error')}: ${result.message}`, 'error');
       }
     } catch (e) {
-      addToast(`合并出错: ${e}`, 'error');
+      addToast(`${tt('common.error')}: ${e}`, 'error');
     } finally {
       setMerging(false);
       setShowMergeConfirm(false);
@@ -67,17 +69,17 @@ const PRDetail: Component<Props> = (props) => {
             class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
             onClick={props.onBack}
           >
-            &larr; 返回
+            &larr; {tt('pr.back')}
           </button>
         </div>
         <h2 class="text-base font-bold text-white leading-snug">{pr().title}</h2>
         <div class="flex items-center gap-2 text-xs text-gray-400">
-          <span class={pr().merged ? 'text-purple-400' : pr().state === 'open' ? 'text-green-400' : 'text-red-400'}>
-            #{pr().number} {pr().merged ? 'Merged' : pr().state === 'open' ? 'Open' : 'Closed'}
+          <span class={isMerged() ? 'text-purple-400' : pr().state === 'open' ? 'text-green-400' : 'text-red-400'}>
+            #{pr().number} {isMerged() ? 'Merged' : pr().state === 'open' ? 'Open' : 'Closed'}
           </span>
-          <span>{pr().user.login} 创建于 {new Date(pr().createdAt).toLocaleDateString()}</span>
+          <span>{ttf('pr.createdBy', pr().user.login, new Date(pr().createdAt).toLocaleDateString())}</span>
           <Show when={pr().mergedAt}>
-            <span>合并于 {new Date(pr().mergedAt!).toLocaleDateString()}</span>
+            <span>{ttf('pr.mergedOn', new Date(pr().mergedAt!).toLocaleDateString())}</span>
           </Show>
         </div>
         <div class="flex items-center gap-2 text-xs">
@@ -104,13 +106,13 @@ const PRDetail: Component<Props> = (props) => {
                 onClick={handleMerge}
                 disabled={merging()}
               >
-                {merging() ? '合并中...' : '确认合并'}
+                {merging() ? tt('pr.merging') : tt('pr.mergeConfirm')}
               </button>
               <button
                 class="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
                 onClick={() => setShowMergeConfirm(false)}
               >
-                取消
+                {tt('pr.cancel')}
               </button>
             </div>
           }>
@@ -154,10 +156,10 @@ const PRDetail: Component<Props> = (props) => {
             {/* File list sidebar */}
             <div class="w-56 shrink-0 border-r border-white/10 overflow-auto">
               <Show when={files.loading}>
-                <div class="p-4 text-xs text-gray-500">加载中...</div>
+                <div class="p-4 text-xs text-gray-500">{tt('pr.loadingFiles')}</div>
               </Show>
               <Show when={files.error}>
-                <div class="p-3 text-xs text-red-400">加载失败</div>
+                <div class="p-3 text-xs text-red-400">{tt('pr.loadFailed')}</div>
               </Show>
               <For each={files()}>
                 {(f) => (
@@ -187,7 +189,7 @@ const PRDetail: Component<Props> = (props) => {
             <div class="flex-1 overflow-auto">
               <Show when={!selectedFile()}>
                 <div class="flex items-center justify-center h-full text-xs text-gray-500">
-                  选择一个文件查看 Diff
+                  {tt('pr.selectFile')}
                 </div>
               </Show>
               <Show when={selectedFile()}>
@@ -214,10 +216,10 @@ const PRDetail: Component<Props> = (props) => {
             </Show>
 
             <Show when={comments.loading}>
-              <div class="text-xs text-gray-500">加载评论中...</div>
+              <div class="text-xs text-gray-500">{tt('pr.loadingComments')}</div>
             </Show>
             <Show when={comments.error}>
-              <div class="text-xs text-red-400">加载评论失败</div>
+              <div class="text-xs text-red-400">{tt('pr.loadCommentsFailed')}</div>
             </Show>
 
             <For each={comments()}>
@@ -267,7 +269,7 @@ const FileDiffView: Component<{
     <div class="p-2">
       <Show when={diffResult()} fallback={
         <div class="text-xs text-gray-500 text-center py-8">
-          {file()?.status === 'removed' ? '文件已删除，无差异内容' : '无法加载差异内容'}
+          {file()?.status === 'removed' ? tt('pr.fileRemoved') : tt('pr.noDiff')}
         </div>
       }>
         <DiffView diffResult={diffResult()} loading={false} filePath={props.filename} />
