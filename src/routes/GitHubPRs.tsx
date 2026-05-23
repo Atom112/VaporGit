@@ -2,6 +2,7 @@ import { Component, createSignal, createResource, Show } from 'solid-js';
 import { repoStore } from '../stores/repoStore';
 import { githubStore } from '../stores/githubStore';
 import { getRemotes } from '../lib/tauriCommands';
+import { tt } from '../i18n';
 import type { GitHubPullRequest } from '../lib/types';
 import PRList from '../components/PRList';
 import PRDetail from '../components/PRDetail';
@@ -40,21 +41,21 @@ const GitHubPRs: Component = () => {
     <div class="h-full flex flex-col">
       <Show when={!githubStore.authenticated}>
         <div class="flex-1 flex items-center justify-center">
-          <p class="text-sm text-gray-500">请先在设置中登录 GitHub</p>
+          <p class="text-sm text-gray-500">{tt('pr.loginRequired')}</p>
         </div>
       </Show>
 
       <Show when={githubStore.authenticated && remoteInfo.loading}>
         <div class="flex-1 flex items-center justify-center">
-          <div class="text-sm text-gray-500">检测仓库远程地址...</div>
+          <div class="text-sm text-gray-500">{tt('pr.detectingRemote')}</div>
         </div>
       </Show>
 
       <Show when={githubStore.authenticated && !remoteInfo.loading && !owner()}>
         <div class="flex-1 flex items-center justify-center">
           <div class="text-center">
-            <p class="text-sm text-gray-500">当前仓库没有 GitHub 远程地址</p>
-            <p class="text-xs text-gray-600 mt-1">请在仓库页确认已添加 GitHub 远程仓库</p>
+            <p class="text-sm text-gray-500">{tt('pr.noRemote')}</p>
+            <p class="text-xs text-gray-600 mt-1">{tt('pr.noRemoteHint')}</p>
           </div>
         </div>
       </Show>

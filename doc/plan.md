@@ -282,7 +282,7 @@ src-tauri/src/
 
 ---
 
-### M5：体验打磨（原 M4，已顺延）
+### M5：体验打磨
 
 | # | 任务 | 说明 |
 |---|------|------|
@@ -291,11 +291,8 @@ src-tauri/src/
 | 5.3 | 二进制文件降级策略 | 图片预览、二进制提示、LFS 标记 |
 | 5.4 | 子模块检测与提示 | 检测 `.gitmodules`，提示用户 |
 | 5.5 | 键盘快捷键 | 常用操作快捷键绑定 |
-| 5.6 | 暗色/亮色主题切换 | 跟随系统 + 手动切换 |
-| 5.7 | 国际化 (i18n) | 中/英文支持 |
-| 5.8 | 自动化测试 | 前端组件测试 + Rust 单元测试 + 集成测试 |
-| 5.9 | CI/CD 流水线 | GitHub Actions：lint + test + build |
-| 5.10 | 各平台安装包签名 | macOS 签名公证、Windows 代码签名 |
+| 5.6 | 国际化 (i18n) | 中/英文支持 |
+| 5.7 | CI/CD 流水线 | GitHub Actions：lint + test + build |
 
 ---
 
@@ -346,19 +343,6 @@ github_get_pull_diff   -> String                // 原始 unified diff
 github_list_pull_comments   -> Vec<PRComment>
 github_create_pull_comment  -> PRComment
 ```
-
----
-
-## 版本发布计划
-
-| 版本 | 里程碑 | 功能 |
-|------|--------|------|
-| v1.0.2 | 当前 | 脚手架 + M1~M3（已完成） |
-| v1.0.3 | M4-A | GitHub SSO 认证 |
-| v1.0.4 | M4-B | GitHub 仓库管理 |
-| v1.0.5 | M4-C | Pull Request 功能 |
-| v1.0.6 | M5 | 性能优化 + 主题 + i18n + 测试 |
-| v1.1.0 | 正式版 | 全功能稳定发布 |
 
 ---
 

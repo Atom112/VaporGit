@@ -1,5 +1,6 @@
 import { Component, For, Show } from 'solid-js';
 import type { FileStatus } from '../lib/types';
+import { tt, ttf } from '../i18n';
 
 interface FileListProps {
   stagedFiles: FileStatus[];
@@ -62,13 +63,13 @@ const FileList: Component<FileListProps> = (props) => {
         <div class="border-b border-white/10">
           <div class="flex items-center justify-between px-3 py-2">
             <span class="text-xs font-semibold opacity-60 uppercase">
-              已暂存 ({props.stagedFiles.length})
+              {ttf('repo.stagedCount', props.stagedFiles.length)}
             </span>
             <button
               class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
               onClick={props.onUnstageAll}
             >
-              全部取消暂存
+              {tt('repo.unstageAll')}
             </button>
           </div>
           <For each={props.stagedFiles}>
@@ -87,7 +88,7 @@ const FileList: Component<FileListProps> = (props) => {
                     e.stopPropagation();
                     props.onToggleStage(file);
                   }}
-                  title="点击取消暂存"
+                  title={tt('repo.unstageTooltip')}
                 >
                   {statusLabel(file.status)}
                 </span>
@@ -103,13 +104,13 @@ const FileList: Component<FileListProps> = (props) => {
         <div class="flex-1">
           <div class="flex items-center justify-between px-3 py-2">
             <span class="text-xs font-semibold opacity-60 uppercase">
-              变更 ({props.unstagedFiles.length})
+              {ttf('repo.changedCount', props.unstagedFiles.length)}
             </span>
             <button
               class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
               onClick={props.onStageAll}
             >
-              全部暂存
+              {tt('repo.stageAll')}
             </button>
           </div>
           <For each={props.unstagedFiles}>
@@ -128,7 +129,7 @@ const FileList: Component<FileListProps> = (props) => {
                     e.stopPropagation();
                     props.onToggleStage(file);
                   }}
-                  title="点击暂存"
+                  title={tt('repo.stageTooltip')}
                 >
                   {statusLabel(file.status)}
                 </span>
@@ -141,7 +142,7 @@ const FileList: Component<FileListProps> = (props) => {
 
       <Show when={props.stagedFiles.length === 0 && props.unstagedFiles.length === 0}>
         <div class="flex-1 flex items-center justify-center p-4 text-sm opacity-40">
-          工作区干净，没有变更
+          {tt('repo.clean')}
         </div>
       </Show>
     </div>

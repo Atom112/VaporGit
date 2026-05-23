@@ -94,6 +94,7 @@ export interface BranchInfo {
 export interface CommitGraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  truncated?: boolean;
 }
 
 export interface GraphNode {

@@ -1,6 +1,7 @@
 import { Component, For, Show, createSignal } from 'solid-js';
-import { checkoutBranch, checkoutRemoteBranch, createBranch, deleteBranch } from '../lib/tauriCommands';
+import { checkoutBranch, checkoutRemoteBranch, deleteBranch } from '../lib/tauriCommands';
 import { addToast } from '../stores/toastStore';
+import { tt } from '../i18n';
 import type { BranchInfo } from '../lib/types';
 
 interface BranchListProps {
@@ -10,8 +11,6 @@ interface BranchListProps {
 }
 
 const BranchList: Component<BranchListProps> = (props) => {
-  const [newName, setNewName] = createSignal('');
-  const [creating, setCreating] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null);
   const [checkoutBranchName, setCheckoutBranchName] = createSignal<string | null>(null);
@@ -51,24 +50,6 @@ const BranchList: Component<BranchListProps> = (props) => {
     }
   };
 
-  const handleCreate = async () => {
-    const name = newName().trim();
-    if (!name) return;
-    setCreating(true);
-    setError(null);
-    try {
-      await createBranch(props.repoPath, name);
-      addToast(`分支 ${name} 创建成功`, 'success');
-      setNewName('');
-      props.onRefresh();
-    } catch (e) {
-      addToast(`创建分支失败: ${e}`, 'error');
-      setError(String(e));
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const handleDelete = async (name: string) => {
     setError(null);
     try {
@@ -84,32 +65,12 @@ const BranchList: Component<BranchListProps> = (props) => {
 
   return (
     <div class="flex flex-col h-full relative">
-      {/* Create branch */}
-      <div class="p-3 border-b border-white/10 shrink-0">
-        <div class="flex gap-2">
-          <input
-            class="flex-1 p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
-            placeholder="新分支名称..."
-            value={newName()}
-            onInput={(e) => setNewName(e.currentTarget.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-          />
-          <button
-            class="px-3 py-1.5 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 disabled:opacity-30 text-xs font-medium transition-colors"
-            disabled={!newName().trim() || creating()}
-            onClick={handleCreate}
-          >
-            创建
-          </button>
-        </div>
-      </div>
-
       {/* Branch list */}
       <div class="flex-1 overflow-auto divide-y divide-white/5">
         <Show when={localBranches().length > 0 || remoteBranches().length > 0} fallback={
-          <div class="flex items-center justify-center h-full text-sm opacity-40">无分支</div>
+          <div class="flex items-center justify-center h-full text-sm opacity-40">{tt('repo.noBranches')}</div>
         }>
-          <div class="px-3 py-2 text-[10px] font-semibold opacity-40 uppercase tracking-wider">本地分支</div>
+          <div class="px-3 py-2 text-[10px] font-semibold opacity-40 uppercase tracking-wider">{tt('repo.localBranches')}</div>
           <For each={localBranches()}>
             {(branch) => {
               const isCurrent = branch.isHead;
@@ -169,7 +130,7 @@ const BranchList: Component<BranchListProps> = (props) => {
           </For>
 
           <Show when={remoteBranches().length > 0}>
-            <div class="px-3 py-2 text-[10px] font-semibold opacity-40 uppercase tracking-wider border-t border-white/5">远程分支</div>
+            <div class="px-3 py-2 text-[10px] font-semibold opacity-40 uppercase tracking-wider border-t border-white/5">{tt('repo.remoteBranches')}</div>
             <For each={remoteBranches()}>
               {(branch) => (
                 <div

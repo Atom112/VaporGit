@@ -10,7 +10,9 @@ export default function ToastContainer() {
             class={`px-4 py-3 rounded-xl shadow-lg backdrop-blur border text-sm font-medium animate-toast-in cursor-pointer ${
               toast.type === 'success'
                 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
-                : 'bg-red-500/20 border-red-500/40 text-red-200'
+                : toast.type === 'error'
+                ? 'bg-red-500/20 border-red-500/40 text-red-200'
+                : 'bg-sky-500/20 border-sky-500/40 text-sky-200'
             }`}
             onClick={() => removeToast(toast.id)}
           >

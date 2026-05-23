@@ -8,7 +8,7 @@ const StatusBar: Component = () => {
 
   return (
     <div class="h-7 flex items-center justify-between px-3 text-xs bg-white/5 border-t border-white/10 shrink-0 select-none">
-      <div class="flex items-center gap-4 opacity-70">
+      <div class="flex items-center gap-3 opacity-70">
         <Show when={branch()} fallback={<span class="opacity-40">无仓库</span>}>
           <span class="flex items-center gap-1">
             <svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

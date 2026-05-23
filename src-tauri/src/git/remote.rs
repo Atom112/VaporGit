@@ -1,4 +1,4 @@
-use git2::{RemoteCallbacks, Repository};
+use git2::{Cred, RemoteCallbacks, Repository};
 use crate::models::remote::RemoteInfo;
 
 pub fn get_remotes(repo: &Repository) -> Result<Vec<RemoteInfo>, String> {
@@ -180,6 +180,53 @@ pub fn push(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
     cb.credentials(|_url, username_from_url, _allowed_types| {
         let user = username_from_url.unwrap_or("git");
         git2::Cred::ssh_key_from_agent(user).or_else(|_| git2::Cred::default())
+    });
+
+    let mut push_opts = git2::PushOptions::new();
+    push_opts.remote_callbacks(cb);
+
+    remote
+        .push(&[&refspec], Some(&mut push_opts))
+        .map_err(|e| format!("Push 失败: {}", e))?;
+
+    remote
+        .disconnect()
+        .map_err(|e| format!("断开远程连接失败: {}", e))?;
+
+    Ok(())
+}
+
+/// Push a branch to a GitHub remote using HTTPS token authentication.
+/// Sets up the remote URL without embedding the token in the config.
+pub fn push_with_github_token(
+    repo: &Repository,
+    remote_name: &str,
+    remote_url: &str,
+    token: &str,
+    branch: &str,
+) -> Result<(), String> {
+    // Try to find the remote, or create it
+    let mut remote = match repo.find_remote(remote_name) {
+        Ok(r) => {
+            // Update URL to the HTTPS URL without token
+            repo.remote_set_url(remote_name, remote_url)
+                .map_err(|e| format!("无法设置远程 URL: {}", e))?;
+            r
+        }
+        Err(_) => repo
+            .remote(remote_name, remote_url)
+            .map_err(|e| format!("无法创建远程 {}: {}", remote_name, e))?,
+    };
+
+    let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
+
+    let mut cb = RemoteCallbacks::new();
+    cb.credentials(move |_url, _username, allowed| {
+        if allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+            Cred::userpass_plaintext("x-access-token", token)
+        } else {
+            Cred::default()
+        }
     });
 
     let mut push_opts = git2::PushOptions::new();

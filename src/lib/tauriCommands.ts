@@ -68,6 +68,14 @@ export async function getCommitDetail(
   return invoke('get_commit_detail', { path, commitId });
 }
 
+export async function getFileBase64(path: string, filePath: string, commitId?: string): Promise<string | null> {
+  return invoke('get_file_base64', { path, filePath, commitId: commitId ?? null });
+}
+
+export async function checkLfs(path: string, filePath: string): Promise<boolean> {
+  return invoke('check_lfs', { path, filePath });
+}
+
 export async function getFileDiff(
   path: string,
   filePath: string,
@@ -146,6 +154,10 @@ export async function getRemotes(path: string): Promise<RemoteInfo[]> {
   return invoke('get_remotes', { path });
 }
 
+export async function checkSubmodules(path: string): Promise<string[]> {
+  return invoke('check_submodules', { path });
+}
+
 export async function getConflicts(path: string): Promise<ConflictEntry[]> {
   return invoke('get_conflicts', { path });
 }
@@ -194,6 +206,10 @@ export async function cloneRepo(url: string, path: string): Promise<RepoInfo> {
   return invoke('clone_repo', { url, path });
 }
 
+export async function initRepo(path: string, initReadme: boolean): Promise<RepoInfo> {
+  return invoke('init_repo', { path, initReadme });
+}
+
 // === GitHub ===
 
 export async function githubLogin(): Promise<GitHubUser> {
@@ -210,6 +226,14 @@ export async function githubLogout(): Promise<void> {
 
 export async function githubGetUser(): Promise<GitHubUser> {
   return invoke('github_get_user');
+}
+
+export async function githubCreateRepo(name: string, description: string | null, private_: boolean): Promise<GitHubRepo> {
+  return invoke('github_create_repo', { name, description, private: private_ });
+}
+
+export async function pushToGitHub(repoPath: string, owner: string, repoName: string, branch: string): Promise<void> {
+  return invoke('push_to_github', { repoPath, owner, repoName, branch });
 }
 
 export async function githubListRepos(page?: number, perPage?: number): Promise<GitHubRepo[]> {

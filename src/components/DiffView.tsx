@@ -1,6 +1,6 @@
 import { Component, For, Show, createSignal, createResource, createEffect } from 'solid-js';
 import type { DiffHunk, DiffResult } from '../lib/types';
-import { getFileContent } from '../lib/tauriCommands';
+import { getFileContent, getFileBase64, checkLfs } from '../lib/tauriCommands';
 import 'highlight.js/styles/github-dark.css';
 import { detectLanguage, highlightLine, highlightFull } from '../lib/syntax';
 import { settingsStore } from '../stores/settingsStore';
@@ -84,12 +84,42 @@ function buildFullFileLines(
   return result;
 }
 
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp'];
+
+function isImageFile(filePath: string): boolean {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  return ext ? IMAGE_EXTENSIONS.includes(ext) : false;
+}
+
 const DiffView: Component<DiffViewProps> = (props) => {
   const [viewMode, setViewMode] = createSignal<'unified' | 'fullFile' | 'split'>(settingsStore.defaultDiffView);
 
   createEffect(() => {
     setViewMode(settingsStore.defaultDiffView);
   });
+
+  // Image preview for binary files
+  const [imageDataUrl] = createResource(
+    () => props.diffResult?.isBinary && isImageFile(props.filePath) && props.repoPath
+      ? { repoPath: props.repoPath, filePath: props.filePath, commitId: props.commitId }
+      : null,
+    async ({ repoPath, filePath, commitId }) => {
+      try {
+        return await getFileBase64(repoPath, filePath, commitId);
+      } catch { return null; }
+    },
+  );
+
+  // LFS check
+  const [isLfs] = createResource(
+    () => props.diffResult?.isBinary && props.repoPath
+      ? { repoPath: props.repoPath, filePath: props.filePath }
+      : null,
+    async ({ repoPath, filePath }) => {
+      try { return await checkLfs(repoPath, filePath); }
+      catch { return false; }
+    },
+  );
 
   const [fullContent] = createResource(
     () =>
@@ -169,13 +199,47 @@ const DiffView: Component<DiffViewProps> = (props) => {
               <Show
                 when={props.diffResult && !props.diffResult.isBinary && !props.diffResult.isTooLarge}
                 fallback={
-                  <div class="flex items-center justify-center h-full opacity-40 text-sm">
-                    {props.diffResult?.isBinary
-                      ? '二进制文件，无法显示差异'
-                      : props.diffResult?.isTooLarge
-                        ? '文件过大，无法显示完整差异'
-                        : '无差异内容'}
-                  </div>
+                  <Show when={props.diffResult?.isBinary} fallback={
+                    <div class="flex items-center justify-center h-full opacity-40 text-sm">
+                      {props.diffResult?.isTooLarge ? '文件过大，无法显示完整差异' : '无差异内容'}
+                    </div>
+                  }>
+                    <Show when={isImageFile(props.filePath) && imageDataUrl() !== undefined}
+                      fallback={
+                        <div class="flex flex-col items-center justify-center h-full gap-3">
+                          <svg class="w-12 h-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                          </svg>
+                          <span class="text-sm opacity-50">二进制文件</span>
+                          <Show when={isLfs() !== undefined && isLfs()}>
+                            <span class="text-xs px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/20">
+                              LFS
+                            </span>
+                          </Show>
+                        </div>
+                      }
+                    >
+                      <div class="flex flex-col items-center justify-center h-full gap-2 p-4">
+                        <Show when={imageDataUrl()}
+                          fallback={
+                            <div class="flex items-center justify-center opacity-40 text-sm">加载预览中...</div>
+                          }
+                        >
+                          <img
+                            src={imageDataUrl()!}
+                            alt={props.filePath}
+                            class="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
+                          />
+                        </Show>
+                        <span class="text-xs opacity-40">{props.filePath}</span>
+                        <Show when={isLfs()}>
+                          <span class="text-xs px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/20">
+                             Git LFS
+                          </span>
+                        </Show>
+                      </div>
+                    </Show>
+                  </Show>
                 }
               >
                 {viewMode() === 'unified' ? (
@@ -285,7 +349,7 @@ const FullFileView: Component<{ diffResult: DiffResult; fullContent: string; lan
           }
           return (
             <div class={`flex items-stretch ${bgClass}`}>
-              <div class={`w-[3px] shrink-0 ${gutterColor}`} />
+              <div class={`w-0.75 shrink-0 ${gutterColor}`} />
               <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
                 {annot.newLine ?? ''}
               </div>

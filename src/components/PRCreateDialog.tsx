@@ -3,6 +3,7 @@ import { githubCreatePull, githubListBranches } from '../lib/tauriCommands';
 import CustomSelect from './CustomSelect';
 import { addToast } from '../stores/toastStore';
 import { commitStore } from '../stores/commitStore';
+import { tt, ttf } from '../i18n';
 
 interface Props {
   owner: string;
@@ -42,7 +43,7 @@ const PRCreateDialog: Component<Props> = (props) => {
     return { shortId: node.shortId, message: node.message };
   };
 
-  const canSubmit = () => title().trim().length > 0 && headBranch().length > 0 && base().length > 0;
+  const canSubmit = () => title().trim().length > 0 && headBranch().length > 0 && base().length > 0 && !hasOnlyOneBranch();
 
   const handleSubmit = async () => {
     if (!canSubmit()) return;
@@ -56,7 +57,7 @@ const PRCreateDialog: Component<Props> = (props) => {
         body: body().trim() || null,
         draft: draft() || null,
       });
-      addToast(`PR #${pr.number} 创建成功`, 'success');
+      addToast(ttf('pr.created', pr.number), 'success');
       props.onCreated();
     } catch (e) {
       setError(String(e));
@@ -71,22 +72,26 @@ const PRCreateDialog: Component<Props> = (props) => {
       .map((b) => ({ value: b.name, label: b.name })) ?? []
   );
 
+  const hasOnlyOneBranch = createMemo(
+    () => !branches.loading && !branches.error && branches()?.length === 1
+  );
+
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div class="w-110 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
         <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <h2 class="text-sm font-bold">创建 Pull Request</h2>
+          <h2 class="text-sm font-bold">{tt('pr.createTitle')}</h2>
           <button
             class="text-xs opacity-50 hover:text-red-400 transition-colors"
             onClick={props.onClose}
           >
-            关闭
+            {tt('common.close')}
           </button>
         </div>
         <div class="p-4 space-y-3">
           {/* Branch info */}
           <div class="flex items-center gap-2 text-xs text-gray-400">
-            <span class="font-mono bg-white/10 px-2 py-1 rounded">{headBranch() || '(no branch)'}</span>
+            <span class="font-mono bg-white/10 px-2 py-1 rounded">{headBranch() || tt('pr.noBranch')}</span>
             <span>&rarr;</span>
             <span class="font-mono bg-white/10 px-2 py-1 rounded">{base()}</span>
             <span class="text-white/70">({props.owner}/{props.repo})</span>
@@ -107,11 +112,11 @@ const PRCreateDialog: Component<Props> = (props) => {
 
           {/* Base branch — dropdown from repo */}
           <div>
-            <label class="block text-xs font-medium mb-1 opacity-70">目标分支 (base)</label>
+            <label class="block text-xs font-medium mb-1 opacity-70">{tt('pr.baseBranch')}</label>
             <Show when={!branches.loading && !branches.error} fallback={
               <>
                 <Show when={branches.loading}>
-                  <div class="w-full p-2 rounded-lg bg-white/10 text-sm text-gray-400">加载分支列表...</div>
+                  <div class="w-full p-2 rounded-lg bg-white/10 text-sm text-gray-400">{tt('pr.loadingBranches')}</div>
                 </Show>
                 <Show when={branches.error}>
                   <input
@@ -122,20 +127,26 @@ const PRCreateDialog: Component<Props> = (props) => {
                 </Show>
               </>
             }>
-              <CustomSelect
-                value={base()}
-                onChange={(v) => setBase(v)}
-                options={branchOptions()}
-              />
+              <Show when={!hasOnlyOneBranch()} fallback={
+                <div class="w-full p-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs">
+                  {tt('pr.onlyOneBranch')}
+                </div>
+              }>
+                <CustomSelect
+                  value={base()}
+                  onChange={(v) => setBase(v)}
+                  options={branchOptions()}
+                />
+              </Show>
             </Show>
           </div>
 
           {/* Title */}
           <div>
-            <label class="block text-xs font-medium mb-1 opacity-70">标题</label>
+            <label class="block text-xs font-medium mb-1 opacity-70">{tt('pr.prTitle')}</label>
             <input
               class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
-              placeholder="PR 标题"
+              placeholder={tt('pr.prTitlePlaceholder')}
               value={title()}
               onInput={(e) => setTitle(e.currentTarget.value)}
             />
@@ -143,11 +154,11 @@ const PRCreateDialog: Component<Props> = (props) => {
 
           {/* Body */}
           <div>
-            <label class="block text-xs font-medium mb-1 opacity-70">描述（可选）</label>
+            <label class="block text-xs font-medium mb-1 opacity-70">{tt('pr.body')}</label>
             <textarea
               class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm resize-none focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
               rows={4}
-              placeholder="描述此 PR 的变更内容..."
+              placeholder={tt('pr.bodyPlaceholder')}
               value={body()}
               onInput={(e) => setBody(e.currentTarget.value)}
             />
@@ -161,7 +172,7 @@ const PRCreateDialog: Component<Props> = (props) => {
               onChange={(e) => setDraft(e.currentTarget.checked)}
               class="rounded bg-white/10 border-white/20"
             />
-            标记为 Draft（草稿）
+            {tt('pr.draft')}
           </label>
 
           {/* Error */}
@@ -177,7 +188,7 @@ const PRCreateDialog: Component<Props> = (props) => {
             onClick={handleSubmit}
             disabled={submitting() || !canSubmit()}
           >
-            {submitting() ? '创建中...' : `创建 Pull Request`}
+            {submitting() ? tt('pr.submitting') : tt('pr.submitBtn')}
           </button>
         </div>
       </div>

@@ -119,6 +119,16 @@ fn save_repo_path_inner(path: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn check_submodules(path: String) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::repo::check_submodules(&repo)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
 pub async fn get_status(path: String) -> Result<Vec<crate::models::status::FileStatus>, String> {
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;
@@ -166,6 +176,16 @@ pub async fn resolve_conflict(path: String, file: String, resolution: String) ->
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn init_repo(path: String, init_readme: bool) -> Result<RepoInfo, String> {
+    let info = tokio::task::spawn_blocking(move || git::repo::init_repo(&path, init_readme))
+        .await
+        .map_err(|e| format!("内部错误: {}", e))??;
+
+    save_repo_path_inner(&info.path)?;
+    Ok(info)
 }
 
 #[tauri::command]

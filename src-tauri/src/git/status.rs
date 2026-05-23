@@ -6,6 +6,7 @@ pub fn get_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
     let mut opts = StatusOptions::new();
     opts.show(StatusShow::IndexAndWorkdir)
         .include_untracked(true)
+        .recurse_untracked_dirs(true)
         .renames_head_to_index(true)
         .renames_index_to_workdir(true);
 
@@ -49,10 +50,17 @@ pub fn get_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
 
 pub fn stage_files(repo: &Repository, files: &[String]) -> Result<(), String> {
     let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let workdir = repo.workdir().ok_or("没有工作目录")?;
 
     for file in files {
+        let path = std::path::Path::new(file);
+        // Skip directories — git only stages files
+        let full = workdir.join(path);
+        if full.is_dir() {
+            continue;
+        }
         index
-            .add_path(std::path::Path::new(file))
+            .add_path(path)
             .map_err(|e| format!("暂存失败 {}: {}", file, e))?;
     }
 

@@ -1,5 +1,6 @@
 import { Component, createEffect, createMemo, createSignal, Show, For, onCleanup } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { tt } from '../i18n';
 import type { GraphNode, CommitGraphData } from '../lib/types';
 
 const COLORS = [
@@ -214,23 +215,23 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
     }
   }
 
-  /** Draw a golden ring around the HEAD commit node */
+  /** Draw a fixed golden ring around the HEAD commit node */
   function drawHeadNode(ctx: CanvasRenderingContext2D) {
     for (const node of props.graphData.nodes) {
       if (!node.isHead) continue;
       const pos = nodePos(node);
-      // Outer glow ring
+      // Outer ring
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, NODE_R + 5, 0, Math.PI * 2);
       ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 2.5;
-      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.7;
       ctx.stroke();
-      // Inner subtle glow
+      // Outer glow
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, NODE_R + 8, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, NODE_R + 9, 0, Math.PI * 2);
       ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.globalAlpha = 0.25;
       ctx.stroke();
       ctx.globalAlpha = 1;
@@ -287,16 +288,16 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
       drawEdges(cctx);
       drawDashedLines(cctx);
       drawBaseNodes(cctx);
-      drawHeadNode(cctx); // HEAD highlight in cached layer
     }
 
     // Blit cached static content
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(cacheCanvas, 0, 0);
 
-    // Draw dynamic overlay (selected/hovered nodes)
+    // Draw dynamic overlays (un-cached: animated + interactive)
     ctx.scale(dpr, dpr);
-    drawNodeOverlay(ctx);
+    drawHeadNode(ctx);  // animated HEAD glow
+    drawNodeOverlay(ctx); // selected/hovered nodes
   }
 
   createEffect(() => {
@@ -555,7 +556,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                检出到此提交
+                {tt('commit.checkout')}
               </button>
               <button
                 class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
@@ -564,7 +565,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                从此创建分支
+                {tt('commit.createBranchFrom')}
               </button>
               <button
                 class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
@@ -573,7 +574,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
-                Cherry-pick 此提交
+                {tt('commit.cherryPick')}
               </button>
               <button
                 class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
@@ -582,7 +583,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                从此发起 Pull Request
+                {tt('commit.createPRFrom')}
               </button>
               <div class="border-t border-white/10 my-1" />
               <button
@@ -592,7 +593,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                复制 SHA
+                {tt('commit.copySHA')}
               </button>
             </div>
           </div>

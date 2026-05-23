@@ -1,5 +1,14 @@
 use crate::models::github::{GitHubBranch, GitHubRepo};
 use crate::github::api::GitHubClient;
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct CreateRepoBody {
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    private: bool,
+}
 
 impl GitHubClient {
     /// List repositories for the authenticated user.
@@ -25,5 +34,20 @@ impl GitHubClient {
     pub async fn list_branches(&self, owner: &str, repo: &str) -> Result<Vec<GitHubBranch>, String> {
         let path = format!("/repos/{}/{}/branches?per_page=100", owner, repo);
         self.get_json(&path).await
+    }
+
+    /// Create a new repository for the authenticated user.
+    pub async fn create_repo(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        private: bool,
+    ) -> Result<GitHubRepo, String> {
+        let body = CreateRepoBody {
+            name: name.to_string(),
+            description: description.map(|s| s.to_string()),
+            private,
+        };
+        self.post_json("/user/repos", &body).await
     }
 }
