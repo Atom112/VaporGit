@@ -162,10 +162,11 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         .set_sorting(Sort::TOPOLOGICAL)
         .map_err(|e| format!("无法设置排序: {}", e))?;
 
-    // Push all local + remote-tracking branch tips so the commit graph
-    // shows every branch, regardless of which one is checked out.
+    // Push all local branch tips so the commit graph
+    // shows the current branch topology clearly, without
+    // PR merge commits from remote-tracking branches.
     let mut pushed_any = false;
-    for branch_type in [Some(git2::BranchType::Local), Some(git2::BranchType::Remote)] {
+    for branch_type in [Some(git2::BranchType::Local)] {
         if let Ok(branches) = repo.branches(branch_type) {
             for branch_result in branches.flatten() {
                 if let Some(oid) = branch_result.0.get().target() {
@@ -192,9 +193,9 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         return Ok(CommitGraphData { nodes: vec![], edges: vec![], truncated: false });
     }
 
-    // Collect branch labels per commit OID (local + remote)
+    // Collect branch labels per commit OID (local only)
     let mut branch_labels: HashMap<Oid, Vec<String>> = HashMap::new();
-    for branch_type in [Some(git2::BranchType::Local), Some(git2::BranchType::Remote)] {
+    for branch_type in [Some(git2::BranchType::Local)] {
         if let Ok(branches) = repo.branches(branch_type) {
             for branch_result in branches.flatten() {
                 if let Some(oid) = branch_result.0.get().target() {
