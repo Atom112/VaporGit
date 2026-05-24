@@ -115,6 +115,7 @@ const zh = {
     deleteBranch: '删除分支',
     checkout: '检出',
     submoduleDetected: (n: number, names: string) => `检测到 ${n} 个子模块：${names}。请在子模块目录中单独操作。`,
+    terminal: '终端',
   },
   commit: {
     checkout: '检出到此提交',
@@ -122,6 +123,13 @@ const zh = {
     cherryPick: 'Cherry-pick 此提交',
     createPRFrom: '从此发起 Pull Request',
     copySHA: '复制 SHA',
+    revert: '撤销提交 (Revert)',
+    revertConfirm: '确定要撤销此提交吗？这将创建一个新的撤销提交。',
+    revertSuccess: '撤销成功',
+    createTag: '创建标签',
+    tagName: '标签名称',
+    tagNamePlaceholder: '输入标签名称...',
+    tagCreated: '标签创建成功',
   },
   pr: {
     loginRequired: '请先在设置中登录 GitHub',

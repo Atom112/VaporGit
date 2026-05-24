@@ -2,6 +2,8 @@ import { Component, createEffect, createMemo, createSignal, Show, For, onCleanup
 import { Portal } from 'solid-js/web';
 import { tt } from '../i18n';
 import type { GraphNode, CommitGraphData } from '../lib/types';
+import { revertCommit, createTag } from '../lib/tauriCommands';
+import { addToast } from '../stores/toastStore';
 
 const COLORS = [
   '#22d3ee', '#a78bfa', '#f472b6', '#34d399', '#fbbf24', '#f87171',
@@ -402,6 +404,92 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
     closeContextMenu();
   };
 
+  // ── Revert dialog ──
+  const [showRevert, setShowRevert] = createSignal<'enter' | 'exit' | null>(null);
+  const [revertLoading, setRevertLoading] = createSignal(false);
+  const [revertError, setRevertError] = createSignal<string | null>(null);
+  let revertTargetId = '';
+
+  const openRevertDialog = () => {
+    const menu = ctxMenu();
+    if (!menu) return;
+    revertTargetId = menu.node.id;
+    closeContextMenu();
+    setRevertLoading(false);
+    setRevertError(null);
+    setShowRevert('enter');
+  };
+
+  const closeRevertDialog = () => {
+    const s = showRevert();
+    if (!s || s === 'exit') return;
+    setShowRevert('exit');
+    setTimeout(() => {
+      setShowRevert(null);
+      setRevertError(null);
+    }, 120);
+  };
+
+  const handleRevert = async () => {
+    if (!props.repoPath) return;
+    setRevertLoading(true);
+    setRevertError(null);
+    try {
+      const result = await revertCommit(props.repoPath, revertTargetId);
+      addToast(result, 'success');
+      closeRevertDialog();
+    } catch (e) {
+      setRevertError(String(e));
+    } finally {
+      setRevertLoading(false);
+    }
+  };
+
+  // ── Tag dialog ──
+  const [showTag, setShowTag] = createSignal<'enter' | 'exit' | null>(null);
+  const [tagName, setTagName] = createSignal('');
+  const [tagLoading, setTagLoading] = createSignal(false);
+  const [tagError, setTagError] = createSignal<string | null>(null);
+  let tagTargetId = '';
+
+  const openTagDialog = () => {
+    const menu = ctxMenu();
+    if (!menu) return;
+    tagTargetId = menu.node.id;
+    closeContextMenu();
+    setTagName('');
+    setTagLoading(false);
+    setTagError(null);
+    setShowTag('enter');
+  };
+
+  const closeTagDialog = () => {
+    const s = showTag();
+    if (!s || s === 'exit') return;
+    setShowTag('exit');
+    setTimeout(() => {
+      setShowTag(null);
+      setTagError(null);
+    }, 120);
+  };
+
+  const handleCreateTag = async () => {
+    if (!props.repoPath) return;
+    const name = tagName().trim();
+    if (!name) return;
+    setTagLoading(true);
+    setTagError(null);
+    try {
+      const result = await createTag(props.repoPath, tagTargetId, name);
+      addToast(result, 'success');
+      closeTagDialog();
+    } catch (e) {
+      setTagError(String(e));
+    } finally {
+      setTagLoading(false);
+    }
+  };
+
   // Close context menu on Escape
   createEffect(() => {
     if (!ctxMenu()) return;
@@ -444,6 +532,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
               const author =
                 node.author.length > 24 ? node.author.slice(0, 24) + '…' : node.author;
               const branchLabels = inferredLabels().get(node.id) || [];
+              const tagLabels = node.tagLabels ?? [];
 
               return (
                 <div
@@ -497,8 +586,18 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                     >
                       {node.message}
                     </div>
-                    <Show when={branchLabels.length > 0}>
+                    <Show when={tagLabels.length > 0 || branchLabels.length > 0}>
                       <div class="flex items-center gap-1 ml-auto shrink-0 overflow-hidden">
+                        <For each={tagLabels}>
+                          {(label) => (
+                            <span
+                              class="text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap"
+                              style={{ color: '#fbbf24', 'background-color': 'rgba(251,191,36,0.15)' }}
+                            >
+                              {label}
+                            </span>
+                          )}
+                        </For>
                         <For each={branchLabels}>
                           {(label) => (
                             <span
@@ -595,11 +694,120 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 </svg>
                 {tt('commit.copySHA')}
               </button>
+              <div class="border-t border-white/10 my-1" />
+              <button
+                class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                onClick={openTagDialog}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                {tt('commit.createTag')}
+              </button>
+              <button
+                class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2 text-red-400"
+                onClick={openRevertDialog}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+                {tt('commit.revert')}
+              </button>
             </div>
           </div>
         )}
       </Show>
     </Portal>
+
+    {/* ── Revert confirmation dialog ── */}
+    <Show when={showRevert()}>
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class="w-96 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <h2 class="text-sm font-bold">{tt('commit.revert')}</h2>
+            <button
+              class="text-xs opacity-50 hover:text-red-400 transition-colors"
+              onClick={closeRevertDialog}
+            >
+              {tt('common.close')}
+            </button>
+          </div>
+          <div class="p-4 space-y-3">
+            <p class="text-sm opacity-80">{tt('commit.revertConfirm')}</p>
+            <Show when={revertError()}>
+              <div class="p-2 rounded bg-red-500/20 border border-red-500/30 text-red-200 text-xs">
+                {revertError()}
+              </div>
+            </Show>
+            <div class="flex gap-2 justify-end">
+              <button
+                class="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm transition-colors"
+                onClick={closeRevertDialog}
+              >
+                {tt('common.cancel')}
+              </button>
+              <button
+                class="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-sm font-medium transition-colors"
+                onClick={handleRevert}
+                disabled={revertLoading()}
+              >
+                {revertLoading() ? tt('common.loading') : tt('commit.revert')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Show>
+
+    {/* ── Tag creation dialog ── */}
+    <Show when={showTag()}>
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class="w-96 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <h2 class="text-sm font-bold">{tt('commit.createTag')}</h2>
+            <button
+              class="text-xs opacity-50 hover:text-red-400 transition-colors"
+              onClick={closeTagDialog}
+            >
+              {tt('common.close')}
+            </button>
+          </div>
+          <div class="p-4 space-y-3">
+            <div>
+              <label class="block text-xs font-medium mb-1 opacity-70">{tt('commit.tagName')}</label>
+              <input
+                class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
+                placeholder={tt('commit.tagNamePlaceholder')}
+                value={tagName()}
+                onInput={(e) => setTagName(e.currentTarget.value)}
+                disabled={tagLoading()}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateTag(); }}
+              />
+            </div>
+            <Show when={tagError()}>
+              <div class="p-2 rounded bg-red-500/20 border border-red-500/30 text-red-200 text-xs">
+                {tagError()}
+              </div>
+            </Show>
+            <div class="flex gap-2 justify-end">
+              <button
+                class="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm transition-colors"
+                onClick={closeTagDialog}
+              >
+                {tt('common.cancel')}
+              </button>
+              <button
+                class="px-4 py-1.5 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 disabled:opacity-30 text-sm font-medium transition-colors"
+                onClick={handleCreateTag}
+                disabled={tagLoading() || !tagName().trim()}
+              >
+                {tagLoading() ? tt('common.loading') : tt('common.create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Show>
     </>
   );
 };

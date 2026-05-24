@@ -52,6 +52,8 @@ pub struct GraphNode {
     pub author: String,
     pub timestamp: i64,
     pub branch_labels: Vec<String>,
+    #[serde(default)]
+    pub tag_labels: Vec<String>,
     pub lane: u32,
     pub color: u32,
     pub row: u32,

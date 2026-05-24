@@ -115,6 +115,7 @@ const en = {
     deleteBranch: 'Delete Branch',
     checkout: 'Checkout',
     submoduleDetected: (n: number, names: string) => `Detected ${n} submodule(s): ${names}. Please operate in submodule directories separately.`,
+    terminal: 'Terminal',
   },
   settings: {
     title: 'Settings',
@@ -178,6 +179,13 @@ const en = {
     cherryPick: 'Cherry-pick this commit',
     createPRFrom: 'Create PR from here',
     copySHA: 'Copy SHA',
+    revert: 'Revert commit',
+    revertConfirm: 'Are you sure you want to revert this commit?',
+    revertSuccess: 'Revert successful',
+    createTag: 'Create tag',
+    tagName: 'Tag name',
+    tagNamePlaceholder: 'Enter tag name...',
+    tagCreated: 'Tag created',
   },
   pr: {
     loginRequired: 'Please log in to GitHub in Settings first',

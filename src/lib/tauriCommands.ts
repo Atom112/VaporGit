@@ -194,6 +194,30 @@ export async function cherryPick(path: string, commitId: string): Promise<string
   return invoke('cherry_pick', { path, commitId });
 }
 
+export async function openTerminal(path: string): Promise<void> {
+  return invoke('open_terminal', { path });
+}
+
+export async function writeTerminal(data: string): Promise<void> {
+  return invoke('write_terminal', { data });
+}
+
+export async function resizeTerminal(cols: number, rows: number): Promise<void> {
+  return invoke('resize_terminal', { cols, rows });
+}
+
+export async function closeTerminal(): Promise<void> {
+  return invoke('close_terminal');
+}
+
+export async function revertCommit(path: string, commitId: string): Promise<string> {
+  return invoke('revert_commit', { path, commitId });
+}
+
+export async function createTag(path: string, commitId: string, tagName: string): Promise<string> {
+  return invoke('create_tag', { path, commitId, tagName });
+}
+
 export async function undo(path: string): Promise<string> {
   return invoke('undo', { path });
 }

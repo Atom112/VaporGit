@@ -5,3 +5,5 @@ pub mod github;
 pub mod remote;
 pub mod repo;
 pub mod stash;
+pub mod tag;
+pub mod terminal;
