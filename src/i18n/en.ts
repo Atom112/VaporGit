@@ -68,6 +68,8 @@ const en = {
     stagedFiles: 'Staged Files',
     unstagedFiles: 'Unstaged Files',
     noChanges: 'No changes',
+    stage: 'Stage',
+    unstage: 'Unstage',
     stageAll: 'Stage All',
     unstageAll: 'Unstage All',
     stagedCount: (n: number) => `Staged (${n})`,

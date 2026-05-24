@@ -1,5 +1,5 @@
 import { For } from 'solid-js';
-import { toasts, removeToast } from '../stores/toastStore';
+import { toasts, removeToast, markExiting } from '../stores/toastStore';
 
 export default function ToastContainer() {
   return (
@@ -7,14 +7,18 @@ export default function ToastContainer() {
       <For each={toasts.items}>
         {(toast) => (
           <div
-            class={`px-4 py-3 rounded-xl shadow-lg backdrop-blur border text-sm font-medium animate-toast-in cursor-pointer ${
+            class={`px-4 py-3 rounded-xl shadow-lg backdrop-blur border text-sm font-medium cursor-pointer ${
+              toast.exiting ? 'animate-toast-out' : 'animate-toast-in'
+            } ${
               toast.type === 'success'
                 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
                 : toast.type === 'error'
                 ? 'bg-red-500/20 border-red-500/40 text-red-200'
                 : 'bg-sky-500/20 border-sky-500/40 text-sky-200'
             }`}
-            onClick={() => removeToast(toast.id)}
+            onClick={() => {
+              if (!toast.exiting) markExiting(toast.id);
+            }}
           >
             {toast.message}
           </div>

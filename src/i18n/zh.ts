@@ -68,6 +68,8 @@ const zh = {
     stagedFiles: '已暂存文件',
     unstagedFiles: '未暂存文件',
     noChanges: '无文件变更',
+    stage: '暂存',
+    unstage: '取消暂存',
     stageAll: '全部暂存',
     unstageAll: '全部取消暂存',
     stagedCount: (n: number) => `已暂存 (${n})`,
