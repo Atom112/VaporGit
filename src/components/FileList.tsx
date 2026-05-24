@@ -58,50 +58,9 @@ const statusColor = (status: FileStatus['status']): string => {
 const FileList: Component<FileListProps> = (props) => {
   return (
     <div class="flex flex-col h-full">
-      {/* Staged files */}
-      <Show when={props.stagedFiles.length > 0}>
-        <div class="border-b border-white/10">
-          <div class="flex items-center justify-between px-3 py-2">
-            <span class="text-xs font-semibold opacity-60 uppercase">
-              {ttf('repo.stagedCount', props.stagedFiles.length)}
-            </span>
-            <button
-              class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-              onClick={props.onUnstageAll}
-            >
-              {tt('repo.unstageAll')}
-            </button>
-          </div>
-          <For each={props.stagedFiles}>
-            {(file) => (
-              <div
-                class={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/10 transition-colors text-sm ${
-                  props.selectedFile === file.path ? 'bg-white/10' : ''
-                }`}
-                onClick={() => props.onSelectFile(file.path)}
-              >
-                <span
-                  class={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold bg-white/10 cursor-pointer hover:bg-white/20 ${statusColor(
-                    file.status
-                  )}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    props.onToggleStage(file);
-                  }}
-                  title={tt('repo.unstageTooltip')}
-                >
-                  {statusLabel(file.status)}
-                </span>
-                <span class="truncate flex-1">{file.path}</span>
-              </div>
-            )}
-          </For>
-        </div>
-      </Show>
-
-      {/* Unstaged files */}
+      {/* Unstaged files (top) */}
       <Show when={props.unstagedFiles.length > 0}>
-        <div class="flex-1">
+        <div class={props.stagedFiles.length > 0 ? 'border-b border-white/10' : ''}>
           <div class="flex items-center justify-between px-3 py-2">
             <span class="text-xs font-semibold opacity-60 uppercase">
               {ttf('repo.changedCount', props.unstagedFiles.length)}
@@ -122,18 +81,67 @@ const FileList: Component<FileListProps> = (props) => {
                 onClick={() => props.onSelectFile(file.path)}
               >
                 <span
-                  class={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold bg-white/10 cursor-pointer hover:bg-white/20 ${statusColor(
+                  class={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold bg-white/10 ${statusColor(
                     file.status
                   )}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    props.onToggleStage(file);
-                  }}
-                  title={tt('repo.stageTooltip')}
                 >
                   {statusLabel(file.status)}
                 </span>
                 <span class="truncate flex-1">{file.path}</span>
+                <button
+                  class="text-[11px] px-2 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-colors shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    props.onToggleStage(file);
+                  }}
+                >
+                  {tt('repo.stage')}
+                </button>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      {/* Staged files (bottom) */}
+      <Show when={props.stagedFiles.length > 0}>
+        <div class="flex-1">
+          <div class="flex items-center justify-between px-3 py-2">
+            <span class="text-xs font-semibold opacity-60 uppercase">
+              {ttf('repo.stagedCount', props.stagedFiles.length)}
+            </span>
+            <button
+              class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+              onClick={props.onUnstageAll}
+            >
+              {tt('repo.unstageAll')}
+            </button>
+          </div>
+          <For each={props.stagedFiles}>
+            {(file) => (
+              <div
+                class={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/10 transition-colors text-sm ${
+                  props.selectedFile === file.path ? 'bg-white/10' : ''
+                }`}
+                onClick={() => props.onSelectFile(file.path)}
+              >
+                <span
+                  class={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold bg-white/10 ${statusColor(
+                    file.status
+                  )}`}
+                >
+                  {statusLabel(file.status)}
+                </span>
+                <span class="truncate flex-1">{file.path}</span>
+                <button
+                  class="text-[11px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/70 transition-colors shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    props.onToggleStage(file);
+                  }}
+                >
+                  {tt('repo.unstage')}
+                </button>
               </div>
             )}
           </For>

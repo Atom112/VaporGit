@@ -1,6 +1,6 @@
 {
   "name": "vaporgit",
-  "version": "1.0.8",
+  "version": "1.1.2",
   "description": "A lightweight cross-platform GUI Git desktop client built with Tauri + SolidJS.",
   "type": "module",
   "scripts": {
@@ -17,6 +17,8 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "autoprefixer": "^10.5.0",
     "highlight.js": "^11.11.1",
     "postcss": "^8.5.14",

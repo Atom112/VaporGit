@@ -176,8 +176,17 @@ pub fn push(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
 
     let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
 
+    // Load GitHub token for HTTPS authentication
+    let token = crate::github::auth::load_token().ok().flatten();
+    let remote_url = remote.pushurl().map(|u| u.to_string()).or_else(|| remote.url().map(|u| u.to_string()));
+
     let mut cb = RemoteCallbacks::new();
-    cb.credentials(|_url, username_from_url, _allowed_types| {
+    cb.credentials(move |_url, username_from_url, allowed| {
+        if let (Some(ref token), Some(ref url)) = (&token, &remote_url) {
+            if url.starts_with("https://") && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+                return Cred::userpass_plaintext("x-access-token", token);
+            }
+        }
         let user = username_from_url.unwrap_or("git");
         git2::Cred::ssh_key_from_agent(user).or_else(|_| git2::Cred::default())
     });

@@ -14,16 +14,7 @@
     <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white" alt="Rust"></a>
   </p>
   <p align="center">
-    <a href="./README/README.zh-CN.md">简体中文</a> ·
-    <a href="./README/README.zh-TW.md">繁體中文</a> ·
-    <a href="./README/README.ja.md">日本語</a> ·
-    <a href="./README/README.ko.md">한국어</a> ·
-    <a href="./README/README.fr.md">Français</a> ·
-    <a href="./README/README.de.md">Deutsch</a> ·
-    <a href="./README/README.ar.md">العربية</a> ·
-    <a href="./README/README.es.md">Español</a> ·
-    <a href="./README/README.pt.md">Português</a> ·
-    <a href="./README/README.ru.md">Русский</a>
+    <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.ja.md">日本語</a>
   </p>
 </div>
 
@@ -31,7 +22,7 @@
 
 ## ✨ Key Features
 
-- **🌳 Beautiful interactive commit graph (DAG)**: Visual rendering of multi-branch logic, clearly displaying the version history.
+- **🌳 Beautiful interactive commit graph (DAG)**: Visual rendering of multi-branch logic, clearly displaying the version history脉络.
 - **🔍 High-performance diff viewer**: Millisecond-level file diff comparison with line-level syntax highlighting.
 - **⚡ Blazing fast & lightweight (Tauri+Rust)**: Say goodbye to Electron's GBs of memory — enjoy a smooth, native-like experience.
 - **🛠 Full Git workflow support**: From staging, committing, branch management, to conflict resolution and remote sync — all daily operations covered.

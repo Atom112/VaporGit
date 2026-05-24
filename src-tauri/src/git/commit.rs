@@ -159,11 +159,13 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         .revwalk()
         .map_err(|e| format!("无法创建 revwalk: {}", e))?;
     revwalk
-        .set_sorting(Sort::TOPOLOGICAL)
+        .set_sorting(Sort::TIME)
         .map_err(|e| format!("无法设置排序: {}", e))?;
 
     // Push all local + remote-tracking branch tips so the commit graph
-    // shows every branch, regardless of which one is checked out.
+    // shows every branch. Use TIME sort so commits appear newest-first,
+    // preventing remote PR merge commits from jumping to the front
+    // purely due to topological ordering.
     let mut pushed_any = false;
     for branch_type in [Some(git2::BranchType::Local), Some(git2::BranchType::Remote)] {
         if let Ok(branches) = repo.branches(branch_type) {
@@ -202,6 +204,20 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
                     if !name.is_empty() {
                         branch_labels.entry(oid).or_default().push(name);
                     }
+                }
+            }
+        }
+    }
+
+    // Collect tag labels per commit OID
+    let mut tag_labels: HashMap<Oid, Vec<String>> = HashMap::new();
+    if let Ok(tag_names) = repo.tag_names(None) {
+        for tag_name in tag_names.iter().flatten() {
+            let ref_name = format!("refs/tags/{}", tag_name);
+            if let Ok(reference) = repo.find_reference(&ref_name) {
+                if let Ok(commit) = reference.peel_to_commit() {
+                    let oid = commit.id();
+                    tag_labels.entry(oid).or_default().push(tag_name.to_string());
                 }
             }
         }
@@ -315,6 +331,7 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
                 author,
                 timestamp,
                 branch_labels: branch_labels.get(oid).cloned().unwrap_or_default(),
+                tag_labels: tag_labels.get(oid).cloned().unwrap_or_default(),
                 lane,
                 color: lane,
                 row,
@@ -491,6 +508,71 @@ pub fn cherry_pick(repo: &Repository, commit_id: &str) -> Result<String, String>
         .map_err(|e| format!("清理状态失败: {}", e))?;
 
     Ok("Cherry-pick 成功".to_string())
+}
+
+/// Revert a commit by creating a new commit that undoes its changes.
+pub fn revert_commit(repo: &Repository, commit_id: &str) -> Result<String, String> {
+    let oid = Oid::from_str(commit_id).map_err(|e| format!("无效的提交 ID: {}", e))?;
+    let commit = repo
+        .find_commit(oid)
+        .map_err(|e| format!("无法找到提交: {}", e))?;
+
+    let mut opts = git2::RevertOptions::new();
+    opts.checkout_builder(git2::build::CheckoutBuilder::new());
+    repo.revert(&commit, Some(&mut opts))
+        .map_err(|e| format!("Revert 失败: {}", e))?;
+
+    // Check for conflicts
+    let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    if index.has_conflicts() {
+        repo.cleanup_state().ok();
+        return Ok("Revert 出现冲突，请手动解决后提交".to_string());
+    }
+    drop(index);
+
+    // Create the revert commit
+    let signature = repo
+        .signature()
+        .map_err(|e| format!("无法获取签名: {}", e))?;
+
+    let tree_oid = repo
+        .index()
+        .map_err(|e| format!("无法获取索引: {}", e))?
+        .write_tree()
+        .map_err(|e| format!("无法写入树: {}", e))?;
+
+    let tree = repo
+        .find_tree(tree_oid)
+        .map_err(|e| format!("无法找到树: {}", e))?;
+
+    let head_commit = repo
+        .head()
+        .map_err(|e| format!("无法获取 HEAD: {}", e))?
+        .peel_to_commit()
+        .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+
+    let msg = commit
+        .message()
+        .unwrap_or("")
+        .lines()
+        .next()
+        .unwrap_or("")
+        .to_string();
+
+    repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        &format!("Revert \"{}\"", msg),
+        &tree,
+        &[&head_commit],
+    )
+    .map_err(|e| format!("Revert 提交失败: {}", e))?;
+
+    repo.cleanup_state()
+        .map_err(|e| format!("清理状态失败: {}", e))?;
+
+    Ok(format!("成功 revert 提交 {}", msg))
 }
 
 /// Undo the last commit via soft reset (keeps changes staged).

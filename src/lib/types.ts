@@ -104,6 +104,7 @@ export interface GraphNode {
   author: string;
   timestamp: number;
   branchLabels: string[];
+  tagLabels: string[];
   lane: number;
   color: number;
   row: number;

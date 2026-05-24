@@ -84,3 +84,13 @@ pub async fn redo(path: String) -> Result<String, String> {
     .await
     .map_err(|e| format!("内部错误: {}", e))?
 }
+
+#[tauri::command]
+pub async fn revert_commit(path: String, commit_id: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::commit::revert_commit(&repo, &commit_id)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}

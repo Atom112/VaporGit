@@ -29,6 +29,8 @@ import {
   push as pushRemote,
   getRemotes,
   checkSubmodules,
+  openTerminal,
+  closeTerminal,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
 import FileList from '../components/FileList';
@@ -43,6 +45,7 @@ import PRCreateDialog from '../components/PRCreateDialog';
 import { githubStore } from '../stores/githubStore';
 import InteractiveRebase from '../components/InteractiveRebase';
 import KeyboardShortcuts from '../components/KeyboardShortcuts';
+import TerminalPanel from '../components/TerminalPanel';
 import { tt } from '../i18n';
 
 const Repository: Component = () => {
@@ -656,6 +659,33 @@ const Repository: Component = () => {
   const unstagedFiles = () =>
     diffStore.fileStatuses.filter((f) => !f.staged);
 
+  // ── Terminal ──
+  const [terminalPhase, setTerminalPhase] = createSignal<'enter' | 'exit' | null>(null);
+
+  const handleOpenTerminal = async () => {
+    const path = repoPath();
+    if (!path) return;
+    // Mount TerminalPanel first so event listeners register before the process starts
+    setTerminalPhase('enter');
+    await new Promise((r) => setTimeout(r, 50));
+    try {
+      await openTerminal(path);
+    } catch (e) {
+      addToast(`打开终端失败: ${e}`, 'error');
+      handleCloseTerminal();
+    }
+  };
+
+  const handleCloseTerminal = () => {
+    const phase = terminalPhase();
+    if (!phase || phase === 'exit') return;
+    setTerminalPhase('exit');
+    setTimeout(() => {
+      setTerminalPhase(null);
+      closeTerminal().catch(() => {});
+    }, 160);
+  };
+
   // ── Render ──
   return (
     <div class="h-full flex flex-col">
@@ -877,7 +907,6 @@ const Repository: Component = () => {
                     selectedFile={selectedCommitFile()}
                     onSelectFile={handleSelectCommitFile}
                     onNavigateCommit={handleNavigateCommit}
-                    onCreatePullRequest={handleCreatePullRequest}
                   />
                 </Show>
               </Show>
@@ -1042,9 +1071,25 @@ const Repository: Component = () => {
               onSelectFile={handleSelectFile}
             />
           </div>
+
+          {/* Terminal toggle */}
+          <div class="p-2 border-t border-white/10 shrink-0">
+            <button
+              class="w-full py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1.5"
+              onClick={handleOpenTerminal}
+            >
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {tt('repo.terminal')}
+            </button>
+          </div>
         </div>
       </div>
     </Show>
+
+      {/* Terminal panel */}
+      <TerminalPanel phase={terminalPhase()} onClose={handleCloseTerminal} />
 
       {/* M3 Modals */}
       <Show when={showStashPanel() && repoPath()}>
