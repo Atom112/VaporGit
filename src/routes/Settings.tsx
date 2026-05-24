@@ -60,28 +60,23 @@ const Settings: Component = () => {
           {/* Language */}
           <div class="p-4 rounded-xl bg-white/5 border border-white/10">
             <label class="block text-sm font-medium mb-2">{tt('settings.language')}</label>
-            <div class="flex gap-2">
-              <button
-                class={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  i18nState.lang === 'zh-CN'
-                    ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-400/30'
-                    : 'bg-white/10 text-gray-400 hover:bg-white/20 border border-transparent'
-                }`}
-                onClick={() => setLang('zh-CN')}
-              >
-                {tt('settings.langZh')}
-              </button>
-              <button
-                class={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  i18nState.lang === 'en'
-                    ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-400/30'
-                    : 'bg-white/10 text-gray-400 hover:bg-white/20 border border-transparent'
-                }`}
-                onClick={() => setLang('en')}
-              >
-                {tt('settings.langEn')}
-              </button>
-            </div>
+            <CustomSelect
+              value={i18nState.lang}
+              onChange={(v) => setLang(v as any)}
+              options={[
+                { value: 'zh-CN', label: tt('settings.langZh') },
+                { value: 'zh-TW', label: tt('settings.langZhTW') },
+                { value: 'en', label: tt('settings.langEn') },
+                { value: 'ja', label: tt('settings.langJa') },
+                { value: 'ko', label: tt('settings.langKo') },
+                { value: 'fr', label: tt('settings.langFr') },
+                { value: 'de', label: tt('settings.langDe') },
+                { value: 'ar', label: tt('settings.langAr') },
+                { value: 'es', label: tt('settings.langEs') },
+                { value: 'pt', label: tt('settings.langPt') },
+                { value: 'ru', label: tt('settings.langRu') },
+              ]}
+            />
           </div>
 
           {/* Default diff view */}

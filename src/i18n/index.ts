@@ -1,26 +1,53 @@
 import { createStore } from 'solid-js/store';
 import zh from './zh';
+import zhTW from './zh-TW';
 import en from './en';
+import ja from './ja';
+import ko from './ko';
+import fr from './fr';
+import de from './de';
+import ar from './ar';
+import es from './es';
+import pt from './pt';
+import ru from './ru';
 
 type TransValue = string | ((...args: any[]) => string);
 type DeepRecord = { [key: string]: TransValue | DeepRecord };
 
-export type Lang = 'zh-CN' | 'en';
+export type Lang = 'zh-CN' | 'zh-TW' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'ar' | 'es' | 'pt' | 'ru';
 
-const SUPPORTED_LANGS: Lang[] = ['zh-CN', 'en'];
+const SUPPORTED_LANGS: Lang[] = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'ar', 'es', 'pt', 'ru'];
 const STORAGE_KEY = 'vaporgit_lang';
 
 const dictCache = new Map<Lang, DeepRecord>([
   ['zh-CN', zh],
+  ['zh-TW', zhTW],
   ['en', en],
+  ['ja', ja],
+  ['ko', ko],
+  ['fr', fr],
+  ['de', de],
+  ['ar', ar],
+  ['es', es],
+  ['pt', pt],
+  ['ru', ru],
 ]);
 
 function detectLang(): Lang {
-  if (typeof window === 'undefined') return 'zh-CN';
+  if (typeof window === 'undefined') return 'en';
   const stored = localStorage.getItem(STORAGE_KEY) as Lang | null;
   if (stored && SUPPORTED_LANGS.includes(stored)) return stored;
   const browser = navigator.language;
-  if (browser.startsWith('zh')) return 'zh-CN';
+  if (browser.startsWith('zh-TW') || browser.startsWith('zh-HK') || browser.startsWith('zh-Hant')) return 'zh-TW';
+      if (browser.startsWith('zh')) return 'zh-CN';
+  if (browser.startsWith('ja')) return 'ja';
+  if (browser.startsWith('ko')) return 'ko';
+  if (browser.startsWith('fr')) return 'fr';
+  if (browser.startsWith('de')) return 'de';
+  if (browser.startsWith('ar')) return 'ar';
+  if (browser.startsWith('es')) return 'es';
+  if (browser.startsWith('pt')) return 'pt';
+  if (browser.startsWith('ru')) return 'ru';
   return 'en';
 }
 

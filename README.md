@@ -2,10 +2,10 @@
   <img src="VaporGit.png" alt="VaporGit Logo" width="128" />
   <h1 align="center">VaporGit</h1>
   <p align="center">
-    <strong>基于 Tauri + SolidJS 的极致轻量跨平台 Git 桌面客户端</strong>
+    <strong>An ultra-lightweight cross-platform Git desktop client built with Tauri + SolidJS</strong>
   </p>
   <p align="center">
-    VaporGit 致力于打造轻量优雅的核心使用体验，为您带来优美、直观且高效的 Git 可视化管理。
+    VaporGit focuses on delivering a lightweight, elegant core experience — beautiful, intuitive, and efficient Git visual management.
   </p>
 
   <p align="center">
@@ -13,78 +13,86 @@
     <a href="https://www.solidjs.com/"><img src="https://img.shields.io/badge/SolidJS-2C4F7C?logo=solid&logoColor=white" alt="SolidJS"></a>
     <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white" alt="Rust"></a>
   </p>
+  <p align="center">
+    <a href="./README/README.zh-CN.md">简体中文</a> ·
+    <a href="./README/README.zh-TW.md">繁體中文</a> ·
+    <a href="./README/README.ja.md">日本語</a> ·
+    <a href="./README/README.ko.md">한국어</a> ·
+    <a href="./README/README.fr.md">Français</a> ·
+    <a href="./README/README.de.md">Deutsch</a> ·
+    <a href="./README/README.ar.md">العربية</a> ·
+    <a href="./README/README.es.md">Español</a> ·
+    <a href="./README/README.pt.md">Português</a> ·
+    <a href="./README/README.ru.md">Русский</a>
+  </p>
 </div>
 
 <br/>
 
-## ✨ 核心特性
+## ✨ Key Features
 
-- **🌳 优美的交互式提交树 (DAG)**：支持多分支复杂逻辑的视觉渲染，清晰展现代码版本脉络。
-- **🔍 直观高性能的 Diff 视图**：毫秒级的代码文件差异对比，支持行级精确高亮，阅码体验不妥协。
-- **⚡ 极速与轻量 (Tauri+Rust)**：告别耗费数 GB 内存 的 Electron 容器，带来如系统原生般清爽丝滑的运行体验。
-- **🛠 全场景 Git 工作流支持**：覆盖从暂存、提交、分支管理，到冲突解决、远程同步的日常全套基础操作。
-
----
-
-## 📥 下载安装
-
-从 [GitHub Releases](https://github.com/Atom112/VaporGit/releases) 页面可直接下载各平台的最新安装包，无需本地构建。
-
-| 平台 | 安装包格式 | 说明 |
-|------|-----------|------|
-| **Windows** | `.msi` / `.exe` | 双击安装即可使用，依赖系统 WebView2 Runtime |
-| **macOS** | `.dmg` | 打开后将 VaporGit 拖入 Applications 文件夹 |
-| **Linux** | `.deb` / `.AppImage` / `.rpm` | `.deb` 适用于 Debian/Ubuntu 系；`.rpm` 适用于 RedHat 系；`.AppImage` 通用格式，下载后 `chmod +x` 即可运行 |
+- **🌳 Beautiful interactive commit graph (DAG)**: Visual rendering of multi-branch logic, clearly displaying the version history.
+- **🔍 High-performance diff viewer**: Millisecond-level file diff comparison with line-level syntax highlighting.
+- **⚡ Blazing fast & lightweight (Tauri+Rust)**: Say goodbye to Electron's GBs of memory — enjoy a smooth, native-like experience.
+- **🛠 Full Git workflow support**: From staging, committing, branch management, to conflict resolution and remote sync — all daily operations covered.
 
 ---
 
-## 🛠️ 构建与本地开发
+## 📥 Download
 
-VaporGit 利用现代 Web 与 Rust 混合架构，在开始之前，请确保您的开发环境齐备：
+Download the latest installer for your platform from the [GitHub Releases](https://github.com/Atom112/VaporGit/releases) page — no local build required.
 
-### 📌 环境要求
+| Platform | Package Format | Notes |
+|----------|---------------|-------|
+| **Windows** | `.msi` / `.exe` | Double-click to install. Requires WebView2 Runtime. |
+| **macOS** | `.dmg` | Open and drag VaporGit into Applications. |
+| **Linux** | `.deb` / `.AppImage` / `.rpm` | `.deb` for Debian/Ubuntu; `.rpm` for Fedora/RHEL; `.AppImage` is universal — `chmod +x` and run. |
+
+---
+
+## 🛠️ Build & Development
+
+VaporGit uses a hybrid architecture of modern Web tech and Rust. Make sure your environment is ready before getting started.
+
+### 📌 Prerequisites
 
 - **Node.js**: 20+
 - **npm**: 10+
-- **Rust**: stable 版本
-- **系统依赖**: 对于 Windows 用户，需具备 Microsoft C++ Build Tools 及 WebView2 Runtime。
+- **Rust**: stable channel
+- **System dependencies**: Windows users need Microsoft C++ Build Tools and WebView2 Runtime.
 
-### 🚀 快速启动开发
-
-在终端中执行以下命令即可启动开发服：
+### 🚀 Quick Start
 
 ```powershell
-# 安装全部前端与项目依赖
+# Install all frontend and project dependencies
 npm install
 
-# 仅启动前端开发服务器（Web视图，便于调试样式）
+# Start the frontend dev server only (for styling and UI work)
 npm run dev
 
-# 启动完整的 Tauri 桌面开发模式 (开启 Rust 监听构建)
+# Start full Tauri desktop dev mode (with Rust hot-reload)
 npm run tauri dev
 ```
 
-### 📦 生产构建生成
+### 📦 Production Build
 
 ```powershell
-# 1. 优先产出前端静态资源
+# Build frontend static assets
 npm run build
 
-# 2. 构建发行版各平台安装包 (macOS .dmg / Windows .msi / Linux .AppImage)
+# Build platform-specific installers (macOS .dmg / Windows .msi / Linux .AppImage)
 npm run tauri build
 ```
 
 ---
 
-## 📚 更多信息
+## 📚 More Info
 
-以敏捷和整洁为优先原则，我们将完整的规划记录抽离，以便单独翻阅：
-
-- **🏆 最新进展与日志**：请查看 [CHANGELOG.md](./CHANGELOG.md)。
-- **🗺️ 项目里程碑与计划**：深入了解开发路线，请阅览 [doc/plan.md](./doc/plan.md)。
+- **🏆 Changelog**: See [CHANGELOG.md](./CHANGELOG.md).
+- **🗺️ Roadmap**: See [doc/plan.md](./doc/plan.md).
 
 ---
 
 ## 📝 License
 
-本项目遵循仓库根目录的 `LICENSE` 协议。
+This project is licensed under the terms of the `LICENSE` file in the repository root.

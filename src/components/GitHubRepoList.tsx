@@ -64,10 +64,10 @@ const GitHubRepoList: Component<Props> = (props) => {
   };
 
   return (
-    <div class="space-y-3">
+    <div class="space-y-3 flex flex-col min-h-0">
       {/* Search bar */}
       <input
-        class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
+        class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30 shrink-0"
         placeholder={tt('github.searchRepos')}
         value={search()}
         onInput={(e) => { setSearch(e.currentTarget.value); setPage(1); }}
@@ -75,7 +75,7 @@ const GitHubRepoList: Component<Props> = (props) => {
 
       {/* Loading state */}
       <Show when={loading() && !error()}>
-        <div class="flex items-center justify-center py-8">
+        <div class="flex items-center justify-center py-8 shrink-0">
           <div class="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
           <span class="ml-2 text-sm text-gray-400">{tt('github.loadingRepos')}</span>
         </div>
@@ -83,20 +83,20 @@ const GitHubRepoList: Component<Props> = (props) => {
 
       {/* Error state */}
       <Show when={error()}>
-        <div class="p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm">
+        <div class="p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm shrink-0">
           加载失败: {error()}
         </div>
       </Show>
 
       {/* Empty state */}
       <Show when={!loading() && !error() && filtered()?.length === 0}>
-        <div class="text-center py-8 text-sm text-gray-500">
+        <div class="text-center py-8 text-sm text-gray-500 shrink-0">
           {search() ? tt('github.noMatchRepos') : tt('github.noRepos')}
         </div>
       </Show>
 
       {/* Repo list */}
-      <div class="space-y-2 max-h-96 overflow-y-auto">
+      <div class="space-y-2 flex-1 overflow-y-auto min-h-0">
         <For each={filtered()}>
           {(repo) => (
             <RepoCard repo={repo} onClone={props.onClone} />
@@ -106,7 +106,7 @@ const GitHubRepoList: Component<Props> = (props) => {
 
       {/* Pagination */}
       <Show when={repos().length >= 50}>
-        <div class="flex justify-center gap-2 pt-2">
+        <div class="flex justify-center gap-2 pt-2 shrink-0">
           <button
             class="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors"
             disabled={page() <= 1}

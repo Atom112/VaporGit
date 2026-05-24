@@ -13,6 +13,9 @@
     <a href="https://www.solidjs.com/"><img src="https://img.shields.io/badge/SolidJS-2C4F7C?logo=solid&logoColor=white" alt="SolidJS"></a>
     <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white" alt="Rust"></a>
   </p>
+  <p align="center">
+    <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.ja.md">日本語</a>
+  </p>
 </div>
 
 <br/>
