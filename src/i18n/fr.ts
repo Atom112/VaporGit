@@ -175,6 +175,8 @@ const fr = {
     loadCommentsFailed: 'Échec du chargement des commentaires',
     fileRemoved: 'Fichier supprimé, aucun contenu de diff',
     noDiff: 'Impossible de charger le contenu du diff',
+    mergeConflict: 'Cette PR a des conflits de fusion. Veuillez les résoudre sur GitHub avant de fusionner',
+    checkingMerge: 'Vérification du statut de fusion...',
   },
   settings: {
     title: 'Paramètres',

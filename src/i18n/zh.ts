@@ -175,6 +175,8 @@ const zh = {
     loadCommentsFailed: '加载评论失败',
     fileRemoved: '文件已删除，无差异内容',
     noDiff: '无法加载差异内容',
+    mergeConflict: '该 PR 存在合并冲突，请在 GitHub 上解决冲突后再合并',
+    checkingMerge: '正在检查合并状态...',
   },
   settings: {
     title: '设置',

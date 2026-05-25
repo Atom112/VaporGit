@@ -175,6 +175,8 @@ const ko = {
     loadCommentsFailed: '댓글 로딩 실패',
     fileRemoved: '파일이 삭제되었습니다',
     noDiff: '차이 내용을 불러올 수 없습니다',
+    mergeConflict: '이 PR에 병합 충돌이 있습니다. GitHub에서 충돌을 해결한 후 병합해 주세요',
+    checkingMerge: '병합 상태 확인 중...',
   },
   settings: {
     title: '설정',

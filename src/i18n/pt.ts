@@ -175,6 +175,8 @@ const pt = {
     loadCommentsFailed: 'Falha ao carregar comentários',
     fileRemoved: 'Arquivo removido, sem conteúdo diff',
     noDiff: 'Não foi possível carregar o conteúdo diff',
+    mergeConflict: 'Este PR tem conflitos de mesclagem. Resolva-os no GitHub antes de mesclar',
+    checkingMerge: 'Verificando status da mesclagem...',
   },
   settings: {
     title: 'Configurações',

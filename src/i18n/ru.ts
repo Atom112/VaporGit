@@ -175,6 +175,8 @@ const ru = {
     loadCommentsFailed: 'Ошибка загрузки комментариев',
     fileRemoved: 'Файл удалён, нет содержимого diff',
     noDiff: 'Не удалось загрузить содержимое diff',
+    mergeConflict: 'В этом PR есть конфликты слияния. Пожалуйста, разрешите их на GitHub перед слиянием',
+    checkingMerge: 'Проверка статуса слияния...',
   },
   settings: {
     title: 'Настройки',

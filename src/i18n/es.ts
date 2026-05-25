@@ -175,6 +175,8 @@ const es = {
     loadCommentsFailed: 'Error al cargar comentarios',
     fileRemoved: 'Archivo eliminado, sin contenido diff',
     noDiff: 'No se puede cargar el contenido diff',
+    mergeConflict: 'Este PR tiene conflictos de fusión. Resuélvalos en GitHub antes de fusionar',
+    checkingMerge: 'Comprobando estado de fusión...',
   },
   settings: {
     title: 'Configuración',

@@ -183,6 +183,8 @@ const en = {
     noChanges: 'No changes',
     notLoggedIn: 'Not logged in to GitHub',
     loginRequired: 'Please log in to GitHub first',
+    mergeConflict: 'This PR has merge conflicts. Please resolve them on GitHub before merging.',
+    checkingMerge: 'Checking merge status...',
   },
   commit: {
     checkout: 'Checkout here',

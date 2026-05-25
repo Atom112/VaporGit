@@ -175,6 +175,8 @@ const ja = {
     loadCommentsFailed: 'コメントの読み込みに失敗しました',
     fileRemoved: 'ファイルは削除されました',
     noDiff: '差分を読み込めません',
+    mergeConflict: 'このPRにはマージ競合があります。GitHubで競合を解決してからマージしてください',
+    checkingMerge: 'マージ状態を確認中...',
   },
   settings: {
     title: '設定',

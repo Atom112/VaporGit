@@ -175,6 +175,8 @@ const de = {
     loadCommentsFailed: 'Kommentare laden fehlgeschlagen',
     fileRemoved: 'Datei entfernt, kein Diff-Inhalt',
     noDiff: 'Diff-Inhalt kann nicht geladen werden',
+    mergeConflict: 'Dieser PR hat Merge-Konflikte. Bitte lösen Sie sie auf GitHub, bevor Sie mergen',
+    checkingMerge: 'Überprüfe Merge-Status...',
   },
   settings: {
     title: 'Einstellungen',

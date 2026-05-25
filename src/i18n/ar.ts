@@ -37,7 +37,7 @@ const ar = {
     cloneSuccess: 'تم الاستنساخ بنجاح',
     cloneFailed: 'فشل الاستنساخ',
     openRepoBtnTitle: 'اختيار دليل مستودع Git',
-    tagline: 'عميل Git минимальный متعدد المنصات',
+    tagline: 'عميل Git بسيط متعدد المنصات',
   },
   createRepo: {
     title: 'إنشاء مستودع جديد',
@@ -175,6 +175,8 @@ const ar = {
     loadCommentsFailed: 'فشل تحميل التعليقات',
     fileRemoved: 'تم حذف الملف، لا يوجد محتوى فرق',
     noDiff: 'تعذر تحميل محتوى الفرق',
+    mergeConflict: 'يحتوي طلب السحب هذا على تعارضات في الدمج. يرجى حلها على GitHub قبل الدمج',
+    checkingMerge: 'جارٍ التحقق من حالة الدمج...',
   },
   settings: {
     title: 'الإعدادات',

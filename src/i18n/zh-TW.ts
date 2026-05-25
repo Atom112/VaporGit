@@ -175,6 +175,8 @@ const zhTW = {
     loadCommentsFailed: '載入評論失敗',
     fileRemoved: '檔案已刪除，無差異內容',
     noDiff: '無法載入差異內容',
+    mergeConflict: '此 PR 存在合併衝突，請在 GitHub 上解決衝突後再合併',
+    checkingMerge: '正在檢查合併狀態...',
   },
   settings: {
     title: '設定',
