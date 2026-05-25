@@ -1,10 +1,11 @@
 import { Component, createSignal, createResource, Show, For } from 'solid-js';
 import type { GitHubPullRequest, PullRequestFile } from '../lib/types';
-import { githubGetPullFiles, githubListPullComments, githubMergePull } from '../lib/tauriCommands';
+import { githubGetPullFiles, githubListPullComments, githubGetPull, githubMergePull } from '../lib/tauriCommands';
 import { addToast } from '../stores/toastStore';
 import { tt, ttf } from '../i18n';
 import DiffView from './DiffView';
 import { parseGitHubPatch } from '../lib/diffParser';
+import CustomSelect from './CustomSelect';
 
 interface Props {
   owner: string;
@@ -19,9 +20,37 @@ const PRDetail: Component<Props> = (props) => {
   const [mergeMethod, setMergeMethod] = createSignal<'merge' | 'squash' | 'rebase'>('merge');
   const [merging, setMerging] = createSignal(false);
   const [showMergeConfirm, setShowMergeConfirm] = createSignal(false);
+  const [mergeConflict, setMergeConflict] = createSignal<'loading' | 'conflict' | 'ok' | null>(null);
 
   const pr = () => props.pr;
   const isMerged = () => pr().mergedAt !== null;
+
+  // Options for CustomSelect
+  const mergeMethodOptions = () => [
+    { value: 'merge', label: tt('Merge') },
+    { value: 'squash', label: tt('Squash') },
+    { value: 'rebase', label: tt('Rebase') },
+  ];
+
+  // Check mergeability on show — fetch fresh PR data from GitHub
+  const checkMergeConflict = async () => {
+    setMergeConflict('loading');
+    try {
+      const freshPr = await githubGetPull(props.owner, props.repo, pr().number);
+      const m = freshPr.mergeable;
+      if (m === false) {
+        setMergeConflict('conflict');
+      } else if (m === null) {
+        // Still computing — show loading, user can try again later
+        setMergeConflict('loading');
+      } else {
+        setMergeConflict('ok');
+      }
+    } catch {
+      // If request fails, allow merge attempt (GitHub will validate)
+      setMergeConflict('ok');
+    }
+  };
 
   // Fetch PR files
   const [files] = createResource(
@@ -47,6 +76,7 @@ const PRDetail: Component<Props> = (props) => {
       });
       if (result.merged) {
         addToast(`PR #${pr().number} ${tt('common.success')}`, 'success');
+        props.onBack();
       } else {
         addToast(`${tt('common.error')}: ${result.message}`, 'error');
       }
@@ -58,7 +88,7 @@ const PRDetail: Component<Props> = (props) => {
     }
   };
 
-  const canMerge = pr().state === 'open' && !pr().draft && pr().mergeable !== false;
+  const canMerge = pr().state === 'open' && !pr().draft;
 
   return (
     <div class="h-full flex flex-col">
@@ -89,40 +119,55 @@ const PRDetail: Component<Props> = (props) => {
         </div>
 
         {/* Merge button area */}
-        <Show when={canMerge}>
+        <Show when={canMerge && mergeConflict() !== 'loading'}>
           <Show when={!showMergeConfirm()} fallback={
-            <div class="flex items-center gap-2 p-2 rounded-lg bg-white/5">
-              <select
-                class="px-2 py-1 text-xs rounded bg-white/10 text-white border border-white/10 focus:outline-none"
-                value={mergeMethod()}
-                onChange={(e) => setMergeMethod(e.currentTarget.value as any)}
-              >
-                <option value="merge">Merge commit</option>
-                <option value="squash">Squash</option>
-                <option value="rebase">Rebase</option>
-              </select>
-              <button
-                class="px-3 py-1 text-xs rounded-lg bg-green-600 hover:bg-green-700 text-white disabled:opacity-30 transition-colors"
-                onClick={handleMerge}
-                disabled={merging()}
-              >
-                {merging() ? tt('pr.merging') : tt('pr.mergeConfirm')}
-              </button>
-              <button
-                class="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-                onClick={() => setShowMergeConfirm(false)}
-              >
-                {tt('pr.cancel')}
-              </button>
+            <div class="space-y-2">
+              <Show when={mergeConflict() === 'conflict'}>
+                <div class="p-2 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-xs flex items-center gap-2">
+                  <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  {tt('pr.mergeConflict')}
+                </div>
+              </Show>
+              <div class="flex items-center gap-2 p-2 rounded-lg bg-white/5">
+                <CustomSelect
+                  value={mergeMethod()}
+                  onChange={(v) => setMergeMethod(v as any)}
+                  options={mergeMethodOptions()}
+                  class="w-40"
+                />
+                <button
+                  class="px-3 py-1 text-xs rounded-lg bg-green-600 hover:bg-green-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  onClick={handleMerge}
+                  disabled={merging() || mergeConflict() === 'conflict'}
+                >
+                  {merging() ? tt('pr.merging') : tt('pr.mergeConfirm')}
+                </button>
+                <button
+                  class="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                  onClick={() => setShowMergeConfirm(false)}
+                >
+                  {tt('pr.cancel')}
+                </button>
+              </div>
             </div>
           }>
             <button
               class="px-3 py-1.5 text-xs rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
-              onClick={() => setShowMergeConfirm(true)}
+              onClick={() => { checkMergeConflict(); setShowMergeConfirm(true); }}
             >
               Merge PR
             </button>
           </Show>
+        </Show>
+
+        {/* mergeable: null — GitHub hasn't computed yet */}
+        <Show when={canMerge && mergeConflict() === 'loading'}>
+          <div class="flex items-center gap-2 text-xs text-gray-400">
+            <div class="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+            {tt('pr.checkingMerge')}
+          </div>
         </Show>
       </div>
 

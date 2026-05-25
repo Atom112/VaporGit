@@ -3,6 +3,7 @@ import { createStore } from 'solid-js/store';
 export interface SettingsState {
   defaultDiffView: 'unified' | 'split' | 'fullFile';
   defaultRemoteName: string;
+  theme: 'dark' | 'light' | 'system';
 }
 
 const STORAGE_KEY = 'vaporgit_settings';
@@ -10,6 +11,7 @@ const STORAGE_KEY = 'vaporgit_settings';
 const defaultSettings: SettingsState = {
   defaultDiffView: 'unified',
   defaultRemoteName: 'origin',
+  theme: 'system',
 };
 
 function loadFromStorage(): SettingsState {

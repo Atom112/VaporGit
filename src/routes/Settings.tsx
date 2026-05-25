@@ -79,6 +79,25 @@ const Settings: Component = () => {
             />
           </div>
 
+          {/* Theme */}
+          <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+            <label class="block text-sm font-medium mb-3">{tt('settings.theme')}</label>
+            <div class="flex gap-2">
+              {(['dark', 'light', 'system'] as const).map((t) => (
+                <button
+                  onClick={() => updateSettings({ theme: t })}
+                  class={`flex-1 px-3 py-2 rounded-lg text-xs transition-colors ${
+                    settingsStore.theme === t
+                      ? 'bg-cyan-500/30 text-cyan-400 border border-cyan-400/50'
+                      : 'bg-white/10 text-gray-400 border border-white/10 hover:bg-white/20'
+                  }`}
+                >
+                  {tt(`settings.theme${t.charAt(0).toUpperCase() + t.slice(1)}` as any)}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Default diff view */}
           <div class="p-4 rounded-xl bg-white/5 border border-white/10">
             <label class="block text-sm font-medium mb-2">{tt('settings.diffView')}</label>
