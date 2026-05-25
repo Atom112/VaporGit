@@ -1,4 +1,4 @@
-import { Component } from 'solid-js';
+import { Component, createSignal, Show } from 'solid-js';
 import { settingsStore, updateSettings } from '../stores/settingsStore';
 import { githubStore, clearAuth } from '../stores/githubStore';
 import { githubLogout, checkUpdate } from '../lib/tauriCommands';
@@ -6,9 +6,12 @@ import { showUpdate } from '../stores/updateStore';
 import { addToast } from '../stores/toastStore';
 import CustomSelect from '../components/CustomSelect';
 import GitHubLogin from '../components/GitHubLogin';
+import { version } from '../../package.json';
 import { i18nState, setLang, tt } from '../i18n';
 
 const Settings: Component = () => {
+  const [checking, setChecking] = createSignal(false);
+
   const handleLogout = async () => {
     try {
       await githubLogout();
@@ -19,6 +22,7 @@ const Settings: Component = () => {
   };
 
   const handleCheckUpdate = async () => {
+    setChecking(true);
     try {
       const update = await checkUpdate();
       if (update) {
@@ -29,6 +33,8 @@ const Settings: Component = () => {
       }
     } catch {
       addToast(tt('toast.updateCheckError'), 'error');
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -142,11 +148,18 @@ const Settings: Component = () => {
 
           {/* Check for updates */}
           <div class="pt-2">
+            <div class="text-center text-xs text-gray-500 mb-2">
+              {tt('settings.version')} {version}
+            </div>
             <button
               onClick={handleCheckUpdate}
-              class="w-full px-4 py-3 rounded-xl text-sm font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+              disabled={checking()}
+              class="w-full px-4 py-3 rounded-xl text-sm font-medium border transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white disabled:opacity-50"
             >
-              {tt('settings.checkUpdate')}
+              <Show when={checking()} fallback={tt('settings.checkUpdate')}>
+                <span class="inline-block w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                <span class="text-gray-400">{tt('settings.checkUpdate')}</span>
+              </Show>
             </button>
           </div>
         </div>
