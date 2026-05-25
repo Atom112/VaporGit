@@ -282,9 +282,13 @@ const Repository: Component = () => {
     setStaging(true);
     try {
       if (file.staged) {
-        await unstageFiles(path, [file.path]);
+        // For renames, also unstage the old-path deletion so the full move is reverted
+        const paths = file.oldPath ? [file.path, file.oldPath] : [file.path];
+        await unstageFiles(path, paths);
       } else {
-        await stageFiles(path, [file.path]);
+        // For renames, also stage the old-path removal so git records the full move
+        const paths = file.oldPath ? [file.path, file.oldPath] : [file.path];
+        await stageFiles(path, paths);
       }
       await refreshStatus();
     } catch (e) {
@@ -304,10 +308,9 @@ const Repository: Component = () => {
     }
     setStaging(true);
     try {
-      await stageFiles(
-        path,
-        unstaged.map((f) => f.path)
-      );
+      // Include old paths for renames so the full move is staged
+      const paths = unstaged.flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]));
+      await stageFiles(path, paths);
       await refreshStatus();
       addToast(`已暂存 ${unstaged.length} 个文件`, 'success');
     } catch (e) {
@@ -325,10 +328,8 @@ const Repository: Component = () => {
     if (staged.length === 0) return;
     setStaging(true);
     try {
-      await unstageFiles(
-        path,
-        staged.map((f) => f.path)
-      );
+      const paths = staged.flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]));
+      await unstageFiles(path, paths);
       await refreshStatus();
     } catch (e) {
       console.error('Unstage all failed:', e);

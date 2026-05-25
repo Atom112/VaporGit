@@ -20,30 +20,33 @@ pub fn get_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
         let path = entry.path().unwrap_or("").to_string();
         let status = entry.status();
 
-        let (kind, staged, old_path) = if status.is_index_new() {
-            (StatusKind::IndexNew, true, None)
-        } else if status.is_index_modified() {
-            (StatusKind::IndexModified, true, None)
-        } else if status.is_index_deleted() {
-            (StatusKind::IndexDeleted, true, None)
-        } else if status.is_index_renamed() {
+        let (kind, staged, old_path) = if status.is_index_renamed() {
+            // Must check renamed BEFORE new — git2 sets both flags for
+            // a rename; new-first would lose old_path.
             let old = entry
                 .head_to_index()
                 .and_then(|d| d.old_file().path())
                 .map(|p| p.to_string_lossy().to_string());
             (StatusKind::Renamed, true, old)
+        } else if status.is_index_new() {
+            (StatusKind::IndexNew, true, None)
+        } else if status.is_index_modified() {
+            (StatusKind::IndexModified, true, None)
+        } else if status.is_index_deleted() {
+            (StatusKind::IndexDeleted, true, None)
+        } else if status.is_wt_renamed() {
+            // Must check renamed BEFORE new for the same reason.
+            let old = entry
+                .index_to_workdir()
+                .and_then(|d| d.old_file().path())
+                .map(|p| p.to_string_lossy().to_string());
+            (StatusKind::Renamed, false, old)
         } else if status.is_wt_new() {
             (StatusKind::WtNew, false, None)
         } else if status.is_wt_modified() {
             (StatusKind::WtModified, false, None)
         } else if status.is_wt_deleted() {
             (StatusKind::WtDeleted, false, None)
-        } else if status.is_wt_renamed() {
-            let old = entry
-                .index_to_workdir()
-                .and_then(|d| d.old_file().path())
-                .map(|p| p.to_string_lossy().to_string());
-            (StatusKind::Renamed, false, old)
         } else if status.is_conflicted() {
             (StatusKind::Conflicted, false, None)
         } else {
@@ -58,23 +61,86 @@ pub fn get_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
         });
     }
 
-    Ok(result)
+    Ok(pair_rename_entries(result))
+}
+
+/// Post-process status entries to pair deletions + additions into renames.
+///
+/// git2's built-in rename detection (`renames_head_to_index` /
+/// `renames_index_to_workdir`) sometimes misses renames — particularly on
+/// Windows when files are moved between directories.  This function pairs
+/// entries by matching basename + staged-ness so the UI can show a single
+/// rename entry (purple, old → new) instead of a split delete + add.
+fn pair_rename_entries(entries: Vec<FileStatus>) -> Vec<FileStatus> {
+    use std::collections::HashMap;
+
+    let mut unmatched_deletions: HashMap<(String, bool), Vec<FileStatus>> = HashMap::new();
+    let mut result = Vec::with_capacity(entries.len());
+
+    for entry in entries {
+        match entry.status {
+            StatusKind::IndexDeleted | StatusKind::WtDeleted => {
+                let key = (
+                    std::path::Path::new(&entry.path)
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                    entry.staged,
+                );
+                unmatched_deletions.entry(key).or_default().push(entry);
+            }
+            StatusKind::IndexNew | StatusKind::WtNew => {
+                let key = (
+                    std::path::Path::new(&entry.path)
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                    entry.staged,
+                );
+                if let Some(deleted_list) = unmatched_deletions.get_mut(&key) {
+                    if let Some(deleted) = deleted_list.pop() {
+                        result.push(FileStatus {
+                            path: entry.path,
+                            status: StatusKind::Renamed,
+                            staged: entry.staged,
+                            old_path: Some(deleted.path),
+                        });
+                        continue;
+                    }
+                }
+                result.push(entry);
+            }
+            _ => result.push(entry),
+        }
+    }
+
+    // Append any deletions that did not have a matching addition
+    for (_, mut list) in unmatched_deletions {
+        result.append(&mut list);
+    }
+
+    result
 }
 
 pub fn stage_files(repo: &Repository, files: &[String]) -> Result<(), String> {
     let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
-    let workdir = repo.workdir().ok_or("没有工作目录")?;
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| "无法获取工作目录".to_string())?;
 
     for file in files {
         let path = std::path::Path::new(file);
-        // Skip directories — git only stages files
-        let full = workdir.join(path);
-        if full.is_dir() {
-            continue;
+        // Resolve against the repo workdir — Path::exists() checks CWD, not the repo root
+        let abs_path = workdir.join(path);
+        if abs_path.exists() {
+            index
+                .add_path(path)
+                .map_err(|e| format!("暂存 {} 失败: {}", file, e))?;
+        } else {
+            index
+                .remove_path(path)
+                .map_err(|e| format!("取消跟踪 {} 失败: {}", file, e))?;
         }
-        index
-            .add_path(path)
-            .map_err(|e| format!("暂存失败 {}: {}", file, e))?;
     }
 
     index.write().map_err(|e| format!("写入索引失败: {}", e))?;
