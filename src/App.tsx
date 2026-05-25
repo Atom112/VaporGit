@@ -1,5 +1,5 @@
 import "./App.css";
-import { onMount } from "solid-js";
+import { onMount, createEffect, createSignal } from "solid-js";
 import Navbar from "./components/Navbar";
 import Titlebar from "./components/Titlebar";
 import PageTransition from "./components/PageTransition";
@@ -8,12 +8,32 @@ import UpdateNotification from "./components/UpdateNotification";
 import { githubCheckAuth, checkUpdate } from "./lib/tauriCommands";
 import { setAuthenticated } from "./stores/githubStore";
 import { showUpdate } from "./stores/updateStore";
+import { settingsStore } from "./stores/settingsStore";
 
 export default function App(props: { children?: any }) {
+  const [systemDark, setSystemDark] = createSignal(
+    window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+
   onMount(() => {
     const handler = (e: MouseEvent) => e.preventDefault();
     document.addEventListener("contextmenu", handler);
     return () => document.removeEventListener("contextmenu", handler);
+  });
+
+  onMount(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  });
+
+  createEffect(() => {
+    const setting = settingsStore.theme;
+    const effective = setting === "system"
+      ? (systemDark() ? "dark" : "light")
+      : setting;
+    document.documentElement.setAttribute("data-theme", effective);
   });
 
   onMount(async () => {

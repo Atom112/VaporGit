@@ -8,6 +8,10 @@
     width: 100vw;
   }
 
+  html {
+    background-color: #2f2f2f;
+  }
+
   body {
     @apply bg-linear-to-br from-indigo-700 via-purple-700 to-pink-700 text-gray-100 min-h-screen overflow-hidden;
     /* enhanced colorful meshglow */
@@ -16,6 +20,25 @@
       radial-gradient(circle at 80% 30%, rgba(236,72,153,0.25) 0, transparent 500px),
       radial-gradient(circle at 60% 80%, rgba(56,189,248,0.18) 0, transparent 500px),
       radial-gradient(circle at 10% 90%, rgba(255,113,200,0.18) 0, transparent 500px);
+  }
+
+  [data-theme="dark"] body {
+    @apply bg-linear-to-br from-neutral-950 via-purple-950 to-neutral-950 text-gray-100;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(120,113,255,0.06) 0, transparent 500px),
+      radial-gradient(circle at 80% 30%, rgba(236,72,153,0.04) 0, transparent 500px),
+      radial-gradient(circle at 60% 80%, rgba(56,189,248,0.03) 0, transparent 500px),
+      radial-gradient(circle at 10% 90%, rgba(255,113,200,0.03) 0, transparent 500px);
+    background-color: #000;
+  }
+
+  [data-theme="light"] body {
+    @apply bg-linear-to-br from-indigo-300 via-purple-300 to-pink-300;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(120,113,255,0.55) 0, transparent 500px),
+      radial-gradient(circle at 80% 30%, rgba(236,72,153,0.40) 0, transparent 500px),
+      radial-gradient(circle at 60% 80%, rgba(56,189,248,0.35) 0, transparent 500px),
+      radial-gradient(circle at 10% 90%, rgba(255,113,200,0.35) 0, transparent 500px);
   }
 
   /* Custom scrollbar - acrylic theme */
@@ -241,43 +264,5 @@
     animation: error-slide-exit 0.12s ease-in forwards;
   }
 
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  text-decoration: inherit;
-}
-
-h1 {
-  text-align: center;
-}
-
-html {
-  background-color: #2f2f2f;
 }
 

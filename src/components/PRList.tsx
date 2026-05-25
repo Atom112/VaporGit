@@ -105,7 +105,7 @@ const PRList: Component<Props> = (props) => {
         <For each={pulls()}>
           {(pr) => (
             <div
-              class="flex items-start gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] cursor-pointer transition-colors"
+              class="flex items-start gap-2 p-3 rounded-xl bg-white/3 border border-white/5 hover:bg-white/6 cursor-pointer transition-colors"
               onClick={() => props.onSelect(pr)}
             >
               <span class={stateColor(pr)}>

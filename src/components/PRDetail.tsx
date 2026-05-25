@@ -27,9 +27,9 @@ const PRDetail: Component<Props> = (props) => {
 
   // Options for CustomSelect
   const mergeMethodOptions = () => [
-    { value: 'merge', label: tt('pr.mergeMerge') },
-    { value: 'squash', label: tt('pr.mergeSquash') },
-    { value: 'rebase', label: tt('pr.mergeRebase') },
+    { value: 'merge', label: tt('Merge') },
+    { value: 'squash', label: tt('Squash') },
+    { value: 'rebase', label: tt('Rebase') },
   ];
 
   // Check mergeability on show — fetch fresh PR data from GitHub
