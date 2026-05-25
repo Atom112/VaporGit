@@ -1,12 +1,12 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { open } from '@tauri-apps/plugin-dialog';
-import { initRepo, githubCreateRepo, pushToGitHub, getStatus } from '../lib/tauriCommands';
-import { githubStore } from '../stores/githubStore';
-import { setRepoStore } from '../stores/repoStore';
-import { setDiffStore } from '../stores/diffStore';
-import { addToast } from '../stores/toastStore';
-import { tt } from '../i18n';
-import type { GitHubRepo } from '../lib/types';
+import { initRepo, githubCreateRepo, pushToGitHub, getStatus } from '../../lib/tauriCommands';
+import { githubStore } from '../../stores/githubStore';
+import { setRepoStore } from '../../stores/repoStore';
+import { setDiffStore } from '../../stores/diffStore';
+import { addToast } from '../../stores/toastStore';
+import { tt } from '../../i18n';
+import type { GitHubRepo } from '../../lib/types';
 
 interface Props {
   phase: 'closed' | 'enter' | 'exit';

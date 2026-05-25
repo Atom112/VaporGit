@@ -20,20 +20,32 @@ pub fn get_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
         let path = entry.path().unwrap_or("").to_string();
         let status = entry.status();
 
-        let (kind, staged) = if status.is_index_new() {
-            (StatusKind::IndexNew, true)
+        let (kind, staged, old_path) = if status.is_index_new() {
+            (StatusKind::IndexNew, true, None)
         } else if status.is_index_modified() {
-            (StatusKind::IndexModified, true)
+            (StatusKind::IndexModified, true, None)
         } else if status.is_index_deleted() {
-            (StatusKind::IndexDeleted, true)
+            (StatusKind::IndexDeleted, true, None)
+        } else if status.is_index_renamed() {
+            let old = entry
+                .head_to_index()
+                .and_then(|d| d.old_file().path())
+                .map(|p| p.to_string_lossy().to_string());
+            (StatusKind::Renamed, true, old)
         } else if status.is_wt_new() {
-            (StatusKind::WtNew, false)
+            (StatusKind::WtNew, false, None)
         } else if status.is_wt_modified() {
-            (StatusKind::WtModified, false)
+            (StatusKind::WtModified, false, None)
         } else if status.is_wt_deleted() {
-            (StatusKind::WtDeleted, false)
+            (StatusKind::WtDeleted, false, None)
+        } else if status.is_wt_renamed() {
+            let old = entry
+                .index_to_workdir()
+                .and_then(|d| d.old_file().path())
+                .map(|p| p.to_string_lossy().to_string());
+            (StatusKind::Renamed, false, old)
         } else if status.is_conflicted() {
-            (StatusKind::Conflicted, false)
+            (StatusKind::Conflicted, false, None)
         } else {
             continue;
         };
@@ -42,6 +54,7 @@ pub fn get_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
             path,
             status: kind,
             staged,
+            old_path,
         });
     }
 

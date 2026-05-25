@@ -1,5 +1,5 @@
 import { Component, For, Show } from 'solid-js';
-import type { CommitDetail as CommitDetailType } from '../lib/types';
+import type { CommitDetail as CommitDetailType } from '../../lib/types';
 
 interface CommitDetailProps {
   detail: CommitDetailType;

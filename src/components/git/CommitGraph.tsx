@@ -1,9 +1,9 @@
 import { Component, createEffect, createMemo, createSignal, Show, For, onCleanup } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { tt } from '../i18n';
-import type { GraphNode, CommitGraphData } from '../lib/types';
-import { revertCommit, createTag } from '../lib/tauriCommands';
-import { addToast } from '../stores/toastStore';
+import { tt } from '../../i18n';
+import type { GraphNode, CommitGraphData } from '../../lib/types';
+import { revertCommit, createTag } from '../../lib/tauriCommands';
+import { addToast } from '../../stores/toastStore';
 
 const COLORS = [
   '#22d3ee', '#a78bfa', '#f472b6', '#34d399', '#fbbf24', '#f87171',

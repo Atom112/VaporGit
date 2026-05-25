@@ -1,5 +1,5 @@
-import { githubStore, setGithubStore, setAuthenticated, resetLogin } from '../stores/githubStore';
-import { githubLogin } from '../lib/tauriCommands';
+import { githubStore, setGithubStore, setAuthenticated, resetLogin } from '../../stores/githubStore';
+import { githubLogin } from '../../lib/tauriCommands';
 
 const GitHubLogin = () => {
   const startLogin = async () => {

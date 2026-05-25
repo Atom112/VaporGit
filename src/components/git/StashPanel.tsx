@@ -1,7 +1,7 @@
 import { Component, createSignal, createEffect, Show, For } from 'solid-js';
-import { stashSave, stashList, stashPop, stashApply, stashDrop } from '../lib/tauriCommands';
-import { addToast } from '../stores/toastStore';
-import type { StashInfo } from '../lib/types';
+import { stashSave, stashList, stashPop, stashApply, stashDrop } from '../../lib/tauriCommands';
+import { addToast } from '../../stores/toastStore';
+import type { StashInfo } from '../../lib/types';
 
 interface Props {
   repoPath: string;

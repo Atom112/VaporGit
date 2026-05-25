@@ -1,6 +1,6 @@
 import { Component, createSignal, Show } from 'solid-js';
-import { rebase, cherryPick } from '../lib/tauriCommands';
-import { addToast } from '../stores/toastStore';
+import { rebase, cherryPick } from '../../lib/tauriCommands';
+import { addToast } from '../../stores/toastStore';
 
 interface Props {
   repoPath: string;

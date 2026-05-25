@@ -4,9 +4,9 @@ import { githubStore } from '../stores/githubStore';
 import { getRemotes } from '../lib/tauriCommands';
 import { tt } from '../i18n';
 import type { GitHubPullRequest } from '../lib/types';
-import PRList from '../components/PRList';
-import PRDetail from '../components/PRDetail';
-import PRCreateDialog from '../components/PRCreateDialog';
+import PRList from '../components/github/PRList';
+import PRDetail from '../components/github/PRDetail';
+import PRCreateDialog from '../components/github/PRCreateDialog';
 
 /** Parse GitHub owner/repo from a remote URL. */
 function parseGitHubRemote(url: string): { owner: string; repo: string } | null {

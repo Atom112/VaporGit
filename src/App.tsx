@@ -1,10 +1,10 @@
 import "./App.css";
 import { onMount, createEffect, createSignal } from "solid-js";
-import Navbar from "./components/Navbar";
-import Titlebar from "./components/Titlebar";
-import PageTransition from "./components/PageTransition";
-import ToastContainer from "./components/ToastContainer";
-import UpdateNotification from "./components/UpdateNotification";
+import Navbar from "./components/layout/Navbar";
+import Titlebar from "./components/layout/Titlebar";
+import PageTransition from "./components/layout/PageTransition";
+import ToastContainer from "./components/ui/ToastContainer";
+import UpdateNotification from "./components/ui/UpdateNotification";
 import { githubCheckAuth, checkUpdate } from "./lib/tauriCommands";
 import { setAuthenticated } from "./stores/githubStore";
 import { showUpdate } from "./stores/updateStore";

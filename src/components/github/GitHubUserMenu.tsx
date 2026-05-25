@@ -1,7 +1,7 @@
 import { Component, createSignal, onCleanup } from 'solid-js';
-import { githubStore, clearAuth } from '../stores/githubStore';
-import { githubLogout } from '../lib/tauriCommands';
-import { tt } from '../i18n';
+import { githubStore, clearAuth } from '../../stores/githubStore';
+import { githubLogout } from '../../lib/tauriCommands';
+import { tt } from '../../i18n';
 
 const GitHubUserMenu: Component = () => {
   const [open, setOpen] = createSignal(false);

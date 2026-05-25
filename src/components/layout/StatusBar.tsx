@@ -1,5 +1,5 @@
 import { Component, Show } from 'solid-js';
-import { repoStore } from '../stores/repoStore';
+import { repoStore } from '../../stores/repoStore';
 
 const StatusBar: Component = () => {
   const branch = () => repoStore.repoInfo?.headBranch;

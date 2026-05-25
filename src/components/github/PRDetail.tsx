@@ -1,11 +1,11 @@
 import { Component, createSignal, createResource, Show, For } from 'solid-js';
-import type { GitHubPullRequest, PullRequestFile } from '../lib/types';
-import { githubGetPullFiles, githubListPullComments, githubGetPull, githubMergePull } from '../lib/tauriCommands';
-import { addToast } from '../stores/toastStore';
-import { tt, ttf } from '../i18n';
-import DiffView from './DiffView';
-import { parseGitHubPatch } from '../lib/diffParser';
-import CustomSelect from './CustomSelect';
+import type { GitHubPullRequest, PullRequestFile } from '../../lib/types';
+import { githubGetPullFiles, githubListPullComments, githubGetPull, githubMergePull } from '../../lib/tauriCommands';
+import { addToast } from '../../stores/toastStore';
+import { tt, ttf } from '../../i18n';
+import DiffView from '../git/DiffView';
+import { parseGitHubPatch } from '../../lib/diffParser';
+import CustomSelect from '../ui/CustomSelect';
 
 interface Props {
   owner: string;

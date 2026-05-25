@@ -33,19 +33,19 @@ import {
   closeTerminal,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
-import FileList from '../components/FileList';
-import CommitDetail from '../components/CommitDetail';
-import CommitGraph from '../components/CommitGraph';
-import BranchList from '../components/BranchList';
-import DiffView from '../components/DiffView';
-import StatusBar from '../components/StatusBar';
-import StashPanel from '../components/StashPanel';
-import ConflictResolver from '../components/ConflictResolver';
-import PRCreateDialog from '../components/PRCreateDialog';
+import FileList from '../components/git/FileList';
+import CommitDetail from '../components/git/CommitDetail';
+import CommitGraph from '../components/git/CommitGraph';
+import BranchList from '../components/git/BranchList';
+import DiffView from '../components/git/DiffView';
+import StatusBar from '../components/layout/StatusBar';
+import StashPanel from '../components/git/StashPanel';
+import ConflictResolver from '../components/git/ConflictResolver';
+import PRCreateDialog from '../components/github/PRCreateDialog';
 import { githubStore } from '../stores/githubStore';
-import InteractiveRebase from '../components/InteractiveRebase';
-import KeyboardShortcuts from '../components/KeyboardShortcuts';
-import TerminalPanel from '../components/TerminalPanel';
+import InteractiveRebase from '../components/git/InteractiveRebase';
+import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
+import TerminalPanel from '../components/terminal/TerminalPanel';
 import { tt } from '../i18n';
 
 const Repository: Component = () => {

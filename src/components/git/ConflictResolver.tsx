@@ -1,7 +1,7 @@
 import { Component, createSignal, Show, For, onMount } from 'solid-js';
-import { getConflicts, resolveConflict } from '../lib/tauriCommands';
-import { addToast } from '../stores/toastStore';
-import type { ConflictEntry } from '../lib/types';
+import { getConflicts, resolveConflict } from '../../lib/tauriCommands';
+import { addToast } from '../../stores/toastStore';
+import type { ConflictEntry } from '../../lib/types';
 
 interface Props {
   repoPath: string;

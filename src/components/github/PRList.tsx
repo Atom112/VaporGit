@@ -1,7 +1,7 @@
 import { Component, createSignal, createResource, Show, For } from 'solid-js';
-import { githubListPulls } from '../lib/tauriCommands';
-import { tt, ttf } from '../i18n';
-import type { GitHubPullRequest } from '../lib/types';
+import { githubListPulls } from '../../lib/tauriCommands';
+import { tt, ttf } from '../../i18n';
+import type { GitHubPullRequest } from '../../lib/types';
 
 interface Props {
   owner: string;
