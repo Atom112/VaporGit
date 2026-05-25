@@ -206,6 +206,7 @@ const pt = {
     themeDark: 'Escuro',
     themeLight: 'Claro',
     themeSystem: 'Sistema',
+    checkUpdate: 'Verificar atualizações',
     saveSettings: 'Salvar Configurações',
     gitConfig: 'Configuração do Git',
     about: 'Sobre',
@@ -274,6 +275,9 @@ const pt = {
   toast: {
     error: 'Operação falhou',
     networkError: 'Erro de rede',
+    updateFound: 'Nova versão disponível',
+    updateNotFound: 'Já está atualizado',
+    updateCheckError: 'Falha ao verificar atualizações',
   },
 };
 

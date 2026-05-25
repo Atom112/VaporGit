@@ -206,6 +206,7 @@ const ar = {
     themeDark: 'داكن',
     themeLight: 'فاتح',
     themeSystem: 'النظام',
+    checkUpdate: 'التحقق من التحديثات',
     saveSettings: 'حفظ الإعدادات',
     gitConfig: 'إعدادات Git',
     about: 'حول',
@@ -274,6 +275,9 @@ const ar = {
   toast: {
     error: 'فشلت العملية',
     networkError: 'خطأ في الشبكة',
+    updateFound: 'إصدار جديد متاح',
+    updateNotFound: 'أنت على أحدث إصدار',
+    updateCheckError: 'فشل التحقق من التحديث',
   },
 };
 

@@ -206,6 +206,7 @@ const es = {
     themeDark: 'Oscuro',
     themeLight: 'Claro',
     themeSystem: 'Sistema',
+    checkUpdate: 'Buscar actualizaciones',
     saveSettings: 'Guardar Configuración',
     gitConfig: 'Configuración de Git',
     about: 'Acerca de',
@@ -274,6 +275,9 @@ const es = {
   toast: {
     error: 'Operación fallida',
     networkError: 'Error de red',
+    updateFound: 'Nueva versión disponible',
+    updateNotFound: 'Ya está actualizado',
+    updateCheckError: 'Error al buscar actualizaciones',
   },
 };
 

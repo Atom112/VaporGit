@@ -147,6 +147,7 @@ const en = {
     themeDark: 'Dark',
     themeLight: 'Light',
     themeSystem: 'System',
+    checkUpdate: 'Check for Updates',
     saveSettings: 'Save Settings',
     gitConfig: 'Git Config',
     about: 'About',
@@ -274,6 +275,9 @@ const en = {
   toast: {
     error: 'Operation failed',
     networkError: 'Network error',
+    updateFound: 'New version available',
+    updateNotFound: 'Already up to date',
+    updateCheckError: 'Update check failed',
   },
 };
 

@@ -1,7 +1,9 @@
 import { Component } from 'solid-js';
 import { settingsStore, updateSettings } from '../stores/settingsStore';
 import { githubStore, clearAuth } from '../stores/githubStore';
-import { githubLogout } from '../lib/tauriCommands';
+import { githubLogout, checkUpdate } from '../lib/tauriCommands';
+import { showUpdate } from '../stores/updateStore';
+import { addToast } from '../stores/toastStore';
 import CustomSelect from '../components/CustomSelect';
 import GitHubLogin from '../components/GitHubLogin';
 import { i18nState, setLang, tt } from '../i18n';
@@ -14,6 +16,20 @@ const Settings: Component = () => {
       // ignore
     }
     clearAuth();
+  };
+
+  const handleCheckUpdate = async () => {
+    try {
+      const update = await checkUpdate();
+      if (update) {
+        showUpdate(update);
+        addToast(tt('toast.updateFound'), 'success');
+      } else {
+        addToast(tt('toast.updateNotFound'), 'info');
+      }
+    } catch {
+      addToast(tt('toast.updateCheckError'), 'error');
+    }
   };
 
   return (
@@ -122,6 +138,16 @@ const Settings: Component = () => {
               onInput={(e) => updateSettings({ defaultRemoteName: e.currentTarget.value })}
             />
             <p class="text-xs opacity-40 mt-1">{tt('settings.remoteNameDesc')}</p>
+          </div>
+
+          {/* Check for updates */}
+          <div class="pt-2">
+            <button
+              onClick={handleCheckUpdate}
+              class="w-full px-4 py-3 rounded-xl text-sm font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              {tt('settings.checkUpdate')}
+            </button>
           </div>
         </div>
       </div>

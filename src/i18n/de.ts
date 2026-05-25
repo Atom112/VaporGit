@@ -206,6 +206,7 @@ const de = {
     themeDark: 'Dunkel',
     themeLight: 'Hell',
     themeSystem: 'System',
+    checkUpdate: 'Nach Updates suchen',
     saveSettings: 'Einstellungen speichern',
     gitConfig: 'Git-Konfiguration',
     about: 'Über',
@@ -274,6 +275,9 @@ const de = {
   toast: {
     error: 'Vorgang fehlgeschlagen',
     networkError: 'Netzwerkfehler',
+    updateFound: 'Neue Version verfügbar',
+    updateNotFound: 'Bereits aktuell',
+    updateCheckError: 'Updateprüfung fehlgeschlagen',
   },
 };
 

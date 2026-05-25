@@ -206,6 +206,7 @@ const zh = {
     themeDark: '深色',
     themeLight: '浅色',
     themeSystem: '跟随系统',
+    checkUpdate: '检查更新',
     saveSettings: '保存设置',
     gitConfig: 'Git 配置',
     about: '关于',
@@ -274,6 +275,9 @@ const zh = {
   toast: {
     error: '操作失败',
     networkError: '网络错误',
+    updateFound: '发现新版本',
+    updateNotFound: '已是最新版本',
+    updateCheckError: '检查更新失败',
   },
 };
 

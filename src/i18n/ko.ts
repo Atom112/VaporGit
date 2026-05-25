@@ -206,6 +206,7 @@ const ko = {
     themeDark: '다크',
     themeLight: '라이트',
     themeSystem: '시스템 따르기',
+    checkUpdate: '업데이트 확인',
     saveSettings: '설정 저장',
     gitConfig: 'Git 설정',
     about: '정보',
@@ -274,6 +275,9 @@ const ko = {
   toast: {
     error: '작업 실패',
     networkError: '네트워크 오류',
+    updateFound: '새 버전이 있습니다',
+    updateNotFound: '최신 버전입니다',
+    updateCheckError: '업데이트 확인 실패',
   },
 };
 
