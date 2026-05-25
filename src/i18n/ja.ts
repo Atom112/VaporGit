@@ -206,6 +206,7 @@ const ja = {
     themeDark: 'ダーク',
     themeLight: 'ライト',
     themeSystem: 'システムに従う',
+    checkUpdate: '更新を確認',
     saveSettings: '設定を保存',
     gitConfig: 'Git設定',
     about: 'バージョン情報',
@@ -274,6 +275,9 @@ const ja = {
   toast: {
     error: '操作に失敗しました',
     networkError: 'ネットワークエラー',
+    updateFound: '新しいバージョンがあります',
+    updateNotFound: '最新バージョンです',
+    updateCheckError: '更新の確認に失敗しました',
   },
 };
 

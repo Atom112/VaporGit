@@ -206,6 +206,7 @@ const ru = {
     themeDark: 'Тёмная',
     themeLight: 'Светлая',
     themeSystem: 'Системная',
+    checkUpdate: 'Проверить обновления',
     saveSettings: 'Сохранить настройки',
     gitConfig: 'Конфигурация Git',
     about: 'О программе',
@@ -274,6 +275,9 @@ const ru = {
   toast: {
     error: 'Операция не удалась',
     networkError: 'Сетевая ошибка',
+    updateFound: 'Доступна новая версия',
+    updateNotFound: 'Уже последняя версия',
+    updateCheckError: 'Ошибка проверки обновлений',
   },
 };
 

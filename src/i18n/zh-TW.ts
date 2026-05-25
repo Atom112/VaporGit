@@ -206,6 +206,7 @@ const zhTW = {
     themeDark: '深色',
     themeLight: '淺色',
     themeSystem: '跟隨系統',
+    checkUpdate: '檢查更新',
     saveSettings: '儲存設定',
     gitConfig: 'Git 設定',
     about: '關於',
@@ -274,6 +275,9 @@ const zhTW = {
   toast: {
     error: '操作失敗',
     networkError: '網路錯誤',
+    updateFound: '發現新版本',
+    updateNotFound: '已是最新版本',
+    updateCheckError: '檢查更新失敗',
   },
 };
 

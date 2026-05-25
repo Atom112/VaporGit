@@ -1,12 +1,17 @@
-import { Component } from 'solid-js';
+import { Component, createSignal, Show } from 'solid-js';
 import { settingsStore, updateSettings } from '../stores/settingsStore';
 import { githubStore, clearAuth } from '../stores/githubStore';
-import { githubLogout } from '../lib/tauriCommands';
+import { githubLogout, checkUpdate } from '../lib/tauriCommands';
+import { showUpdate } from '../stores/updateStore';
+import { addToast } from '../stores/toastStore';
 import CustomSelect from '../components/CustomSelect';
 import GitHubLogin from '../components/GitHubLogin';
+import { version } from '../../package.json';
 import { i18nState, setLang, tt } from '../i18n';
 
 const Settings: Component = () => {
+  const [checking, setChecking] = createSignal(false);
+
   const handleLogout = async () => {
     try {
       await githubLogout();
@@ -14,6 +19,23 @@ const Settings: Component = () => {
       // ignore
     }
     clearAuth();
+  };
+
+  const handleCheckUpdate = async () => {
+    setChecking(true);
+    try {
+      const update = await checkUpdate();
+      if (update) {
+        showUpdate(update);
+        addToast(tt('toast.updateFound'), 'success');
+      } else {
+        addToast(tt('toast.updateNotFound'), 'info');
+      }
+    } catch {
+      addToast(tt('toast.updateCheckError'), 'error');
+    } finally {
+      setChecking(false);
+    }
   };
 
   return (
@@ -122,6 +144,23 @@ const Settings: Component = () => {
               onInput={(e) => updateSettings({ defaultRemoteName: e.currentTarget.value })}
             />
             <p class="text-xs opacity-40 mt-1">{tt('settings.remoteNameDesc')}</p>
+          </div>
+
+          {/* Check for updates */}
+          <div class="pt-2">
+            <div class="text-center text-xs text-gray-500 mb-2">
+              {tt('settings.version')} {version}
+            </div>
+            <button
+              onClick={handleCheckUpdate}
+              disabled={checking()}
+              class="w-full px-4 py-3 rounded-xl text-sm font-medium border transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white disabled:opacity-50"
+            >
+              <Show when={checking()} fallback={tt('settings.checkUpdate')}>
+                <span class="inline-block w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                <span class="text-gray-400">{tt('settings.checkUpdate')}</span>
+              </Show>
+            </button>
           </div>
         </div>
       </div>

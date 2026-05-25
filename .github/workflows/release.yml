@@ -68,5 +68,5 @@ jobs:
             - **Linux (Debian/Ubuntu)**: VaporGit__VERSION___amd64.deb
             - **Linux (Fedora/RHEL)**: VaporGit__VERSION___x86_64.rpm
             - **Linux (universal)**: VaporGit__VERSION___amd64.AppImage
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false

@@ -206,6 +206,7 @@ const fr = {
     themeDark: 'Sombre',
     themeLight: 'Clair',
     themeSystem: 'Système',
+    checkUpdate: 'Vérifier les mises à jour',
     saveSettings: 'Enregistrer les paramètres',
     gitConfig: 'Configuration Git',
     about: 'À propos',
@@ -274,6 +275,9 @@ const fr = {
   toast: {
     error: 'Échec de l\'opération',
     networkError: 'Erreur réseau',
+    updateFound: 'Nouvelle version disponible',
+    updateNotFound: 'Déjà à jour',
+    updateCheckError: 'Échec de la vérification',
   },
 };
 
