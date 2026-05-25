@@ -208,37 +208,55 @@ fn is_newer_version(latest: &str, current: &str) -> bool {
 }
 
 /// Check if a newer version of VaporGit is available on GitHub.
-/// Uses the public GitHub Releases API (no authentication required).
+/// Uses the public GitHub Releases API; authenticates if possible for higher rate limits.
 #[tauri::command]
 pub async fn check_update() -> Result<Option<GitHubRelease>, String> {
     let current_version = env!("CARGO_PKG_VERSION");
 
+    // Try authenticated request first (higher rate limit), fall back to anonymous
+    let mut release = try_auth_release().await;
+    if release.is_none() {
+        release = try_anonymous_release().await;
+    }
+
+    match release {
+        Some(r) => {
+            let latest_tag = r.tag_name.trim_start_matches('v');
+            if is_newer_version(latest_tag, current_version) {
+                Ok(Some(r))
+            } else {
+                Ok(None)
+            }
+        }
+        None => Ok(None),
+    }
+}
+
+async fn try_auth_release() -> Option<GitHubRelease> {
+    let token = auth::load_token().ok()??;
+    let client = GitHubClient::new(token).ok()?;
+    client.get_json("/repos/Atom112/VaporGit/releases/latest").await.ok()
+}
+
+async fn try_anonymous_release() -> Option<GitHubRelease> {
     let client = reqwest::Client::builder()
         .user_agent("VaporGit/1.0")
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+        .ok()?;
 
     let resp = client
         .get("https://api.github.com/repos/Atom112/VaporGit/releases/latest")
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|e| format!("Network error: {e}"))?;
+        .ok()?;
 
-    // Silently return None on any HTTP error (no network, rate-limited, etc.)
     if !resp.status().is_success() {
-        return Ok(None);
+        return None;
     }
 
-    let release: GitHubRelease = parse_github_response(resp).await?;
-
-    let latest_tag = release.tag_name.trim_start_matches('v');
-    if is_newer_version(latest_tag, current_version) {
-        Ok(Some(release))
-    } else {
-        Ok(None)
-    }
+    parse_github_response(resp).await.ok()
 }
 
 /// Find the asset matching the current platform from a release.
