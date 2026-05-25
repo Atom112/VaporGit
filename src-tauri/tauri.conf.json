@@ -12,11 +12,26 @@
   "app": {
     "windows": [
       {
+        "label": "splashscreen",
+        "title": "VaporGit",
+        "width": 400,
+        "height": 280,
+        "decorations": false,
+        "shadow": false,
+        "transparent": true,
+        "center": true,
+        "url": "/splashscreen.html",
+        "visible": true
+      },
+      {
+        "label": "main",
         "title": "VaporGit",
         "width": 1280,
         "height": 800,
         "decorations": false,
-        "transparent": true
+        "transparent": true,
+        "center": true,
+        "visible": false
       }
     ],
     "security": {
@@ -32,6 +47,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "wix": {
+        "bannerPath": "src-tauri/wix/banner.bmp",
+        "dialogImagePath": "src-tauri/wix/dialog.bmp"
+      }
+    }
   }
 }
