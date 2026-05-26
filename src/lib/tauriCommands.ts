@@ -41,11 +41,16 @@ export async function getStatus(path: string): Promise<FileStatus[]> {
   return invoke('get_status', { path });
 }
 
-export async function stageFiles(path: string, files: string[]): Promise<void> {
+interface StageEntry {
+  path: string;
+  oldPath?: string;
+}
+
+export async function stageFiles(path: string, files: StageEntry[]): Promise<FileStatus[]> {
   return invoke('stage_files', { path, files });
 }
 
-export async function unstageFiles(path: string, files: string[]): Promise<void> {
+export async function unstageFiles(path: string, files: StageEntry[]): Promise<FileStatus[]> {
   return invoke('unstage_files', { path, files });
 }
 

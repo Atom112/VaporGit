@@ -1,8 +1,16 @@
 use crate::git;
 use crate::models::conflict::ConflictEntry;
 use crate::models::repo::{RecentRepo, RepoInfo};
+use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StageEntry {
+    path: String,
+    old_path: Option<String>,
+}
 
 fn config_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
@@ -139,20 +147,41 @@ pub async fn get_status(path: String) -> Result<Vec<crate::models::status::FileS
 }
 
 #[tauri::command]
-pub async fn stage_files(path: String, files: Vec<String>) -> Result<(), String> {
+pub async fn stage_files(path: String, files: Vec<StageEntry>) -> Result<Vec<crate::models::status::FileStatus>, String> {
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;
-        git::status::stage_files(&repo, &files)
+        let all_paths: Vec<String> = files
+            .iter()
+            .flat_map(|f| {
+                let mut v = vec![f.path.clone()];
+                if let Some(ref old) = f.old_path {
+                    v.push(old.clone());
+                }
+                v
+            })
+            .collect();
+        git::status::stage_files(&repo, &all_paths)
+        // get_status() now uses Diff API — rename detection is automatic
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))?
 }
 
 #[tauri::command]
-pub async fn unstage_files(path: String, files: Vec<String>) -> Result<(), String> {
+pub async fn unstage_files(path: String, files: Vec<StageEntry>) -> Result<Vec<crate::models::status::FileStatus>, String> {
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;
-        git::status::unstage_files(&repo, &files)
+        let all_paths: Vec<String> = files
+            .iter()
+            .flat_map(|f| {
+                let mut v = vec![f.path.clone()];
+                if let Some(ref old) = f.old_path {
+                    v.push(old.clone());
+                }
+                v
+            })
+            .collect();
+        git::status::unstage_files(&repo, &all_paths)
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))?

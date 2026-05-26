@@ -281,16 +281,21 @@ const Repository: Component = () => {
     if (!path || staging()) return;
     setStaging(true);
     try {
+      const entry = { path: file.path, oldPath: file.oldPath };
+      let updated: FileStatus[];
       if (file.staged) {
-        // For renames, also unstage the old-path deletion so the full move is reverted
-        const paths = file.oldPath ? [file.path, file.oldPath] : [file.path];
-        await unstageFiles(path, paths);
+        updated = await unstageFiles(path, [entry]);
       } else {
-        // For renames, also stage the old-path removal so git records the full move
-        const paths = file.oldPath ? [file.path, file.oldPath] : [file.path];
-        await stageFiles(path, paths);
+        updated = await stageFiles(path, [entry]);
       }
-      await refreshStatus();
+      // Use the status returned by stage/unstage directly — it is the
+      // authoritative result after the index write and guarantees rename
+      // entries (delete+add) are paired into a single RENAMED record.
+      setDiffStore({ fileStatuses: updated });
+      const hasConflicts = updated.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        setShowConflictResolver(true);
+      }
     } catch (e) {
       console.error('Stage/unstage failed:', e);
     } finally {
@@ -308,10 +313,13 @@ const Repository: Component = () => {
     }
     setStaging(true);
     try {
-      // Include old paths for renames so the full move is staged
-      const paths = unstaged.flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]));
-      await stageFiles(path, paths);
-      await refreshStatus();
+      const entries = unstaged.map((f) => ({ path: f.path, oldPath: f.oldPath }));
+      const updated = await stageFiles(path, entries);
+      setDiffStore({ fileStatuses: updated });
+      const hasConflicts = updated.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        setShowConflictResolver(true);
+      }
       addToast(`已暂存 ${unstaged.length} 个文件`, 'success');
     } catch (e) {
       console.error('Stage all failed:', e);
@@ -328,9 +336,13 @@ const Repository: Component = () => {
     if (staged.length === 0) return;
     setStaging(true);
     try {
-      const paths = staged.flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]));
-      await unstageFiles(path, paths);
-      await refreshStatus();
+      const entries = staged.map((f) => ({ path: f.path, oldPath: f.oldPath }));
+      const updated = await unstageFiles(path, entries);
+      setDiffStore({ fileStatuses: updated });
+      const hasConflicts = updated.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        setShowConflictResolver(true);
+      }
     } catch (e) {
       console.error('Unstage all failed:', e);
       addToast(`取消暂存失败: ${e}`, 'error');
