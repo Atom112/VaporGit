@@ -1,5 +1,6 @@
 import { githubStore, setGithubStore, setAuthenticated, resetLogin } from '../../stores/githubStore';
 import { githubLogin } from '../../lib/tauriCommands';
+import { describeError } from '../../lib/gitErrorDesc';
 
 const GitHubLogin = () => {
   const startLogin = async () => {
@@ -10,7 +11,7 @@ const GitHubLogin = () => {
     } catch (err) {
       setGithubStore({
         loginPhase: 'error',
-        error: String(err),
+        error: describeError(err),
         loading: false,
       });
     }

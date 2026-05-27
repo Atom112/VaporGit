@@ -46,7 +46,8 @@ import { githubStore } from '../stores/githubStore';
 import InteractiveRebase from '../components/git/InteractiveRebase';
 import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
 import TerminalPanel from '../components/terminal/TerminalPanel';
-import { tt } from '../i18n';
+import { tt, ttf } from '../i18n';
+import { describeError } from '../lib/gitErrorDesc';
 
 const Repository: Component = () => {
   // ── State ──
@@ -513,10 +514,10 @@ const Repository: Component = () => {
     setRemoteActionLoading(true);
     try {
       await fetchRemote(path, settingsStore.defaultRemoteName);
-      addToast('Fetch 完成', 'success');
+      addToast(tt('repo.fetchSuccess'), 'success');
       await refreshGraph(true);
     } catch (e) {
-      addToast(`Fetch 失败: ${e}`, 'error');
+      addToast(ttf('repo.fetchFailed', describeError(e)), 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -531,7 +532,7 @@ const Repository: Component = () => {
       addToast(result, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`Pull 失败: ${e}`, 'error');
+      addToast(ttf('repo.pullFailed', describeError(e)), 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -543,10 +544,10 @@ const Repository: Component = () => {
     setRemoteActionLoading(true);
     try {
       await pushRemote(path, settingsStore.defaultRemoteName);
-      addToast('Push 完成', 'success');
+      addToast(tt('repo.pushSuccess'), 'success');
       await refreshGraph(true);
     } catch (e) {
-      addToast(`Push 失败: ${e}`, 'error');
+      addToast(ttf('repo.pushFailed', describeError(e)), 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -613,7 +614,7 @@ const Repository: Component = () => {
       setPrCreateInfo({ owner: match[1], repo: match[2].replace(/\.git$/, '') });
       setShowPRCreate(true);
     } catch (e) {
-      addToast(`获取远程仓库信息失败: ${e}`, 'error');
+      addToast(`获取远程仓库信息失败: ${describeError(e)}`, 'error');
     }
   };
 
@@ -1138,7 +1139,7 @@ const Repository: Component = () => {
           onClose={() => setShowPRCreate(false)}
           onCreated={() => {
             setShowPRCreate(false);
-            addToast('Pull Request 创建成功', 'success');
+            addToast(tt('pr.createdGeneric'), 'success');
           }}
         />
       </Show>

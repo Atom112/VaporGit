@@ -49,16 +49,16 @@ pub(crate) async fn parse_github_response<T: serde::de::DeserializeOwned>(
     resp: reqwest::Response,
 ) -> Result<T, String> {
     let status = resp.status();
-    let text = resp.text().await.map_err(|e| format!("Failed to read response: {}", e))?;
+    let text = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
 
     if !status.is_success() {
-        return Err(format!("GitHub API error ({}): {}", status, text));
+        return Err(format!("HTTP {}: {}", status, text));
     }
 
     let mut json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Invalid JSON from GitHub: {}", e))?;
+        serde_json::from_str(&text).map_err(|e| format!("GitHub 返回数据格式错误: {}", e))?;
 
     keys_snake_to_camel(&mut json);
 
-    serde_json::from_value(json).map_err(|e| format!("Failed to parse GitHub response: {}", e))
+    serde_json::from_value(json).map_err(|e| format!("解析 GitHub 响应失败: {}", e))
 }

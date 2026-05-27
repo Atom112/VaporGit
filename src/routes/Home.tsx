@@ -9,6 +9,7 @@ import { addToast } from '../stores/toastStore';
 import GitHubRepoList from '../components/github/GitHubRepoList';
 import CreateRepoDialog from '../components/ui/CreateRepoDialog';
 import { tt } from '../i18n';
+import { describeError } from '../lib/gitErrorDesc';
 
 const Home: Component = () => {
   const navigate = useNavigate();
@@ -92,8 +93,8 @@ const Home: Component = () => {
       setClonePhase('closed');
       navigate('/repository');
     } catch (e) {
-      addToast(`${tt('home.cloneFailed')}: ${e}`, 'error');
-      setCloneError(String(e));
+      addToast(`${tt('home.cloneFailed')}: ${describeError(e)}`, 'error');
+      setCloneError(String(describeError(e)));
       setRepoStore({ loading: false });
     } finally {
       setCloneLoading(false);
