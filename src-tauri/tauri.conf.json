@@ -48,11 +48,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "windows": {
-      "wix": {
-        "bannerPath": "wix/banner.bmp",
-        "dialogImagePath": "wix/dialog.bmp"
-      }
-    }
+    "windows": {}
   }
 }
