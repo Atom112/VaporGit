@@ -97,10 +97,13 @@ const PRDetail: Component<Props> = (props) => {
       <div class="px-4 py-3 border-b border-white/10 shrink-0 space-y-2">
         <div class="flex items-center gap-2">
           <button
-            class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+            class="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
             onClick={props.onBack}
           >
-            &larr; {tt('pr.back')}
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            {tt('pr.back')}
           </button>
         </div>
         <h2 class="text-base font-bold text-white leading-snug">{pr().title}</h2>
@@ -114,9 +117,11 @@ const PRDetail: Component<Props> = (props) => {
           </Show>
         </div>
         <div class="flex items-center gap-2 text-xs">
-          <span class="text-gray-500">{pr().base.label}</span>
-          <span class="text-gray-600">&larr;</span>
-          <span class="text-gray-500">{pr().head.label}</span>
+          <span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">{pr().base.label}</span>
+          <svg class="w-4 h-4 text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+          </svg>
+          <span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">{pr().head.label}</span>
         </div>
 
         {/* Merge button area */}

@@ -135,6 +135,10 @@ export async function deleteBranch(path: string, name: string): Promise<void> {
   return invoke('delete_branch', { path, name });
 }
 
+export async function deleteRemoteBranch(path: string, remoteName: string, branchName: string): Promise<void> {
+  return invoke('delete_remote_branch', { path, remoteName, branchName });
+}
+
 export async function fetch(path: string, remote?: string): Promise<void> {
   return invoke('fetch', { path, remote: remote ?? null });
 }
@@ -165,6 +169,14 @@ export async function checkSubmodules(path: string): Promise<string[]> {
 
 export async function getConflicts(path: string): Promise<ConflictEntry[]> {
   return invoke('get_conflicts', { path });
+}
+
+export async function getConflictContent(path: string, file: string, stage: string): Promise<string> {
+  return invoke('get_conflict_content', { path, file, stage });
+}
+
+export async function discardFiles(path: string, files: string[]): Promise<FileStatus[]> {
+  return invoke('discard_files', { path, files });
 }
 
 export async function resolveConflict(path: string, file: string, resolution: string): Promise<void> {

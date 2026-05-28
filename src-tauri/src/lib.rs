@@ -4,13 +4,13 @@ mod github;
 mod models;
 mod terminal;
 
-use commands::branch::{checkout_branch, checkout_remote_branch, create_branch, delete_branch, get_branch_list};
+use commands::branch::{checkout_branch, checkout_remote_branch, create_branch, delete_branch, delete_remote_branch, get_branch_list};
 use commands::commit::{cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, rebase, revert_commit, undo, redo};
 use commands::tag::create_tag;
 use commands::terminal::{close_terminal, open_terminal, resize_terminal, write_terminal};
 use commands::diff::{check_lfs, get_file_base64, get_file_content, get_file_diff};
 use commands::remote::{fetch, get_remotes, pull, push};
-use commands::repo::{check_submodules, clone_repo, get_conflicts, get_recent_repos, get_status, init_repo, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
+use commands::repo::{check_submodules, clone_repo, discard_files, get_conflict_content, get_conflicts, get_recent_repos, get_status, init_repo, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
 use commands::splashscreen::close_splashscreen;
 use commands::stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_save};
 use commands::github::{
@@ -71,6 +71,7 @@ pub fn run() {
             checkout_branch,
             checkout_remote_branch,
             delete_branch,
+            delete_remote_branch,
             // remote
             fetch,
             pull,
@@ -84,7 +85,10 @@ pub fn run() {
             stash_drop,
             // conflict
             get_conflicts,
+            get_conflict_content,
             resolve_conflict,
+            // discard
+            discard_files,
             // github
             check_update,
             github_get_asset,

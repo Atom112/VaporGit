@@ -21,6 +21,7 @@ import {
   removeRecentRepo,
   checkoutBranch,
   createBranch,
+  deleteBranch,
   cherryPick,
   undo as undoLast,
   redo as redoLast,
@@ -31,6 +32,7 @@ import {
   checkSubmodules,
   openTerminal,
   closeTerminal,
+  discardFiles,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
 import FileList from '../components/git/FileList';
@@ -352,6 +354,32 @@ const Repository: Component = () => {
     }
   };
 
+  const handleDiscard = async (file: FileStatus) => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      const updated = await discardFiles(path, [file.path]);
+      setDiffStore({ fileStatuses: updated });
+    } catch (e) {
+      addToast(`放弃更改失败: ${describeError(e)}`, 'error');
+    }
+  };
+
+  const handleDiscardAll = async () => {
+    const path = repoPath();
+    if (!path) return;
+    const unstaged = diffStore.fileStatuses.filter((f) => !f.staged);
+    if (unstaged.length === 0) return;
+    try {
+      const paths = unstaged.map((f) => f.path);
+      const updated = await discardFiles(path, paths);
+      setDiffStore({ fileStatuses: updated });
+      addToast(`已放弃 ${unstaged.length} 个文件的更改`, 'success');
+    } catch (e) {
+      addToast(`放弃更改失败: ${describeError(e)}`, 'error');
+    }
+  };
+
   const handleCommit = async () => {
     const path = repoPath();
     const message = commitMessage().trim();
@@ -529,10 +557,24 @@ const Repository: Component = () => {
     setRemoteActionLoading(true);
     try {
       const result = await pullRemote(path, settingsStore.defaultRemoteName);
-      addToast(result, 'success');
+      // After pull, refresh to detect conflicts
       await refreshAll();
+      const statuses = diffStore.fileStatuses;
+      const hasConflicts = statuses.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        addToast(tt('repo.conflictPullDetected'), 'info');
+        setShowConflictResolver(true);
+      } else {
+        addToast(result, 'success');
+      }
     } catch (e) {
       addToast(ttf('repo.pullFailed', describeError(e)), 'error');
+      // Also check for conflicts on error (e.g. merge conflicts returned as errors)
+      await refreshStatus();
+      const statuses = diffStore.fileStatuses;
+      if (statuses.some((f) => f.status === 'CONFLICTED')) {
+        setShowConflictResolver(true);
+      }
     } finally {
       setRemoteActionLoading(false);
     }
@@ -665,6 +707,30 @@ const Repository: Component = () => {
       await refreshAll();
     } catch (e) {
       addToast(`Cherry-pick 失败: ${e}`, 'error');
+    }
+  };
+
+  const handleGraphCheckoutBranch = async (branchName: string) => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      await checkoutBranch(path, branchName);
+      addToast(`已切换到分支 ${branchName}`, 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(`切换分支失败: ${e}`, 'error');
+    }
+  };
+
+  const handleGraphDeleteBranch = async (branchName: string) => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      await deleteBranch(path, branchName);
+      addToast(ttf('commit.deleteBranchSuccess', branchName), 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(ttf('commit.deleteBranchFailed', describeError(e)), 'error');
     }
   };
 
@@ -859,6 +925,8 @@ const Repository: Component = () => {
                             onCreateBranch={handleGraphCreateBranch}
                             onCherryPick={handleGraphCherryPick}
                             onCreatePullRequest={handleCreatePullRequest}
+                            onCheckoutBranch={handleGraphCheckoutBranch}
+                            onDeleteBranch={handleGraphDeleteBranch}
                           />
                         </div>
                         <Show when={commitStore.graphData?.truncated}>
@@ -1083,6 +1151,8 @@ const Repository: Component = () => {
               onStageAll={handleStageAll}
               onUnstageAll={handleUnstageAll}
               onSelectFile={handleSelectFile}
+              onDiscard={handleDiscard}
+              onDiscardAll={handleDiscardAll}
             />
           </div>
 

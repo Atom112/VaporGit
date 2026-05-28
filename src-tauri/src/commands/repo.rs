@@ -198,6 +198,26 @@ pub async fn get_conflicts(path: String) -> Result<Vec<ConflictEntry>, String> {
 }
 
 #[tauri::command]
+pub async fn get_conflict_content(path: String, file: String, stage: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::get_conflict_content(&repo, &file, &stage)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn discard_files(path: String, files: Vec<String>) -> Result<Vec<crate::models::status::FileStatus>, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::discard_files(&repo, &files)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
 pub async fn resolve_conflict(path: String, file: String, resolution: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;

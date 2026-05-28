@@ -182,9 +182,55 @@ pub fn delete_branch(repo: &Repository, name: &str) -> Result<(), String> {
         .find_branch(name, git2::BranchType::Local)
         .map_err(|e| format!("无法找到分支 {}: {}", name, e))?;
 
+    // Check if this is the current branch
+    let head = repo.head().ok();
+    if let Some(h) = head {
+        if let Some(shorthand) = h.shorthand() {
+            if shorthand == name {
+                return Err(format!("无法删除当前检出的分支 '{}'，请先切换到其他分支", name));
+            }
+        }
+    }
+
     branch
         .delete()
         .map_err(|e| format!("删除分支失败: {}", e))?;
+
+    Ok(())
+}
+
+pub fn delete_remote_branch(repo: &Repository, remote_name: &str, branch_name: &str) -> Result<(), String> {
+    let mut remote = repo
+        .find_remote(remote_name)
+        .map_err(|e| format!("无法找到远程 {}: {}", remote_name, e))?;
+
+    let refspec = format!(":refs/heads/{}", branch_name);
+
+    // Try loading GitHub token for HTTPS authentication
+    let token = crate::github::auth::load_token().ok().flatten();
+    let remote_url = remote.url().map(|u| u.to_string());
+
+    let mut cb = git2::RemoteCallbacks::new();
+    cb.credentials(move |_url, username_from_url, allowed| {
+        if let (Some(ref token), Some(ref url)) = (&token, &remote_url) {
+            if url.starts_with("https://") && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+                return git2::Cred::userpass_plaintext("x-access-token", token);
+            }
+        }
+        let user = username_from_url.unwrap_or("git");
+        git2::Cred::ssh_key_from_agent(user).or_else(|_| git2::Cred::default())
+    });
+
+    let mut push_opts = git2::PushOptions::new();
+    push_opts.remote_callbacks(cb);
+
+    remote
+        .push(&[&refspec], Some(&mut push_opts))
+        .map_err(|e| format!("删除远程分支失败: {}", e))?;
+
+    remote
+        .disconnect()
+        .map_err(|e| format!("断开远程连接失败: {}", e))?;
 
     Ok(())
 }

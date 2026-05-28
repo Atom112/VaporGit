@@ -2,7 +2,7 @@ import { Component, createEffect, createMemo, createSignal, Show, For, onCleanup
 import { Portal } from 'solid-js/web';
 import { tt } from '../../i18n';
 import type { GraphNode, CommitGraphData } from '../../lib/types';
-import { revertCommit, createTag } from '../../lib/tauriCommands';
+import { revertCommit, createTag, deleteRemoteBranch as deleteRemoteBranchCmd, getRemotes } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 
 const COLORS = [
@@ -30,6 +30,8 @@ interface CommitGraphProps {
   onCreateBranch?: (commitId: string) => void;
   onCherryPick?: (commitId: string) => void;
   onCreatePullRequest?: (commitId: string) => void;
+  onCheckoutBranch?: (branchName: string) => void;
+  onDeleteBranch?: (branchName: string) => void;
 }
 
 const CommitGraph: Component<CommitGraphProps> = (props) => {
@@ -404,6 +406,80 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
     closeContextMenu();
   };
 
+  /** Get effective branch labels for the context menu target node,
+   *  falling back to inferred labels when the node has no direct labels. */
+  function getMenuBranchLabels(): string[] {
+    const menu = ctxMenu();
+    if (!menu) return [];
+    if (menu.node.branchLabels.length > 0) return menu.node.branchLabels;
+    const inferred = inferredLabels().get(menu.node.id);
+    return inferred || [];
+  }
+
+  const handleContextCheckoutBranch = () => {
+    const branchLabels = getMenuBranchLabels();
+    if (branchLabels.length === 0) return;
+    props.onCheckoutBranch?.(branchLabels[0]);
+    closeContextMenu();
+  };
+
+  const handleContextDeleteBranch = () => {
+    const branchLabels = getMenuBranchLabels();
+    if (branchLabels.length === 0) return;
+    closeContextMenu();
+    // Open delete branch dialog with the first branch label
+    const branchName = branchLabels[0];
+    if (branchName) {
+      setDeleteBranchTarget(branchName);
+      setDeleteBranchPhase('enter');
+      setDeleteScope('both');
+      setDeleteLoading(false);
+      setDeleteError(null);
+    }
+  };
+
+  const closeDeleteBranchDialog = () => {
+    if (deleteBranchPhase() === 'exit') return;
+    setDeleteBranchPhase('exit');
+    setTimeout(() => {
+      setDeleteBranchPhase(null);
+      setDeleteBranchTarget(null);
+      setDeleteError(null);
+    }, 120);
+  };
+
+  const handleDeleteBranchConfirm = async () => {
+    const branch = deleteBranchTarget();
+    if (!branch || !props.repoPath) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      const scope = deleteScope();
+      if (scope === 'local' || scope === 'both') {
+        await props.onDeleteBranch?.(branch);
+      }
+      if (scope === 'remote' || scope === 'both') {
+        // Delete remote branch via the remote command
+        const remotes = await getRemotes(props.repoPath);
+        if (remotes.length > 0) {
+          await deleteRemoteBranchCmd(props.repoPath, remotes[0].name, branch);
+        }
+      }
+      closeDeleteBranchDialog();
+    } catch (e) {
+      setDeleteError(String(e));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  // ── Delete branch dialog state ──
+  const [deleteBranchPhase, setDeleteBranchPhase] = createSignal<'enter' | 'exit' | null>(null);
+  const [deleteBranchTarget, setDeleteBranchTarget] = createSignal<string | null>(null);
+  const [deleteScope, setDeleteScope] = createSignal<'local' | 'remote' | 'both'>('both');
+  const [deleteLoading, setDeleteLoading] = createSignal(false);
+  const [deleteError, setDeleteError] = createSignal<string | null>(null);
+
   // ── Revert dialog ──
   const [showRevert, setShowRevert] = createSignal<'enter' | 'exit' | null>(null);
   const [revertLoading, setRevertLoading] = createSignal(false);
@@ -638,7 +714,20 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
             onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}
           >
             <div
-              class={`fixed w-48 py-1 rounded-xl bg-white/10 backdrop-blur-2xl border border-white/10 shadow-2xl text-sm overflow-hidden ${
+              ref={(el) => {
+                requestAnimationFrame(() => {
+                  const rect = el.getBoundingClientRect();
+                  const vw = window.innerWidth;
+                  const vh = window.innerHeight;
+                  let left = menu().x;
+                  let top = menu().y;
+                  if (left + rect.width > vw - 8) left = Math.max(8, vw - rect.width - 8);
+                  if (top + rect.height > vh - 8) top = Math.max(8, vh - rect.height - 8);
+                  el.style.left = `${left}px`;
+                  el.style.top = `${top}px`;
+                });
+              }}
+              class={`fixed min-w-56 py-1 rounded-xl bg-white/10 backdrop-blur-2xl border border-white/10 shadow-2xl text-sm overflow-hidden ${
                 menu().phase === 'enter'
                   ? 'animate-context-menu-enter'
                   : 'animate-context-menu-exit'
@@ -666,6 +755,44 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 </svg>
                 {tt('commit.createBranchFrom')}
               </button>
+              <Show when={(() => {
+                const labels = menu().node.branchLabels.length > 0
+                  ? menu().node.branchLabels
+                  : (inferredLabels().get(menu().node.id) || []);
+                return labels.length > 0 ? labels[0] : false;
+              })()}>
+                {(branchName) => {
+                  const c = COLORS[menu().node.color % COLORS.length];
+                  return (
+                  <>
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                  onClick={handleContextCheckoutBranch}
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span class="truncate flex items-center gap-1.5">
+                    {tt('commit.checkoutBranch')}
+                    <span class="text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap" style={{ color: c, 'background-color': `${c}20` }}>{branchName()}</span>
+                  </span>
+                </button>
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+                  onClick={handleContextDeleteBranch}
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span class="truncate flex items-center gap-1.5">
+                    {tt('commit.deleteBranch')}
+                    <span class="text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap" style={{ color: c, 'background-color': `${c}20` }}>{branchName()}</span>
+                  </span>
+                </button>
+                  </>
+                  );
+                }}
+              </Show>
               <button
                 class="w-full text-left px-3 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
                 onClick={handleContextCherryPick}
@@ -802,6 +929,89 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 disabled={tagLoading() || !tagName().trim()}
               >
                 {tagLoading() ? tt('common.loading') : tt('common.create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Show>
+
+    {/* ── Delete branch dialog ── */}
+    <Show when={deleteBranchPhase() && deleteBranchTarget()}>
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class={`w-96 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
+          deleteBranchPhase() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
+        }`}>
+          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <h2 class="text-sm font-bold text-red-400">{tt('commit.deleteBranch')}</h2>
+            <button
+              class="text-xs opacity-50 hover:text-red-400 transition-colors"
+              onClick={closeDeleteBranchDialog}
+            >
+              {tt('common.close')}
+            </button>
+          </div>
+          <div class="p-4 space-y-4">
+            <div>
+              <label class="block text-xs font-medium mb-1 opacity-70">{tt('repo.branchName')}</label>
+              <div class="text-sm font-mono px-3 py-2 rounded-lg bg-white/10 border border-white/10">
+                {deleteBranchTarget()}
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-2 opacity-70">{tt('commit.deleteScopeLabel')}</label>
+              <div class="space-y-2">
+                <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="deleteScope"
+                    class="accent-cyan-400"
+                    checked={deleteScope() === 'local'}
+                    onChange={() => setDeleteScope('local')}
+                  />
+                  <span class="text-sm">{tt('commit.scopeLocal')}</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="deleteScope"
+                    class="accent-purple-400"
+                    checked={deleteScope() === 'remote'}
+                    onChange={() => setDeleteScope('remote')}
+                  />
+                  <span class="text-sm">{tt('commit.scopeRemote')}</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="deleteScope"
+                    class="accent-red-400"
+                    checked={deleteScope() === 'both'}
+                    onChange={() => setDeleteScope('both')}
+                  />
+                  <span class="text-sm">{tt('commit.scopeBoth')}</span>
+                </label>
+              </div>
+            </div>
+            <Show when={deleteError()}>
+              <div class="p-2 rounded bg-red-500/20 border border-red-500/30 text-red-200 text-xs">
+                {deleteError()}
+              </div>
+            </Show>
+            <div class="flex gap-2 justify-end">
+              <button
+                class="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm transition-colors"
+                onClick={closeDeleteBranchDialog}
+                disabled={deleteLoading()}
+              >
+                {tt('common.cancel')}
+              </button>
+              <button
+                class="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-sm font-medium transition-colors"
+                onClick={handleDeleteBranchConfirm}
+                disabled={deleteLoading()}
+              >
+                {deleteLoading() ? tt('commit.deleting') : tt('commit.confirmDelete')}
               </button>
             </div>
           </div>

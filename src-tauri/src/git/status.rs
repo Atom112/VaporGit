@@ -247,6 +247,105 @@ pub fn get_conflicts(repo: &Repository) -> Result<Vec<ConflictEntry>, String> {
     Ok(result)
 }
 
+pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Result<String, String> {
+    let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+
+    let conflicts = index.conflicts()
+        .map_err(|e| format!("无法获取冲突迭代器: {}", e))?;
+
+    for conflict_result in conflicts {
+        let conflict = match conflict_result {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let conflict_path = conflict
+            .ancestor
+            .as_ref()
+            .or_else(|| conflict.our.as_ref())
+            .or_else(|| conflict.their.as_ref())
+            .map(|e| std::str::from_utf8(&e.path).unwrap_or(""))
+            .unwrap_or("")
+            .to_string();
+
+        if conflict_path != file {
+            continue;
+        }
+
+        let entry = match stage {
+            "ours" => conflict.our,
+            "theirs" => conflict.their,
+            "ancestor" => conflict.ancestor,
+            _ => return Err("无效的阶段参数，请使用 'ours'、'theirs' 或 'ancestor'".to_string()),
+        };
+
+        if let Some(e) = entry {
+            let blob = repo.find_blob(e.id).map_err(|_| format!("无法读取文件 '{}' 的内容", file))?;
+            if blob.is_binary() {
+                return Ok("[二进制文件]".to_string());
+            }
+            let content = std::str::from_utf8(blob.content())
+                .map_err(|_| "文件内容不是有效的 UTF-8 文本".to_string())?;
+            return Ok(content.to_string());
+        }
+    }
+
+    Ok(String::new())
+}
+
+pub fn discard_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus>, String> {
+    let workdir = repo.workdir().ok_or_else(|| "无法获取工作目录".to_string())?;
+    let head = repo.head().ok();
+    let head_tree = head.as_ref().and_then(|h| h.peel_to_tree().ok());
+
+    let mut tracked = Vec::new();
+    let mut untracked = Vec::new();
+
+    for file in files {
+        let path = std::path::Path::new(file);
+        if head_tree.as_ref().map_or(false, |tree| tree.get_path(path).is_ok()) {
+            tracked.push(file.clone());
+        } else {
+            untracked.push(file.clone());
+        }
+    }
+
+    // Checkout tracked files from HEAD (restores working tree + index)
+    if !tracked.is_empty() {
+        let mut checkout = git2::build::CheckoutBuilder::new();
+        checkout.force().update_index(true);
+        for f in &tracked {
+            checkout.path(std::path::Path::new(f.as_str()));
+        }
+        repo.checkout_head(Some(&mut checkout))
+            .map_err(|e| format!("无法撤销文件更改: {}", e))?;
+    }
+
+    // Delete untracked/new files from disk and remove from index
+    if !untracked.is_empty() {
+        for file in &untracked {
+            let abs_path = workdir.join(file);
+            if abs_path.exists() {
+                if abs_path.is_dir() {
+                    std::fs::remove_dir_all(&abs_path)
+                        .map_err(|e| format!("无法删除目录 '{}': {}", file, e))?;
+                } else {
+                    std::fs::remove_file(&abs_path)
+                        .map_err(|e| format!("无法删除文件 '{}': {}", file, e))?;
+                }
+            }
+        }
+        let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+        for file in &untracked {
+            index.remove_path(std::path::Path::new(file)).ok();
+        }
+        index.write().map_err(|e| format!("写入索引失败: {}", e))?;
+        index.read(true).map_err(|e| format!("重读索引失败: {}", e))?;
+    }
+
+    get_status(repo)
+}
+
 pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Result<(), String> {
     let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
     let path = std::path::Path::new(file);
