@@ -27,7 +27,7 @@ import {
   redo as redoLast,
   fetch as fetchRemote,
   pull as pullRemote,
-  push as pushRemote,
+  pushWithAutoCreate,
   getRemotes,
   checkSubmodules,
   openTerminal,
@@ -44,7 +44,9 @@ import StatusBar from '../components/layout/StatusBar';
 import StashPanel from '../components/git/StashPanel';
 import ConflictResolver from '../components/git/ConflictResolver';
 import PRCreateDialog from '../components/github/PRCreateDialog';
+import GiteePRCreateDialog from '../components/gitee/GiteePRCreateDialog';
 import { githubStore } from '../stores/githubStore';
+import { giteeStore } from '../stores/giteeStore';
 import InteractiveRebase from '../components/git/InteractiveRebase';
 import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
 import TerminalPanel from '../components/terminal/TerminalPanel';
@@ -585,8 +587,12 @@ const Repository: Component = () => {
     if (!path || remoteActionLoading()) return;
     setRemoteActionLoading(true);
     try {
-      await pushRemote(path, settingsStore.defaultRemoteName);
-      addToast(tt('repo.pushSuccess'), 'success');
+      const result = await pushWithAutoCreate(path, settingsStore.defaultRemoteName);
+      if (result === 'auto_created_and_pushed') {
+        addToast(tt('repo.pushAutoCreateSuccess'), 'success');
+      } else {
+        addToast(tt('repo.pushSuccess'), 'success');
+      }
       await refreshGraph(true);
     } catch (e) {
       addToast(ttf('repo.pushFailed', describeError(e)), 'error');
@@ -638,6 +644,7 @@ const Repository: Component = () => {
   };
 
   // ── PR creation from commit detail ──
+  const [prCreatePlatform, setPrCreatePlatform] = createSignal<'github' | 'gitee'>('github');
   const handleCreatePullRequest = async () => {
     const path = repoPath();
     if (!path) return;
@@ -648,13 +655,21 @@ const Repository: Component = () => {
         addToast('未找到 origin 远程仓库', 'error');
         return;
       }
-      const match = origin.url.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
-      if (!match) {
-        addToast('远程仓库不是 GitHub 地址', 'error');
+      const ghMatch = origin.url.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+      if (ghMatch) {
+        setPrCreatePlatform('github');
+        setPrCreateInfo({ owner: ghMatch[1], repo: ghMatch[2].replace(/\.git$/, '') });
+        setShowPRCreate(true);
         return;
       }
-      setPrCreateInfo({ owner: match[1], repo: match[2].replace(/\.git$/, '') });
-      setShowPRCreate(true);
+      const gtMatch = origin.url.match(/gitee\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+      if (gtMatch) {
+        setPrCreatePlatform('gitee');
+        setPrCreateInfo({ owner: gtMatch[1], repo: gtMatch[2].replace(/\.git$/, '') });
+        setShowPRCreate(true);
+        return;
+      }
+      addToast('远程仓库不是 GitHub 或 Gitee 地址', 'error');
     } catch (e) {
       addToast(`获取远程仓库信息失败: ${describeError(e)}`, 'error');
     }
@@ -1075,6 +1090,17 @@ const Repository: Component = () => {
                   {tt('repo.prs')}
                 </A>
               )}
+              {giteeStore.authenticated && (
+                <A
+                  class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors flex items-center justify-center gap-1"
+                  href="/gitee-pulls"
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  {tt('repo.prs')}
+                </A>
+              )}
             </div>
             <div class="flex gap-1.5">
               <button
@@ -1201,8 +1227,20 @@ const Repository: Component = () => {
       </Show>
 
       {/* PR Create Dialog */}
-      <Show when={showPRCreate() && prCreateInfo() && githubStore.authenticated}>
+      <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'github' && githubStore.authenticated}>
         <PRCreateDialog
+          owner={prCreateInfo()!.owner}
+          repo={prCreateInfo()!.repo}
+          defaultBase="main"
+          onClose={() => setShowPRCreate(false)}
+          onCreated={() => {
+            setShowPRCreate(false);
+            addToast(tt('pr.createdGeneric'), 'success');
+          }}
+        />
+      </Show>
+      <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'gitee' && giteeStore.authenticated}>
+        <GiteePRCreateDialog
           owner={prCreateInfo()!.owner}
           repo={prCreateInfo()!.repo}
           defaultBase="main"

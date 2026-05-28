@@ -1,10 +1,14 @@
 import { githubStore, setGithubStore, setAuthenticated, resetLogin } from '../../stores/githubStore';
-import { githubLogin } from '../../lib/tauriCommands';
+import { clearGiteeAuth } from '../../stores/giteeStore';
+import { githubLogin, giteeLogout } from '../../lib/tauriCommands';
 import { describeError } from '../../lib/gitErrorDesc';
 
 const GitHubLogin = () => {
   const startLogin = async () => {
     setGithubStore({ loginPhase: 'authorizing', error: null, loading: true });
+    // Logout Gitee first — platforms are mutually exclusive
+    try { await giteeLogout(); } catch { /* ignore */ }
+    clearGiteeAuth();
     try {
       const user = await githubLogin();
       setAuthenticated(user);

@@ -1,5 +1,17 @@
-use git2::{Cred, RemoteCallbacks, Repository};
 use crate::models::remote::RemoteInfo;
+use git2::{Cred, RemoteCallbacks, Repository};
+
+/// Get the push URL (or fallback URL) for a named remote.
+pub fn get_push_url(repo: &Repository, remote_name: &str) -> Result<String, String> {
+    let remote = repo
+        .find_remote(remote_name)
+        .map_err(|e| format!("无法找到远程 {}: {}", remote_name, e))?;
+    remote
+        .pushurl()
+        .map(|u| u.to_string())
+        .or_else(|| remote.url().map(|u| u.to_string()))
+        .ok_or_else(|| format!("远程 {} 没有 URL", remote_name))
+}
 
 pub fn get_remotes(repo: &Repository) -> Result<Vec<RemoteInfo>, String> {
     let remotes = repo
@@ -176,15 +188,24 @@ pub fn push(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
 
     let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
 
-    // Load GitHub token for HTTPS authentication
-    let token = crate::github::auth::load_token().ok().flatten();
+    // Load platform tokens for HTTPS authentication
+    let github_token = crate::github::auth::load_token().ok().flatten();
+    let gitee_token = crate::gitee::auth::token_store().load().ok().flatten();
     let remote_url = remote.pushurl().map(|u| u.to_string()).or_else(|| remote.url().map(|u| u.to_string()));
 
     let mut cb = RemoteCallbacks::new();
     cb.credentials(move |_url, username_from_url, allowed| {
-        if let (Some(ref token), Some(ref url)) = (&token, &remote_url) {
+        if let Some(ref url) = remote_url {
             if url.starts_with("https://") && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
-                return Cred::userpass_plaintext("x-access-token", token);
+                if url.contains("github.com") {
+                    if let Some(ref token) = github_token {
+                        return Cred::userpass_plaintext("x-access-token", token);
+                    }
+                } else if url.contains("gitee.com") {
+                    if let Some(ref token) = gitee_token {
+                        return Cred::userpass_plaintext("oauth2", token);
+                    }
+                }
             }
         }
         let user = username_from_url.unwrap_or("git");

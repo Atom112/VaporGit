@@ -283,3 +283,149 @@ export interface PRComment {
   createdAt: string;
   updatedAt: string;
 }
+
+// === GitLab types ===
+
+export interface GitLabUser {
+  id: number;
+  username: string;
+  name: string | null;
+  avatarUrl: string;
+  webUrl: string;
+  email: string | null;
+  bio: string | null;
+  publicRepos?: number;
+  createdAt?: string | null;
+}
+
+export interface GitLabAuthStatus {
+  authenticated: boolean;
+  user: GitLabUser | null;
+}
+
+// === GitLab types ===
+
+export interface GitLabUser {
+  id: number;
+  username: string;
+  name: string | null;
+  avatarUrl: string;
+  webUrl: string;
+  email: string | null;
+  bio: string | null;
+  publicRepos?: number;
+  createdAt?: string | null;
+}
+
+export interface GitLabAuthStatus {
+  authenticated: boolean;
+  user: GitLabUser | null;
+}
+
+// === Gitee types ===
+
+export interface GiteeUser {
+  id: number;
+  login: string;
+  name: string | null;
+  avatarUrl: string;
+  url: string;
+  email: string | null;
+  bio: string | null;
+  publicRepos?: number;
+  createdAt?: string | null;
+}
+
+export interface GiteeAuthStatus {
+  authenticated: boolean;
+  user: GiteeUser | null;
+}
+
+export interface GiteeRepo {
+  id: number;
+  name: string;
+  fullName: string;
+  owner: { login: string; id: number; avatarUrl: string };
+  htmlUrl: string;
+  description: string | null;
+  fork: boolean;
+  cloneUrl: string;
+  sshUrl: string | null;
+  language: string | null;
+  stargazersCount: number;
+  forksCount: number;
+  defaultBranch: string;
+  updatedAt: string;
+  private: boolean;
+}
+
+export interface GiteeBranch {
+  name: string;
+  commit: { sha: string };
+}
+
+export interface GiteePullRequest {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: string;
+  htmlUrl: string;
+  diffUrl: string;
+  head: GiteePRBranchRef;
+  base: GiteePRBranchRef;
+  user: { login: string; id: number; avatarUrl: string };
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+  mergedAt: string | null;
+  merged: boolean;
+  mergeable: boolean | null;
+  draft: boolean;
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
+}
+
+export interface GiteePRBranchRef {
+  label: string;
+  ref: string;
+  sha: string;
+  repo: {
+    id: number;
+    name: string;
+    fullName: string;
+    owner: { login: string; id: number; avatarUrl: string };
+    htmlUrl: string;
+    cloneUrl: string;
+    defaultBranch: string;
+  } | null;
+}
+
+export interface GiteePullRequestFile {
+  sha: string;
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  rawUrl: string;
+  patch: string | null;
+}
+
+export interface GiteePRComment {
+  id: number;
+  body: string;
+  path: string | null;
+  position: number | null;
+  commitId: string | null;
+  user: { login: string; id: number; avatarUrl: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GiteeMergePullResult {
+  merged: boolean;
+  message: string;
+  sha: string | null;
+}

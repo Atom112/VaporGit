@@ -5,8 +5,9 @@ import Titlebar from "./components/layout/Titlebar";
 import PageTransition from "./components/layout/PageTransition";
 import ToastContainer from "./components/ui/ToastContainer";
 import UpdateNotification from "./components/ui/UpdateNotification";
-import { githubCheckAuth, checkUpdate } from "./lib/tauriCommands";
+import { githubCheckAuth, giteeCheckAuth, checkUpdate } from "./lib/tauriCommands";
 import { setAuthenticated } from "./stores/githubStore";
+import { setGiteeAuthenticated } from "./stores/giteeStore";
 import { showUpdate } from "./stores/updateStore";
 import { settingsStore } from "./stores/settingsStore";
 
@@ -44,6 +45,17 @@ export default function App(props: { children?: any }) {
       }
     } catch {
       // No stored session — not authenticated, that's fine
+    }
+  });
+
+  onMount(async () => {
+    try {
+      const status = await giteeCheckAuth();
+      if (status.authenticated && status.user) {
+        setGiteeAuthenticated(status.user);
+      }
+    } catch {
+      // ignore
     }
   });
 

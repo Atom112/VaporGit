@@ -4,9 +4,11 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { openRepo, getStatus, cloneRepo } from '../lib/tauriCommands';
 import { repoStore, setRepoStore } from '../stores/repoStore';
 import { githubStore } from '../stores/githubStore';
+import { giteeStore } from '../stores/giteeStore';
 import { setDiffStore } from '../stores/diffStore';
 import { addToast } from '../stores/toastStore';
 import GitHubRepoList from '../components/github/GitHubRepoList';
+import GiteeRepoList from '../components/gitee/GiteeRepoList';
 import CreateRepoDialog from '../components/ui/CreateRepoDialog';
 import { tt } from '../i18n';
 import { describeError } from '../lib/gitErrorDesc';
@@ -168,7 +170,7 @@ const Home: Component = () => {
         </div>
       </div>
 
-      {/* GitHub repos — below center */}
+      {/* Platform repos — below center */}
       <div class="flex justify-center p-8 pt-0 min-h-0 overflow-hidden">
         <div class="min-w-[560px] max-w-[70%] w-full min-h-0 flex flex-col">
           <Show when={githubStore.authenticated}>
@@ -181,6 +183,19 @@ const Home: Component = () => {
               </h2>
               <div class="flex-1 min-h-0 flex flex-col">
                 <GitHubRepoList onClone={handleCloneFromRepo} />
+              </div>
+            </div>
+          </Show>
+          <Show when={giteeStore.authenticated}>
+            <div class="mt-8 min-h-0 flex flex-col">
+              <h2 class="text-lg font-bold mb-3 flex items-center gap-2 shrink-0">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M11.984 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.016 0zm6.09 5.333c.328 0 .593.266.592.593v1.482a.594.594 0 0 1-.593.592H9.777c-.982 0-1.778.796-1.778 1.778v5.63c0 .327.266.592.593.592h5.63c.982 0 1.778-.796 1.778-1.778v-.296a.593.593 0 0 0-.592-.593h-4.15a.592.592 0 0 1-.592-.592v-1.482a.593.593 0 0 1 .593-.592h6.815c.327 0 .593.265.593.592v3.408a4 4 0 0 1-4 4H5.926a.593.593 0 0 1-.593-.593V9.778a4.444 4.444 0 0 1 4.445-4.444h8.296z" />
+                </svg>
+                {tt('gitee.repos')}
+              </h2>
+              <div class="flex-1 min-h-0 flex flex-col">
+                <GiteeRepoList onClone={handleCloneFromRepo} />
               </div>
             </div>
           </Show>
