@@ -45,6 +45,7 @@ export interface FileStatus {
   path: string;
   status: StatusKind;
   staged: boolean;
+  oldPath?: string;
 }
 
 export type StatusKind =

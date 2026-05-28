@@ -1,12 +1,13 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { open } from '@tauri-apps/plugin-dialog';
-import { initRepo, githubCreateRepo, pushToGitHub, getStatus } from '../lib/tauriCommands';
-import { githubStore } from '../stores/githubStore';
-import { setRepoStore } from '../stores/repoStore';
-import { setDiffStore } from '../stores/diffStore';
-import { addToast } from '../stores/toastStore';
-import { tt } from '../i18n';
-import type { GitHubRepo } from '../lib/types';
+import { initRepo, githubCreateRepo, pushToGitHub, getStatus } from '../../lib/tauriCommands';
+import { githubStore } from '../../stores/githubStore';
+import { setRepoStore } from '../../stores/repoStore';
+import { setDiffStore } from '../../stores/diffStore';
+import { addToast } from '../../stores/toastStore';
+import { tt, ttf } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
+import type { GitHubRepo } from '../../lib/types';
 
 interface Props {
   phase: 'closed' | 'enter' | 'exit';
@@ -62,7 +63,7 @@ const CreateRepoDialog: Component<Props> = (props) => {
         const branch = repoInfo.headBranch || 'main';
         await pushToGitHub(fullPath, githubRepo.owner.login, githubRepo.name, branch);
 
-        addToast(`${tt('createRepo.success')} 并推送到 GitHub: ${githubRepo.fullName}`, 'success');
+        addToast(ttf('createRepo.pushSuccess', githubRepo.fullName), 'success');
       } else {
         addToast(tt('createRepo.success'), 'success');
       }
@@ -81,8 +82,8 @@ const CreateRepoDialog: Component<Props> = (props) => {
       props.onClose();
       props.onNavigate();
     } catch (e) {
-      setError(String(e));
-      addToast(`${tt('createRepo.error')}: ${e}`, 'error');
+      setError(describeError(e));
+      addToast(`${tt('createRepo.error')}: ${describeError(e)}`, 'error');
     } finally {
       setLoading(false);
     }

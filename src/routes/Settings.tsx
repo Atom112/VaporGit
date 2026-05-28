@@ -4,8 +4,8 @@ import { githubStore, clearAuth } from '../stores/githubStore';
 import { githubLogout, checkUpdate } from '../lib/tauriCommands';
 import { showUpdate } from '../stores/updateStore';
 import { addToast } from '../stores/toastStore';
-import CustomSelect from '../components/CustomSelect';
-import GitHubLogin from '../components/GitHubLogin';
+import CustomSelect from '../components/ui/CustomSelect';
+import GitHubLogin from '../components/github/GitHubLogin';
 import { version } from '../../package.json';
 import { i18nState, setLang, tt } from '../i18n';
 

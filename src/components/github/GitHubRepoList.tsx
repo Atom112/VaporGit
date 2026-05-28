@@ -1,8 +1,8 @@
 import { Component, createSignal, createEffect, Show, For } from 'solid-js';
-import { githubListRepos } from '../lib/tauriCommands';
-import { githubStore, cacheRepos } from '../stores/githubStore';
-import type { GitHubRepo } from '../lib/types';
-import { tt, ttf } from '../i18n';
+import { githubListRepos } from '../../lib/tauriCommands';
+import { githubStore, cacheRepos } from '../../stores/githubStore';
+import type { GitHubRepo } from '../../lib/types';
+import { tt, ttf } from '../../i18n';
 
 interface Props {
   onClone: (url: string) => void;

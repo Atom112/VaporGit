@@ -1,9 +1,9 @@
 import { Component, For, Show, createSignal, createResource, createEffect } from 'solid-js';
-import type { DiffHunk, DiffResult } from '../lib/types';
-import { getFileContent, getFileBase64, checkLfs } from '../lib/tauriCommands';
+import type { DiffHunk, DiffResult } from '../../lib/types';
+import { getFileContent, getFileBase64, checkLfs } from '../../lib/tauriCommands';
 import 'highlight.js/styles/github-dark.css';
-import { detectLanguage, highlightLine, highlightFull } from '../lib/syntax';
-import { settingsStore } from '../stores/settingsStore';
+import { detectLanguage, highlightLine, highlightFull } from '../../lib/syntax';
+import { settingsStore } from '../../stores/settingsStore';
 
 interface DiffViewProps {
   diffResult?: DiffResult;

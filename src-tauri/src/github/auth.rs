@@ -183,7 +183,7 @@ async fn exchange_code_for_token(code: &str, verifier: &str, port: u16) -> Resul
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!("Token exchange failed ({status}): {body}"));
+        return Err(format!("HTTP {}: {}", status, body));
     }
 
     let body: serde_json::Value =

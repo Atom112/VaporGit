@@ -28,14 +28,8 @@ impl GitHubClient {
     }
 
     fn check_response_status(&self, status: u16, body: &str) -> Result<(), String> {
-        if status == 401 {
-            return Err("unauthorized".to_string());
-        }
-        if status == 403 {
-            return Err("rate_limited".to_string());
-        }
         if !(200..300).contains(&status) {
-            return Err(format!("GitHub API error ({}): {}", status, body));
+            return Err(format!("HTTP {}: {}", status, body));
         }
         Ok(())
     }
@@ -107,13 +101,13 @@ impl GitHubClient {
             .map_err(|e| format!("Network error: {}", e))?;
 
         let status = resp.status();
+        let body = resp.text().await.map_err(|e| format!("Failed to read response: {}", e))?;
+
         if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
             self.check_response_status(status.as_u16(), &body)?;
-            return Err(format!("GitHub API error ({}): {}", status, body));
         }
 
-        resp.text().await.map_err(|e| format!("Failed to read response: {}", e))
+        Ok(body)
     }
 
     /// Get the authenticated user's profile.

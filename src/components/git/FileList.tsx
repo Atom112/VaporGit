@@ -1,6 +1,6 @@
 import { Component, For, Show } from 'solid-js';
-import type { FileStatus } from '../lib/types';
-import { tt, ttf } from '../i18n';
+import type { FileStatus } from '../../lib/types';
+import { tt, ttf } from '../../i18n';
 
 interface FileListProps {
   stagedFiles: FileStatus[];
@@ -87,7 +87,13 @@ const FileList: Component<FileListProps> = (props) => {
                 >
                   {statusLabel(file.status)}
                 </span>
-                <span class="truncate flex-1">{file.path}</span>
+                <span class="truncate flex-1" title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}>
+                  <Show when={file.oldPath}>
+                    <span class="opacity-50 line-through mr-1">{file.oldPath}</span>
+                    <span class="opacity-40 mx-0.5">→</span>
+                  </Show>
+                  {file.path}
+                </span>
                 <button
                   class="text-[11px] px-2 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-colors shrink-0"
                   onClick={(e) => {
@@ -132,7 +138,13 @@ const FileList: Component<FileListProps> = (props) => {
                 >
                   {statusLabel(file.status)}
                 </span>
-                <span class="truncate flex-1">{file.path}</span>
+                <span class="truncate flex-1" title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}>
+                  <Show when={file.oldPath}>
+                    <span class="opacity-50 line-through mr-1">{file.oldPath}</span>
+                    <span class="opacity-40 mx-0.5">→</span>
+                  </Show>
+                  {file.path}
+                </span>
                 <button
                   class="text-[11px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/70 transition-colors shrink-0"
                   onClick={(e) => {

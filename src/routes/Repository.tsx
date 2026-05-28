@@ -33,20 +33,21 @@ import {
   closeTerminal,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
-import FileList from '../components/FileList';
-import CommitDetail from '../components/CommitDetail';
-import CommitGraph from '../components/CommitGraph';
-import BranchList from '../components/BranchList';
-import DiffView from '../components/DiffView';
-import StatusBar from '../components/StatusBar';
-import StashPanel from '../components/StashPanel';
-import ConflictResolver from '../components/ConflictResolver';
-import PRCreateDialog from '../components/PRCreateDialog';
+import FileList from '../components/git/FileList';
+import CommitDetail from '../components/git/CommitDetail';
+import CommitGraph from '../components/git/CommitGraph';
+import BranchList from '../components/git/BranchList';
+import DiffView from '../components/git/DiffView';
+import StatusBar from '../components/layout/StatusBar';
+import StashPanel from '../components/git/StashPanel';
+import ConflictResolver from '../components/git/ConflictResolver';
+import PRCreateDialog from '../components/github/PRCreateDialog';
 import { githubStore } from '../stores/githubStore';
-import InteractiveRebase from '../components/InteractiveRebase';
-import KeyboardShortcuts from '../components/KeyboardShortcuts';
-import TerminalPanel from '../components/TerminalPanel';
-import { tt } from '../i18n';
+import InteractiveRebase from '../components/git/InteractiveRebase';
+import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
+import TerminalPanel from '../components/terminal/TerminalPanel';
+import { tt, ttf } from '../i18n';
+import { describeError } from '../lib/gitErrorDesc';
 
 const Repository: Component = () => {
   // ── State ──
@@ -281,12 +282,21 @@ const Repository: Component = () => {
     if (!path || staging()) return;
     setStaging(true);
     try {
+      const entry = { path: file.path, oldPath: file.oldPath };
+      let updated: FileStatus[];
       if (file.staged) {
-        await unstageFiles(path, [file.path]);
+        updated = await unstageFiles(path, [entry]);
       } else {
-        await stageFiles(path, [file.path]);
+        updated = await stageFiles(path, [entry]);
       }
-      await refreshStatus();
+      // Use the status returned by stage/unstage directly — it is the
+      // authoritative result after the index write and guarantees rename
+      // entries (delete+add) are paired into a single RENAMED record.
+      setDiffStore({ fileStatuses: updated });
+      const hasConflicts = updated.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        setShowConflictResolver(true);
+      }
     } catch (e) {
       console.error('Stage/unstage failed:', e);
     } finally {
@@ -304,11 +314,13 @@ const Repository: Component = () => {
     }
     setStaging(true);
     try {
-      await stageFiles(
-        path,
-        unstaged.map((f) => f.path)
-      );
-      await refreshStatus();
+      const entries = unstaged.map((f) => ({ path: f.path, oldPath: f.oldPath }));
+      const updated = await stageFiles(path, entries);
+      setDiffStore({ fileStatuses: updated });
+      const hasConflicts = updated.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        setShowConflictResolver(true);
+      }
       addToast(`已暂存 ${unstaged.length} 个文件`, 'success');
     } catch (e) {
       console.error('Stage all failed:', e);
@@ -325,11 +337,13 @@ const Repository: Component = () => {
     if (staged.length === 0) return;
     setStaging(true);
     try {
-      await unstageFiles(
-        path,
-        staged.map((f) => f.path)
-      );
-      await refreshStatus();
+      const entries = staged.map((f) => ({ path: f.path, oldPath: f.oldPath }));
+      const updated = await unstageFiles(path, entries);
+      setDiffStore({ fileStatuses: updated });
+      const hasConflicts = updated.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        setShowConflictResolver(true);
+      }
     } catch (e) {
       console.error('Unstage all failed:', e);
       addToast(`取消暂存失败: ${e}`, 'error');
@@ -500,10 +514,10 @@ const Repository: Component = () => {
     setRemoteActionLoading(true);
     try {
       await fetchRemote(path, settingsStore.defaultRemoteName);
-      addToast('Fetch 完成', 'success');
+      addToast(tt('repo.fetchSuccess'), 'success');
       await refreshGraph(true);
     } catch (e) {
-      addToast(`Fetch 失败: ${e}`, 'error');
+      addToast(ttf('repo.fetchFailed', describeError(e)), 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -518,7 +532,7 @@ const Repository: Component = () => {
       addToast(result, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`Pull 失败: ${e}`, 'error');
+      addToast(ttf('repo.pullFailed', describeError(e)), 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -530,10 +544,10 @@ const Repository: Component = () => {
     setRemoteActionLoading(true);
     try {
       await pushRemote(path, settingsStore.defaultRemoteName);
-      addToast('Push 完成', 'success');
+      addToast(tt('repo.pushSuccess'), 'success');
       await refreshGraph(true);
     } catch (e) {
-      addToast(`Push 失败: ${e}`, 'error');
+      addToast(ttf('repo.pushFailed', describeError(e)), 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -600,7 +614,7 @@ const Repository: Component = () => {
       setPrCreateInfo({ owner: match[1], repo: match[2].replace(/\.git$/, '') });
       setShowPRCreate(true);
     } catch (e) {
-      addToast(`获取远程仓库信息失败: ${e}`, 'error');
+      addToast(`获取远程仓库信息失败: ${describeError(e)}`, 'error');
     }
   };
 
@@ -1125,7 +1139,7 @@ const Repository: Component = () => {
           onClose={() => setShowPRCreate(false)}
           onCreated={() => {
             setShowPRCreate(false);
-            addToast('Pull Request 创建成功', 'success');
+            addToast(tt('pr.createdGeneric'), 'success');
           }}
         />
       </Show>

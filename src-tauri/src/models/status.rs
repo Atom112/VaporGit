@@ -6,6 +6,9 @@ pub struct FileStatus {
     pub path: String,
     pub status: StatusKind,
     pub staged: bool,
+    /// Previous path when status is Renamed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

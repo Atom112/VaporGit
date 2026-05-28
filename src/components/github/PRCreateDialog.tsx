@@ -1,9 +1,10 @@
 import { Component, createSignal, createResource, createMemo, Show } from 'solid-js';
-import { githubCreatePull, githubListBranches } from '../lib/tauriCommands';
-import CustomSelect from './CustomSelect';
-import { addToast } from '../stores/toastStore';
-import { commitStore } from '../stores/commitStore';
-import { tt, ttf } from '../i18n';
+import { githubCreatePull, githubListBranches } from '../../lib/tauriCommands';
+import CustomSelect from '../ui/CustomSelect';
+import { addToast } from '../../stores/toastStore';
+import { commitStore } from '../../stores/commitStore';
+import { tt, ttf } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
 
 interface Props {
   owner: string;
@@ -60,7 +61,7 @@ const PRCreateDialog: Component<Props> = (props) => {
       addToast(ttf('pr.created', pr.number), 'success');
       props.onCreated();
     } catch (e) {
-      setError(String(e));
+      setError(describeError(e));
     } finally {
       setSubmitting(false);
     }

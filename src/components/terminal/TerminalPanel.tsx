@@ -2,9 +2,9 @@ import { Component, createEffect, createSignal, onCleanup, onMount } from 'solid
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { resizeTerminal, writeTerminal, closeTerminal } from '../lib/tauriCommands';
+import { resizeTerminal, writeTerminal, closeTerminal } from '../../lib/tauriCommands';
 import { listen } from '@tauri-apps/api/event';
-import { tt } from '../i18n';
+import { tt } from '../../i18n';
 
 interface TerminalPanelProps {
   phase: 'enter' | 'exit' | null;

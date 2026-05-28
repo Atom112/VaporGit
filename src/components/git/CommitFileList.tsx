@@ -1,5 +1,5 @@
 import { Component, For, Show } from 'solid-js';
-import type { FileChange } from '../lib/types';
+import type { FileChange } from '../../lib/types';
 
 interface CommitFileListProps {
   files: FileChange[];

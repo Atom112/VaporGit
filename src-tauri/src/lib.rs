@@ -11,6 +11,7 @@ use commands::terminal::{close_terminal, open_terminal, resize_terminal, write_t
 use commands::diff::{check_lfs, get_file_base64, get_file_content, get_file_diff};
 use commands::remote::{fetch, get_remotes, pull, push};
 use commands::repo::{check_submodules, clone_repo, get_conflicts, get_recent_repos, get_status, init_repo, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
+use commands::splashscreen::close_splashscreen;
 use commands::stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_save};
 use commands::github::{
     check_update, github_check_auth, github_create_pull, github_create_pull_comment,
@@ -27,6 +28,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(terminal::TerminalProcess::new())
         .invoke_handler(tauri::generate_handler![
+            // splashscreen
+            close_splashscreen,
             // repo
             open_repo,
             init_repo,

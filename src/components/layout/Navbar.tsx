@@ -1,9 +1,9 @@
 import { Component, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
-import { githubStore, setGithubStore, setAuthenticated } from '../stores/githubStore';
-import { githubCheckAuth } from '../lib/tauriCommands';
-import GitHubUserMenu from './GitHubUserMenu';
-import { repoStore } from '../stores/repoStore';
+import { githubStore, setGithubStore, setAuthenticated } from '../../stores/githubStore';
+import { githubCheckAuth } from '../../lib/tauriCommands';
+import GitHubUserMenu from '../github/GitHubUserMenu';
+import { repoStore } from '../../stores/repoStore';
 
 const Navbar: Component = () => {
   onMount(async () => {
