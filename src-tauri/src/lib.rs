@@ -16,6 +16,7 @@ use commands::remote::{fetch, get_remotes, pull, push, push_with_auto_create};
 use commands::repo::{check_submodules, clone_repo, discard_files, get_conflict_content, get_conflicts, get_recent_repos, get_status, init_repo, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
 use commands::splashscreen::close_splashscreen;
 use commands::stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_save};
+use commands::tutorial::{create_demo_repo, delete_dir};
 use commands::github::{
     check_update, github_check_auth, github_create_pull, github_create_pull_comment,
     github_create_repo, github_get_asset, github_get_pull, github_get_pull_diff,
@@ -137,6 +138,9 @@ pub fn run() {
             gitee_get_pull_files,
             gitee_get_pull_diff,
             gitee_list_pull_comments,
+            // tutorial
+            create_demo_repo,
+            delete_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

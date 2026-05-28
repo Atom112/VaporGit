@@ -9,3 +9,4 @@ pub mod splashscreen;
 pub mod stash;
 pub mod tag;
 pub mod terminal;
+pub mod tutorial;

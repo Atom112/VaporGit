@@ -480,3 +480,13 @@ export async function giteeListPullComments(
 ): Promise<GiteePRComment[]> {
   return invoke('gitee_list_pull_comments', { owner, repo, number });
 }
+
+// === Tutorial ===
+
+export async function createDemoRepo(): Promise<string> {
+  return invoke('create_demo_repo');
+}
+
+export async function deleteDir(path: string): Promise<void> {
+  return invoke('delete_dir', { path });
+}

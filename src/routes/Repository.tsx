@@ -785,28 +785,30 @@ const Repository: Component = () => {
   return (
     <div class="h-full flex flex-col">
       <Show when={repoPath()} fallback={
-        <div class="flex-1 flex flex-col items-center justify-center p-8 overflow-auto animate-tree-enter">
-          <div class="max-w-xl w-full">
-            <h1 class="text-2xl font-bold mb-6 text-center">{tt('repo.noRepoOpen')}</h1>
+        <div class="flex-1 flex flex-col p-8 overflow-hidden animate-tree-enter">
+          <div class="max-w-xl w-full mx-auto flex-1 flex flex-col min-h-0">
+            <div class="shrink-0">
+              <h1 class="text-2xl font-bold mb-6 text-center">{tt('repo.noRepoOpen')}</h1>
 
-            <Show when={repoErrorPhase() !== 'closed'}>
-              <div class={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm space-y-2 ${
-                repoErrorPhase() === 'enter' ? 'animate-error-enter' : 'animate-error-exit'
-              }`}>
-                <p>{repoError()}</p>
-                <Show when={failedRepoPath()}>
-                  <button
-                    class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
-                    onClick={handleRemoveFailedRepo}
-                  >
-                    {tt('common.delete')}
-                  </button>
-                </Show>
-              </div>
-            </Show>
+              <Show when={repoErrorPhase() !== 'closed'}>
+                <div class={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm space-y-2 ${
+                  repoErrorPhase() === 'enter' ? 'animate-error-enter' : 'animate-error-exit'
+                }`}>
+                  <p>{repoError()}</p>
+                  <Show when={failedRepoPath()}>
+                    <button
+                      class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
+                      onClick={handleRemoveFailedRepo}
+                    >
+                      {tt('common.delete')}
+                    </button>
+                  </Show>
+                </div>
+              </Show>
+            </div>
 
             <div
-              class={`p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm mb-6 text-center ${
+              class={`p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm mb-6 text-center shrink-0 ${
                 repoStore.loading ? 'opacity-50 pointer-events-none' : ''
               }`}
               onClick={handleOpenRepo}
@@ -819,24 +821,42 @@ const Repository: Component = () => {
             </div>
 
             <Show when={recentRepos().length > 0}>
-              <h2 class="text-sm font-semibold mb-3 opacity-60 uppercase tracking-wider text-center">{tt('home.recentRepos')}</h2>
-              <div class="space-y-2">
+              <div class="flex-1 flex flex-col min-h-0">
+                <h2 class="text-sm font-semibold mb-3 opacity-60 uppercase tracking-wider text-center shrink-0">{tt('home.recentRepos')}</h2>
+                <div class="overflow-y-auto min-h-0 space-y-2 pr-1">
                 <For each={recentRepos()}>
                   {(repo) => (
                     <div
-                      class={`p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-between ${
+                      class={`p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center gap-2 ${
                         repoStore.loading ? 'opacity-50 pointer-events-none' : ''
                       }`}
                       onClick={() => handleRecentClick(repo)}
                     >
-                      <div class="flex-1 min-w-0">
+                      <div class="flex-1 min-w-0 overflow-hidden">
                         <span class="font-medium">{repo.name}</span>
-                        <span class="ml-3 text-xs opacity-50 truncate align-middle">{repo.path}</span>
+                        <span class="text-xs opacity-50 block truncate">{repo.path}</span>
                       </div>
-                      <span class="text-xs opacity-40 shrink-0">{repo.lastOpened}</span>
+                      <span class="text-xs opacity-40 shrink-0 whitespace-nowrap">{repo.lastOpened}</span>
+                      <button
+                        class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-xs text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await removeRecentRepo(repo.path);
+                            const repos = await getRecentRepos();
+                            setRecentRepos(repos);
+                          } catch { /* ignore */ }
+                        }}
+                        title={tt('common.delete')}
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
                   )}
                 </For>
+                </div>
               </div>
             </Show>
           </div>
@@ -929,21 +949,19 @@ const Repository: Component = () => {
                         <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('repo.noCommits')}</div>
                       }
                     >
-                      <div class="flex flex-col h-full">
-                        <div class="flex-1 min-h-0">
-                          <CommitGraph
-                            graphData={commitStore.graphData!}
-                            selectedNodeId={commitStore.selectedNode?.id}
-                            onSelectNode={handleSelectGraphNode}
-                            repoPath={repoPath() ?? undefined}
-                            onCheckout={handleGraphCheckout}
-                            onCreateBranch={handleGraphCreateBranch}
-                            onCherryPick={handleGraphCherryPick}
-                            onCreatePullRequest={handleCreatePullRequest}
-                            onCheckoutBranch={handleGraphCheckoutBranch}
-                            onDeleteBranch={handleGraphDeleteBranch}
-                          />
-                        </div>
+                      <div id="commit-graph-area" class="flex flex-col h-full">
+                        <CommitGraph
+                          graphData={commitStore.graphData!}
+                          selectedNodeId={commitStore.selectedNode?.id}
+                          onSelectNode={handleSelectGraphNode}
+                          repoPath={repoPath() ?? undefined}
+                          onCheckout={handleGraphCheckout}
+                          onCreateBranch={handleGraphCreateBranch}
+                          onCherryPick={handleGraphCherryPick}
+                          onCreatePullRequest={handleCreatePullRequest}
+                          onCheckoutBranch={handleGraphCheckoutBranch}
+                          onDeleteBranch={handleGraphDeleteBranch}
+                        />
                         <Show when={commitStore.graphData?.truncated}>
                           <div class="shrink-0 px-3 py-1.5 text-xs text-yellow-400/70 bg-yellow-400/5 border-t border-yellow-400/10 text-center">
                             {tt('repo.graphTruncated')}
@@ -1047,7 +1065,7 @@ const Repository: Component = () => {
           style={{ width: `${rightWidth()}px` }}
         >
           {/* Remote toolbar */}
-          <div class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
+          <div id="remote-actions" class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
             <div class="flex gap-1.5">
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
@@ -1145,7 +1163,7 @@ const Repository: Component = () => {
           </div>
 
           {/* Commit input */}
-          <div class="p-3 border-b border-white/10 shrink-0">
+          <div id="commit-area" class="p-3 border-b border-white/10 shrink-0">
             <textarea
               class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm resize-none focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
               rows={3}
@@ -1168,7 +1186,7 @@ const Repository: Component = () => {
           </div>
 
           {/* File list */}
-          <div class="flex-1 overflow-auto">
+          <div id="file-list-area" class="flex-1 overflow-auto">
             <FileList
               stagedFiles={stagedFiles()}
               unstagedFiles={unstagedFiles()}

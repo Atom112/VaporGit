@@ -1,8 +1,9 @@
 import { Component, createSignal, Show } from 'solid-js';
-import { settingsStore, updateSettings } from '../stores/settingsStore';
+import { settingsStore, updateSettings, resetTutorial } from '../stores/settingsStore';
 import { githubStore, clearAuth } from '../stores/githubStore';
 import { giteeStore, clearGiteeAuth } from '../stores/giteeStore';
 import { githubLogout, giteeLogout, checkUpdate } from '../lib/tauriCommands';
+import { startTutorial } from '../stores/tutorialStore';
 import { showUpdate } from '../stores/updateStore';
 import { addToast } from '../stores/toastStore';
 import CustomSelect from '../components/ui/CustomSelect';
@@ -186,6 +187,20 @@ const Settings: Component = () => {
               onInput={(e) => updateSettings({ defaultRemoteName: e.currentTarget.value })}
             />
             <p class="text-xs opacity-40 mt-1">{tt('settings.remoteNameDesc')}</p>
+          </div>
+
+          {/* Tutorial */}
+          <div class="pt-2">
+            <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+              <h2 class="text-sm font-medium mb-1">{tt('settings.tutorial')}</h2>
+              <p class="text-xs opacity-60 mb-3">{tt('settings.tutorialDesc')}</p>
+              <button
+                class="px-4 py-2 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 text-sm font-medium transition-colors"
+                onClick={() => { resetTutorial(); startTutorial(); }}
+              >
+                {tt('settings.restartTutorial')}
+              </button>
+            </div>
           </div>
 
           {/* Check for updates */}
