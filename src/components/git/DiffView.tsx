@@ -139,7 +139,7 @@ const DiffView: Component<DiffViewProps> = (props) => {
   const lang = () => detectLanguage(props.filePath);
 
   return (
-    <div class="flex flex-col h-full">
+    <div class="flex flex-col h-full min-h-0">
       {/* Header */}
       <div class="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/5 shrink-0">
         <div class="flex items-center gap-2 min-w-0">

@@ -303,7 +303,7 @@ const FileDiffView: Component<{
   };
 
   return (
-    <div class="p-2">
+    <div class="p-2 h-full flex flex-col min-h-0">
       <Show when={diffResult()} fallback={
         <div class="text-xs text-gray-500 text-center py-8">
           {file()?.status === 'removed' ? tt('pr.fileRemoved') : tt('pr.noDiff')}

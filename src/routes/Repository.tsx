@@ -1030,7 +1030,7 @@ const Repository: Component = () => {
 
           {/* Diff: File diff view */}
           <Show when={leftMode() === 'diff'}>
-            <div class="flex-1 flex flex-col animate-content-enter">
+            <div class="flex-1 flex flex-col min-h-0 overflow-hidden animate-content-enter">
               <Show
                 when={diffStore.diffResult || diffStore.diffLoading}
                 fallback={
