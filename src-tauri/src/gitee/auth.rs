@@ -2,8 +2,16 @@ use crate::models::gitee::{GiteeAuthStatus, GiteeUser};
 use crate::oauth::flow::{fetch_current_user, start_auth_code_flow, ProviderConfig};
 use crate::oauth::token::{TokenConfig, TokenStore};
 
-const CLIENT_ID: &str = "5681aca9ea54ed91a7d2e434c277760eb039fbcd171253b0aefae1d96161f7f8";
-const CLIENT_SECRET: &str = "4ef407bdcf8f06f96c153748d7a6616257808540b70a8420ba0020e72afb25ec";
+fn gitee_client_id() -> String {
+    std::env::var("VAPORGIT_GITEE_CLIENT_ID")
+        .unwrap_or_else(|_| "5681aca9ea54ed91a7d2e434c277760eb039fbcd171253b0aefae1d96161f7f8".to_string())
+}
+
+fn gitee_client_secret() -> String {
+    std::env::var("VAPORGIT_GITEE_CLIENT_SECRET")
+        .unwrap_or_else(|_| "4ef407bdcf8f06f96c153748d7a6616257808540b70a8420ba0020e72afb25ec".to_string())
+}
+
 const AUTHORIZE_URL: &str = "https://gitee.com/oauth/authorize";
 const TOKEN_URL: &str = "https://gitee.com/oauth/token";
 const API_URL: &str = "https://gitee.com/api/v5";
@@ -13,8 +21,8 @@ const USER_AGENT: &str = "VaporGit/1.0";
 fn config() -> ProviderConfig {
     ProviderConfig {
         provider_name: "gitee",
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
+        client_id: gitee_client_id(),
+        client_secret: gitee_client_secret(),
         authorize_url: AUTHORIZE_URL,
         token_url: TOKEN_URL,
         api_url: API_URL,

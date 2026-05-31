@@ -1,5 +1,114 @@
 # Changelog / 已实现功能
 
+## [Unreleased] - 2026-05-31
+
+### Security
+- 修复 CSP 安全策略完全关闭问题：设置最小权限 CSP（`default-src 'self'`），防止 XSS 攻击
+- OAuth 客户端凭据支持通过环境变量覆盖（`VAPORGIT_GITHUB_CLIENT_ID` / `VAPORGIT_GITEE_CLIENT_ID`），降低源码凭据泄露风险
+- Token 文件存储添加权限限制（Unix `0600`），防止其他用户读取 OAuth token
+- 新增 `git/validate.rs` 输入验证模块：分支名/标签名使用 `validate_ref_name()` 校验，防止注入
+- 修复 `discard_files` 路径遍历漏洞：用户提供路径需在 repo workdir 内，拒绝 `..` 和绝对路径
+- 修复 `discard_files` 递归删除目录风险：改为拒绝目录删除，防止数据丢失
+
+### Fixed
+- 修复 `fetch` 不支持 HTTPS Token 鉴权：为 `fetch()` 添加 GitHub/Gitee token 加载，与 `push` 一致
+- 修复 `pull` 快进合并硬编码 `refs/heads/main` 回退：改为检测当前 HEAD 分支名
+- 修复 `redo` 创建内容不同的提交：改用 reflog 原始 OID 恢复原提交的树，确保 `redo` 精确还原
+- 修复远程删除分支只支持 GitHub token：添加 Gitee token 支持
+- 修复 Token 选择用 `url.contains()` 判断不准确：新增 `extract_host()` 函数正确解析 HTTPS/SSH URL
+- 修复 cherry-pick/revert 提交消息缺乏标准格式：添加原始提交 SHA 引用
+- 变基冲突时收集冲突文件列表返回给用户，提供更清晰的提示
+
+### Changed
+- `describeError()` 正则改为只匹配 `HTTP 4xx/5xx` 前缀，避免误匹配
+- `describeError()` 返回纯翻译文本而非英文原文 + 翻译的混合格式
+- Pull 结果消息统一为中文（"已经是最新的"、"快进合并完成"、"合并完成"）
+- ProviderConfig 的 `client_id` / `client_secret` 从 `&'static str` 改为 `String` 类型，支持运行时动态赋值
+
+### Added
+- 为所有静默失败的 catch 块添加 Toast 用户通知（refreshStatus、handleToggleStage、handleSelectFile 等）
+- 9 处原始 `String(e)` 错误改为 `describeError()` 包装 + i18n key
+- 新增 18 个 i18n key（en.ts / zh.ts）
+
+## v1.2.1 - 2026-05-30
+
+### Fixed
+- 修复文件 diff 显示页面无法滚动的问题
+
+## v1.2.0 - 2026-05-28
+
+### Added
+- 新手引导教程（`TutorialOverlay.tsx`）
+- 首次运行欢迎弹窗
+- 9 步交互式功能引导（仓库打开、远程操作、提交、文件状态、提交图等）
+- 演示仓库自动创建与清理
+
+### Changed
+- UI 优化：页面布局、颜色系统、动画效果改进
+
+## v1.1.7 - 2026-05-28
+
+### Added
+- 为 Gitee 平台添加 PR 管理功能（列表、详情、创建、合并）（`GiteePRList.tsx`、`GiteePRDetail.tsx`、`GiteePRCreateDialog.tsx`）
+
+## v1.1.6 - 2026-05-28
+
+### Changed
+- 清理安装包美化文件
+- 错误信息明晰化
+
+## v1.1.5 - 2026-05-26
+
+### Fixed
+- 使用 `git2::Diff API` 进行重命名检测，仿照 GitKraken 逻辑，替代 basename 启发式算法
+
+## v1.1.4 - 2026-05-25
+
+### Added
+- 设置页面添加"检查更新"手动触发按钮
+
+### Fixed
+- 使用已验证的 GitHub API 进行更新检查，避免未登录时的速率限制问题
+- GitHub Actions 发布 workflow 改为自动发布（非草案）
+- 更新检查使用 GitHub 认证 API 以避免匿名限流
+
+## v1.1.3 - 2026-05-25
+
+### Added
+- 主题切换：支持 Dark / Light / System 三种模式
+- Tailwind CSS v4 升级
+- Node.js 升级到 26
+
+### Fixed
+- PR merge UI 改进与 i18n 修复
+
+## v1.1.2 - 2026-05-24
+
+### Added
+- 文件列表添加"暂存全部"和"取消暂存全部"按钮
+- README.en.md 英文版本文档
+
+### Changed
+- Toast 通知添加退出动画
+
+## v1.1.0 - 2026-05-24
+
+### Added
+- 内置终端功能（`TerminalPanel.tsx`）：基于 xterm.js + Rust PTY，支持 PowerShell/cmd/bash/zsh
+- M5 阶段功能：进阶协作能力
+
+### Fixed
+- 提交图 PR 节点提前问题修复
+- 提交树渲染修复
+
+## v1.0.9 - 2026-05-24
+
+### Added
+- 启动画面（Splash Screen）：应用启动时显示品牌动画
+- 目录结构变更检测逻辑
+
+---
+
 ## v1.0.8
 
 ### 修复

@@ -8,11 +8,20 @@ use tokio::sync::oneshot;
 use url::Url;
 
 /// Register a GitHub OAuth App at https://github.com/settings/developers
-/// and set this to your app's Client ID.
-const GITHUB_CLIENT_ID: &str = "Ov23li87YrIgxujryQ0H";
+/// and set VAPORGIT_GITHUB_CLIENT_ID / VAPORGIT_GITHUB_CLIENT_SECRET env vars to override.
+///
+/// The built-in client ID/secret use PKCE (Proof Key for Code Exchange),
+/// which is secure even without a client secret. For custom deployments,
+/// set the environment variables to use your own OAuth app credentials.
+fn github_client_id() -> String {
+    std::env::var("VAPORGIT_GITHUB_CLIENT_ID")
+        .unwrap_or_else(|_| "Ov23li87YrIgxujryQ0H".to_string())
+}
 
-/// Optional client secret for confidential apps.
-const GITHUB_CLIENT_SECRET: &str = "8281894ca048efd5ea1c456cdc8fd918e0508682";
+fn github_client_secret() -> String {
+    std::env::var("VAPORGIT_GITHUB_CLIENT_SECRET")
+        .unwrap_or_else(|_| "8281894ca048efd5ea1c456cdc8fd918e0508682".to_string())
+}
 
 const GITHUB_AUTHORIZE_URL: &str = "https://github.com/login/oauth/authorize";
 const GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
@@ -73,8 +82,9 @@ pub async fn start_auth_code_flow(app: tauri::AppHandle) -> Result<GitHubUser, S
     let port = random_port();
     let label = format!("github-oauth-{}", nanos());
 
+    let client_id = github_client_id();
     let auth_url = format!(
-        "{GITHUB_AUTHORIZE_URL}?client_id={GITHUB_CLIENT_ID}&\
+        "{GITHUB_AUTHORIZE_URL}?client_id={client_id}&\
          redirect_uri=http://localhost:{port}/callback&\
          scope=repo+user+read:org&\
          response_type=code&\
@@ -162,14 +172,16 @@ fn nanos() -> u128 {
 async fn exchange_code_for_token(code: &str, verifier: &str, port: u16) -> Result<String, String> {
     let client = build_client(10)?;
 
+    let client_id = github_client_id();
+    let client_secret = github_client_secret();
     let mut params = vec![
-        ("client_id", GITHUB_CLIENT_ID.to_string()),
+        ("client_id", client_id),
         ("code", code.to_string()),
         ("redirect_uri", format!("http://localhost:{port}/callback")),
         ("code_verifier", verifier.to_string()),
     ];
-    if !GITHUB_CLIENT_SECRET.is_empty() {
-        params.push(("client_secret", GITHUB_CLIENT_SECRET.to_string()));
+    if !client_secret.is_empty() {
+        params.push(("client_secret", client_secret));
     }
 
     let resp = client
@@ -246,9 +258,9 @@ pub fn save_token(token: &str) -> Result<(), String> {
         let _ = entry.set_password(token);
     }
 
-    // Persist to file as reliable fallback (same pattern as recent_repos.json)
+    // Persist to file as reliable fallback with restricted permissions
     let _ = ensure_token_dir();
-    let _ = fs::write(token_file_path(), token);
+    let _ = crate::oauth::token::write_secure_file(&token_file_path(), token);
 
     Ok(())
 }

@@ -427,8 +427,24 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
                 commit_count += 1;
                 if let Ok(index) = repo.index() {
                     if index.has_conflicts() {
+                        // Collect conflicted files for the user
+                        let conflict_files: Vec<String> = index.conflicts()
+                            .map_err(|e| format!("无法读取冲突: {}", e))?
+                            .filter_map(|c| c.ok())
+                            .filter_map(|c| {
+                                c.ancestor.as_ref()
+                                    .or_else(|| c.our.as_ref())
+                                    .or_else(|| c.their.as_ref())
+                                    .and_then(|e| std::str::from_utf8(&e.path).ok())
+                                    .map(|p| p.to_string())
+                            })
+                            .collect();
                         rebase.abort().ok();
-                        return Ok(format!("变基过程中出现冲突，已中止。已处理 {} 个提交。请解决冲突后手动继续。", commit_count));
+                        let files_str = conflict_files.join("、");
+                        return Ok(format!(
+                            "变基过程中出现冲突，已中止。已处理 {} 个提交。\n冲突文件：{}\n请解决冲突后，使用终端手动执行 git rebase --continue",
+                            commit_count, files_str
+                        ));
                     }
                 }
             }
@@ -445,6 +461,12 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
         .map_err(|e| format!("变基完成失败: {}", e))?;
 
     Ok(format!("变基完成，共处理 {} 个提交", commit_count))
+}
+
+/// Continue a rebase after resolving conflicts (not yet implemented, use terminal).
+#[allow(dead_code)]
+pub fn continue_rebase(_repo: &Repository) -> Result<String, String> {
+    Err("暂不支持图形界面继续变基，请使用终端执行 git rebase --continue".to_string())
 }
 
 pub fn cherry_pick(repo: &Repository, commit_id: &str) -> Result<String, String> {
@@ -493,12 +515,14 @@ pub fn cherry_pick(repo: &Repository, commit_id: &str) -> Result<String, String>
         .message()
         .unwrap_or("Cherry-pick")
         .to_string();
+    let msg_first_line = msg.lines().next().unwrap_or(&msg);
+    let short_sha = &commit_id[..8.min(commit_id.len())];
 
     repo.commit(
         Some("HEAD"),
         &signature,
         &signature,
-        &format!("cherry-pick: {}", msg.lines().next().unwrap_or(&msg)),
+        &format!("cherry-pick: {} ({})", msg_first_line, short_sha),
         &tree,
         &[&head_commit],
     )
@@ -558,12 +582,13 @@ pub fn revert_commit(repo: &Repository, commit_id: &str) -> Result<String, Strin
         .next()
         .unwrap_or("")
         .to_string();
+    let short_sha = &commit_id[..8.min(commit_id.len())];
 
     repo.commit(
         Some("HEAD"),
         &signature,
         &signature,
-        &format!("Revert \"{}\"", msg),
+        &format!("Revert \"{}\" ({})", msg, short_sha),
         &tree,
         &[&head_commit],
     )
@@ -576,6 +601,11 @@ pub fn revert_commit(repo: &Repository, commit_id: &str) -> Result<String, Strin
 }
 
 /// Undo the last commit via soft reset (keeps changes staged).
+///
+/// NOTE: This is a soft reset — index and working tree are preserved.
+/// The undone commit's content remains staged and can be re-committed.
+/// If you modify files after undo, the original tree is lost from the
+/// index (but still available in git reflog).
 pub fn undo(repo: &Repository) -> Result<String, String> {
     let head = repo.head().map_err(|e| format!("无法获取 HEAD: {}", e))?;
     let head_commit = head.peel_to_commit().map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
@@ -600,45 +630,65 @@ pub fn undo(repo: &Repository) -> Result<String, String> {
     Ok(msg)
 }
 
-/// Redo: commit again using the previous commit's message (from reflog HEAD@{1}).
+/// Redo by restoring the exact commit that was undone.
+///
+/// Reads the previous HEAD OID from the reflog (entry 1), then creates a new
+/// commit using the **original tree** (not the current index), ensuring the
+/// restored commit is identical in content to the one that was undone.
 pub fn redo(repo: &Repository) -> Result<String, String> {
-    // Read HEAD reflog to find the previous commit message
     let reflog = repo.reflog("HEAD").map_err(|e| format!("无法读取 reflog: {}", e))?;
 
-    // reflog entry 0 is the current state, entry 1 is the previous HEAD
     if reflog.len() < 2 {
         return Err("没有可重做的操作".to_string());
     }
 
+    // reflog.get(1) contains the entry for the state BEFORE the undo.
+    // id_new() gives the OID of the commit at that point (the one we want to restore).
     let prev_entry = reflog.get(1).ok_or("没有可重做的操作".to_string())?;
-    let prev_msg: &str = prev_entry.message().unwrap_or("redo");
-    // Extract the actual commit message from the reflog message ("commit: <msg>" or "reset: ...")
+    let prev_oid = prev_entry.id_new();
+    let prev_msg = prev_entry.message().unwrap_or("redo");
+
+    // Get the original commit to restore its tree
+    let prev_commit = repo.find_commit(prev_oid)
+        .map_err(|_| "无法找到之前的提交，可能已被垃圾回收".to_string())?;
+
+    // Use the original tree from the undone commit
+    let original_tree = prev_commit.tree()
+        .map_err(|e| format!("无法获取原始提交树: {}", e))?;
+
+    // Extract commit message from reflog
     let commit_msg = if let Some(msg) = prev_msg.strip_prefix("commit: ") {
         msg.to_string()
     } else if let Some(msg) = prev_msg.strip_prefix("commit (amend): ") {
         msg.to_string()
     } else {
-        prev_msg.to_string()
+        // Fall back to the original commit message
+        prev_commit.message().unwrap_or("redo").to_string()
     };
 
     let signature = repo.signature().map_err(|e| format!("无法获取签名: {}", e))?;
 
-    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
-    let tree_oid = index.write_tree().map_err(|e| format!("无法写入树: {}", e))?;
-    let tree = repo.find_tree(tree_oid).map_err(|e| format!("无法找到树: {}", e))?;
-
     let head = repo.head().map_err(|e| format!("无法获取 HEAD: {}", e))?;
     let head_commit = head.peel_to_commit().map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
 
-    repo.commit(
+    // Commit using the original tree — this ensures the restored commit
+    // has the exact same content as the one that was undone
+    let new_oid = repo.commit(
         Some("HEAD"),
         &signature,
         &signature,
         &commit_msg,
-        &tree,
+        &original_tree,
         &[&head_commit],
     )
     .map_err(|e| format!("重做提交失败: {}", e))?;
+
+    // Reset index to match the restored commit (so the working state reflects it)
+    let obj = repo.find_object(new_oid, None)
+        .map_err(|e| format!("无法找到重做提交: {}", e))?;
+    let mut checkout = git2::build::CheckoutBuilder::new();
+    repo.reset(&obj, git2::ResetType::Mixed, Some(&mut checkout))
+        .map_err(|e| format!("重置索引失败: {}", e))?;
 
     Ok(commit_msg)
 }

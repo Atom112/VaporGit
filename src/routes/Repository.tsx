@@ -148,7 +148,8 @@ const Repository: Component = () => {
         setShowConflictResolver(true);
       }
     } catch (e) {
-      console.error('Failed to refresh status:', e);
+      console.error('刷新状态失败:', e);
+      addToast(ttf('repo.refreshFailed', describeError(e)), 'error');
     }
   };
 
@@ -165,7 +166,7 @@ const Repository: Component = () => {
       }
       setCommitPage(reset ? 1 : page + 1);
     } catch (e) {
-      console.error('Failed to load history:', e);
+      console.error('加载历史失败:', e);
     }
   };
 
@@ -177,8 +178,11 @@ const Repository: Component = () => {
       const data = await getCommitGraph(path);
       setCommitStore({ graphData: data, graphLoading: false });
     } catch (e) {
-      console.error('Failed to load commit graph:', e);
+      console.error('加载提交图失败:', e);
       setCommitStore({ graphLoading: false });
+      if (!silent) {
+        addToast(ttf('repo.graphLoadFailed', describeError(e)), 'error');
+      }
     }
   };
 
@@ -190,13 +194,16 @@ const Repository: Component = () => {
       const branches = await getBranchList(path);
       setCommitStore({ branches, branchesLoading: false });
     } catch (e) {
-      console.error('Failed to load branches:', e);
+      console.error('加载分支列表失败:', e);
       setCommitStore({ branchesLoading: false });
+      if (!silent) {
+        addToast(ttf('repo.branchesLoadFailed', describeError(e)), 'error');
+      }
     }
   };
 
   const refreshAll = async () => {
-    await Promise.all([refreshStatus(), refreshHistory(), refreshGraph(), refreshBranches()]);
+    await Promise.all([refreshStatus(), refreshHistory(), refreshGraph(true), refreshBranches(true)]);
     // Check for submodules
     const path = repoPath();
     if (path) {
@@ -205,7 +212,7 @@ const Repository: Component = () => {
         if (subs.length > 0) {
           addToast(`检测到 ${subs.length} 个子模块：${subs.join(', ')}。请在子模块目录中单独操作。`, 'info');
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore — submodule check is non-critical */ }
     }
   };
 
@@ -302,7 +309,8 @@ const Repository: Component = () => {
         setShowConflictResolver(true);
       }
     } catch (e) {
-      console.error('Stage/unstage failed:', e);
+      console.error('暂存/取消暂存失败:', e);
+      addToast(ttf('repo.stageFailed', describeError(e)), 'error');
     } finally {
       setStaging(false);
     }
@@ -328,7 +336,7 @@ const Repository: Component = () => {
       addToast(`已暂存 ${unstaged.length} 个文件`, 'success');
     } catch (e) {
       console.error('Stage all failed:', e);
-      addToast(`暂存失败: ${e}`, 'error');
+      addToast(ttf('repo.stageAllFailed', describeError(e)), 'error');
     } finally {
       setStaging(false);
     }
@@ -350,7 +358,7 @@ const Repository: Component = () => {
       }
     } catch (e) {
       console.error('Unstage all failed:', e);
-      addToast(`取消暂存失败: ${e}`, 'error');
+      addToast(ttf('repo.unstageAllFailed', describeError(e)), 'error');
     } finally {
       setStaging(false);
     }
@@ -411,8 +419,9 @@ const Repository: Component = () => {
       const result = await getFileDiff(path, filePath);
       setDiffStore({ diffResult: result, diffLoading: false });
     } catch (e) {
-      console.error('Failed to load diff:', e);
+      console.error('加载文件差异失败:', e);
       setDiffStore({ diffLoading: false });
+      addToast(ttf('repo.diffLoadFailed', describeError(e)), 'error');
     }
   };
 
@@ -431,7 +440,8 @@ const Repository: Component = () => {
       const detail = await getCommitDetail(path, c.id);
       setCommitDetail(detail);
     } catch (e) {
-      console.error('Failed to load commit detail:', e);
+      console.error('加载提交详情失败:', e);
+      addToast(ttf('repo.commitDetailLoadFailed', describeError(e)), 'error');
     } finally {
       setCommitLoading(false);
     }
@@ -472,7 +482,8 @@ const Repository: Component = () => {
         });
         setCommitDetail(detail);
       } catch (e) {
-        console.error('Failed to load commit detail from graph:', e);
+        console.error('从图形加载提交详情失败:', e);
+        addToast(ttf('repo.commitDetailLoadFailed', describeError(e)), 'error');
       } finally {
         setCommitLoading(false);
       }
@@ -499,8 +510,9 @@ const Repository: Component = () => {
       );
       setDiffStore({ diffResult: result, diffLoading: false });
     } catch (e) {
-      console.error('Failed to load commit file diff:', e);
+      console.error('加载提交文件差异失败:', e);
       setDiffStore({ diffLoading: false });
+      addToast(ttf('repo.diffLoadFailed', describeError(e)), 'error');
     }
   };
 
@@ -610,7 +622,7 @@ const Repository: Component = () => {
       addToast(`已撤销提交: ${msg.slice(0, 50)}`, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`撤销失败: ${e}`, 'error');
+      addToast(ttf('repo.undoFailed', describeError(e)), 'error');
     } finally {
       setUndoLoading(false);
     }
@@ -625,7 +637,7 @@ const Repository: Component = () => {
       addToast(`已重做提交: ${msg.slice(0, 50)}`, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`重做失败: ${e}`, 'error');
+      addToast(ttf('repo.redoFailed', describeError(e)), 'error');
     } finally {
       setUndoLoading(false);
     }
@@ -684,7 +696,7 @@ const Repository: Component = () => {
       addToast('已检出到提交 ' + commitId.slice(0, 8), 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`检出失败: ${e}`, 'error');
+      addToast(ttf('commit.checkoutFailed', describeError(e)), 'error');
     }
   };
 
@@ -707,7 +719,7 @@ const Repository: Component = () => {
       setCreateBranchDialog(null);
       await refreshAll();
     } catch (e) {
-      addToast(`创建分支失败: ${e}`, 'error');
+      addToast(ttf('commit.createBranchFailed', describeError(e)), 'error');
     } finally {
       setCreateBranchLoading(false);
     }
@@ -721,7 +733,7 @@ const Repository: Component = () => {
       addToast(result, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`Cherry-pick 失败: ${e}`, 'error');
+      addToast(ttf('commit.cherryPickFailed', describeError(e)), 'error');
     }
   };
 
@@ -730,10 +742,10 @@ const Repository: Component = () => {
     if (!path) return;
     try {
       await checkoutBranch(path, branchName);
-      addToast(`已切换到分支 ${branchName}`, 'success');
+      addToast(ttf('repo.switchBranchSuccess', branchName), 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`切换分支失败: ${e}`, 'error');
+      addToast(ttf('repo.switchBranchFailed', describeError(e)), 'error');
     }
   };
 
@@ -766,7 +778,7 @@ const Repository: Component = () => {
     try {
       await openTerminal(path);
     } catch (e) {
-      addToast(`打开终端失败: ${e}`, 'error');
+      addToast(ttf('repo.terminalOpenFailed', describeError(e)), 'error');
       handleCloseTerminal();
     }
   };

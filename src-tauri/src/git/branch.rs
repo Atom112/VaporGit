@@ -91,6 +91,9 @@ pub fn get_branch_list(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
 }
 
 pub fn create_branch(repo: &Repository, name: &str, from: Option<&str>) -> Result<(), String> {
+    // Validate branch name
+    crate::git::validate::validate_ref_name(name)?;
+
     let target = match from {
         Some(ref_name) => {
             let obj = repo
@@ -206,15 +209,26 @@ pub fn delete_remote_branch(repo: &Repository, remote_name: &str, branch_name: &
 
     let refspec = format!(":refs/heads/{}", branch_name);
 
-    // Try loading GitHub token for HTTPS authentication
-    let token = crate::github::auth::load_token().ok().flatten();
+    // Try loading tokens for HTTPS authentication (supports GitHub + Gitee)
+    let github_token = crate::github::auth::load_token().ok().flatten();
+    let gitee_token = crate::gitee::auth::token_store().load().ok().flatten();
     let remote_url = remote.url().map(|u| u.to_string());
+    let remote_host = remote_url.as_ref().and_then(|u| crate::git::remote::extract_host(u));
+    let is_https = remote_url.as_ref().map_or(false, |u| u.starts_with("https://"));
 
     let mut cb = git2::RemoteCallbacks::new();
     cb.credentials(move |_url, username_from_url, allowed| {
-        if let (Some(ref token), Some(ref url)) = (&token, &remote_url) {
-            if url.starts_with("https://") && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
-                return git2::Cred::userpass_plaintext("x-access-token", token);
+        if is_https && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+            if let Some(ref host) = remote_host {
+                if host == "github.com" || host.ends_with(".github.com") {
+                    if let Some(ref token) = github_token {
+                        return git2::Cred::userpass_plaintext("x-access-token", token);
+                    }
+                } else if host == "gitee.com" || host.ends_with(".gitee.com") {
+                    if let Some(ref token) = gitee_token {
+                        return git2::Cred::userpass_plaintext("oauth2", token);
+                    }
+                }
             }
         }
         let user = username_from_url.unwrap_or("git");

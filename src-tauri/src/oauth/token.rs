@@ -4,6 +4,18 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
+/// Write a file with restricted permissions (owner-only on Unix).
+/// Uses 0600 on Unix; standard permissions on Windows (file is in user appdata).
+pub(crate) fn write_secure_file(path: &std::path::Path, content: &str) -> Result<(), String> {
+    fs::write(path, content).map_err(|e| format!("无法写入文件: {}", e))?;
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
 pub struct TokenConfig {
     pub service_name: &'static str,
     pub keyring_user: &'static str,
@@ -52,7 +64,7 @@ impl TokenStore {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let _ = fs::write(&path, token);
+        let _ = write_secure_file(&path, token);
 
         Ok(())
     }

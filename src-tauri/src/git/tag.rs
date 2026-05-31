@@ -6,6 +6,9 @@ pub fn create_tag(
     commit_id: &str,
     tag_name: &str,
 ) -> Result<String, String> {
+    // Validate tag name
+    crate::git::validate::validate_ref_name(tag_name)?;
+
     let oid = Oid::from_str(commit_id).map_err(|e| format!("无效的提交 ID: {}", e))?;
     let commit = repo
         .find_commit(oid)
