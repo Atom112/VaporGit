@@ -1,6 +1,6 @@
 # Changelog / 已实现功能
 
-## [Unreleased] - 2026-05-31
+## v1.2.2 - 2026-05-31
 
 ### Security
 - 修复 CSP 安全策略完全关闭问题：设置最小权限 CSP（`default-src 'self'`），防止 XSS 攻击
