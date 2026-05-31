@@ -1,24 +1,34 @@
 mod commands;
 mod git;
 mod github;
+mod gitee;
 mod models;
+mod oauth;
+mod remote_url;
 mod terminal;
 
-use commands::branch::{checkout_branch, checkout_remote_branch, create_branch, delete_branch, get_branch_list};
+use commands::branch::{checkout_branch, checkout_remote_branch, create_branch, delete_branch, delete_remote_branch, get_branch_list};
 use commands::commit::{cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, rebase, revert_commit, undo, redo};
 use commands::tag::create_tag;
 use commands::terminal::{close_terminal, open_terminal, resize_terminal, write_terminal};
 use commands::diff::{check_lfs, get_file_base64, get_file_content, get_file_diff};
-use commands::remote::{fetch, get_remotes, pull, push};
-use commands::repo::{check_submodules, clone_repo, get_conflicts, get_recent_repos, get_status, init_repo, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
+use commands::remote::{fetch, get_remotes, pull, push, push_with_auto_create};
+use commands::repo::{check_submodules, clone_repo, discard_files, get_conflict_content, get_conflicts, get_recent_repos, get_status, init_repo, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
 use commands::splashscreen::close_splashscreen;
 use commands::stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_save};
+use commands::tutorial::{create_demo_repo, delete_dir};
 use commands::github::{
     check_update, github_check_auth, github_create_pull, github_create_pull_comment,
     github_create_repo, github_get_asset, github_get_pull, github_get_pull_diff,
     github_get_pull_files, github_get_repo, github_get_user, github_install_update,
     github_list_branches, github_list_pull_comments, github_list_pulls, github_list_repos,
     github_login, github_logout, github_merge_pull, github_start_download, push_to_github,
+};
+use commands::gitee::{
+    gitee_check_auth, gitee_create_pull, gitee_create_repo, gitee_get_pull, gitee_get_pull_diff,
+    gitee_get_pull_files, gitee_get_repo, gitee_get_user, gitee_list_branches,
+    gitee_list_pull_comments, gitee_list_pulls, gitee_list_repos, gitee_login, gitee_logout,
+    gitee_merge_pull,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -71,10 +81,12 @@ pub fn run() {
             checkout_branch,
             checkout_remote_branch,
             delete_branch,
+            delete_remote_branch,
             // remote
             fetch,
             pull,
             push,
+            push_with_auto_create,
             get_remotes,
             // stash
             stash_save,
@@ -84,7 +96,10 @@ pub fn run() {
             stash_drop,
             // conflict
             get_conflicts,
+            get_conflict_content,
             resolve_conflict,
+            // discard
+            discard_files,
             // github
             check_update,
             github_get_asset,
@@ -107,6 +122,25 @@ pub fn run() {
             github_get_pull_diff,
             github_list_pull_comments,
             github_create_pull_comment,
+            // gitee
+            gitee_login,
+            gitee_check_auth,
+            gitee_logout,
+            gitee_get_user,
+            gitee_list_repos,
+            gitee_get_repo,
+            gitee_create_repo,
+            gitee_list_branches,
+            gitee_list_pulls,
+            gitee_get_pull,
+            gitee_create_pull,
+            gitee_merge_pull,
+            gitee_get_pull_files,
+            gitee_get_pull_diff,
+            gitee_list_pull_comments,
+            // tutorial
+            create_demo_repo,
+            delete_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

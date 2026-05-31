@@ -4,6 +4,8 @@ export interface SettingsState {
   defaultDiffView: 'unified' | 'split' | 'fullFile';
   defaultRemoteName: string;
   theme: 'dark' | 'light' | 'system';
+  tutorialCompleted: boolean;
+  tutorialDismissed: boolean;
 }
 
 const STORAGE_KEY = 'vaporgit_settings';
@@ -12,6 +14,8 @@ const defaultSettings: SettingsState = {
   defaultDiffView: 'unified',
   defaultRemoteName: 'origin',
   theme: 'system',
+  tutorialCompleted: false,
+  tutorialDismissed: false,
 };
 
 function loadFromStorage(): SettingsState {
@@ -44,6 +48,18 @@ export function updateSettings(partial: Partial<SettingsState>) {
 
 export function useSettingsStore() {
   return { settingsStore, setSettingsStore: updateSettings };
+}
+
+export function resetTutorial() {
+  updateSettings({ tutorialCompleted: false, tutorialDismissed: false });
+}
+
+export function dismissTutorial() {
+  updateSettings({ tutorialDismissed: true });
+}
+
+export function completeTutorial() {
+  updateSettings({ tutorialCompleted: true, tutorialDismissed: true });
 }
 
 export { settingsStore };

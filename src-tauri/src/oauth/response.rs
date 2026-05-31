@@ -1,0 +1,55 @@
+fn snake_to_camel(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut capitalize = false;
+    for c in s.chars() {
+        if c == '_' {
+            capitalize = true;
+        } else if capitalize {
+            result.push(c.to_ascii_uppercase());
+            capitalize = false;
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+pub(crate) fn keys_snake_to_camel(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            let keys: Vec<String> = map.keys().cloned().collect();
+            for key in keys {
+                if let Some(v) = map.remove(&key) {
+                    let new_key = snake_to_camel(&key);
+                    let mut v = v;
+                    keys_snake_to_camel(&mut v);
+                    map.insert(new_key, v);
+                }
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                keys_snake_to_camel(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+pub(crate) async fn parse_platform_response<T: serde::de::DeserializeOwned>(
+    resp: reqwest::Response,
+) -> Result<T, String> {
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+
+    if !status.is_success() {
+        return Err(format!("HTTP {}: {}", status, text));
+    }
+
+    let mut json: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("返回数据格式错误: {}", e))?;
+
+    keys_snake_to_camel(&mut json);
+
+    serde_json::from_value(json).map_err(|e| format!("解析响应失败: {}", e))
+}

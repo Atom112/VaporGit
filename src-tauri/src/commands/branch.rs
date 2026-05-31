@@ -50,3 +50,13 @@ pub async fn delete_branch(path: String, name: String) -> Result<(), String> {
     .await
     .map_err(|e| format!("内部错误: {}", e))?
 }
+
+#[tauri::command]
+pub async fn delete_remote_branch(path: String, remote_name: String, branch_name: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::branch::delete_remote_branch(&repo, &remote_name, &branch_name)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}

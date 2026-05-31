@@ -1,5 +1,43 @@
-use git2::{Cred, RemoteCallbacks, Repository};
 use crate::models::remote::RemoteInfo;
+use git2::{Cred, RemoteCallbacks, Repository};
+use url::Url;
+
+/// Extract the hostname from a git remote URL, handling both HTTPS and SSH formats.
+/// - "https://github.com/user/repo.git" → "github.com"
+/// - "git@github.com:user/repo.git" → "github.com"
+/// - "ssh://git@github.com/user/repo" → "github.com"
+pub(crate) fn extract_host(url: &str) -> Option<String> {
+    // Try HTTPS/SSh URL parsing first
+    if let Ok(parsed) = Url::parse(url) {
+        if let Some(host) = parsed.host_str() {
+            return Some(host.to_string());
+        }
+    }
+    // Handle SCP-style SSH URLs: git@github.com:user/repo.git
+    if let Some(at_pos) = url.find('@') {
+        let after_at = &url[at_pos + 1..];
+        if let Some(colon_pos) = after_at.find(':') {
+            let host = &after_at[..colon_pos];
+            // Filter out Windows paths (C:\) and port numbers
+            if !host.contains('/') && !host.contains('\\') && host.contains('.') {
+                return Some(host.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Get the push URL (or fallback URL) for a named remote.
+pub fn get_push_url(repo: &Repository, remote_name: &str) -> Result<String, String> {
+    let remote = repo
+        .find_remote(remote_name)
+        .map_err(|e| format!("无法找到远程 {}: {}", remote_name, e))?;
+    remote
+        .pushurl()
+        .map(|u| u.to_string())
+        .or_else(|| remote.url().map(|u| u.to_string()))
+        .ok_or_else(|| format!("远程 {} 没有 URL", remote_name))
+}
 
 pub fn get_remotes(repo: &Repository) -> Result<Vec<RemoteInfo>, String> {
     let remotes = repo
@@ -31,8 +69,29 @@ pub fn fetch(repo: &Repository, remote_name: Option<&str>) -> Result<(), String>
         .find_remote(name)
         .map_err(|e| format!("无法找到远程 {}: {}", name, e))?;
 
+    // Load platform tokens for HTTPS authentication (same as push)
+    let github_token = crate::github::auth::load_token().ok().flatten();
+    let gitee_token = crate::gitee::auth::token_store().load().ok().flatten();
+    let remote_url = remote.url().map(|u| u.to_string());
+
+    let remote_host = remote_url.as_ref().and_then(|u| extract_host(u));
+    let is_https = remote_url.as_ref().map_or(false, |u| u.starts_with("https://"));
+
     let mut cb = RemoteCallbacks::new();
-    cb.credentials(|_url, username_from_url, _allowed_types| {
+    cb.credentials(move |_url, username_from_url, allowed| {
+        if is_https && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+            if let Some(ref host) = remote_host {
+                if host == "github.com" || host.ends_with(".github.com") {
+                    if let Some(ref token) = github_token {
+                        return Cred::userpass_plaintext("x-access-token", token);
+                    }
+                } else if host == "gitee.com" || host.ends_with(".gitee.com") {
+                    if let Some(ref token) = gitee_token {
+                        return Cred::userpass_plaintext("oauth2", token);
+                    }
+                }
+            }
+        }
         let user = username_from_url.unwrap_or("git");
         git2::Cred::ssh_key_from_agent(user).or_else(|_| git2::Cred::default())
     });
@@ -68,21 +127,22 @@ pub fn pull(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
         .map_err(|e| format!("合并分析失败: {}", e))?;
 
     if analysis.is_up_to_date() {
-        return Ok("Already up to date.".to_string());
+        return Ok("已经是最新的".to_string());
     }
 
     if analysis.is_fast_forward() {
-        let remote_branch = branch.map(|b| {
-            if b.contains('/') {
-                b.to_string()
-            } else {
-                format!("{}/{}", name, b)
-            }
-        });
+        // Detect current branch name if not provided
+        let current_branch = branch.map(|b| b.to_string()).or_else(|| {
+            repo.head().ok().and_then(|h| h.shorthand().map(|s| s.to_string()))
+        }).unwrap_or_else(|| "main".to_string());
 
-        let ff_ref = remote_branch
-            .as_deref()
-            .unwrap_or("refs/heads/main");
+        let remote_branch = if current_branch.contains('/') {
+            current_branch.clone()
+        } else {
+            format!("{}/{}", name, current_branch)
+        };
+
+        let ff_ref = remote_branch.as_str();
 
         let mut reference = repo
             .find_reference(ff_ref)
@@ -90,7 +150,7 @@ pub fn pull(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
 
         reference
             .set_target(fetch_commit.id(), "Fast-forward pull")
-            .map_err(|e| format!("Fast-forward 失败: {}", e))?;
+            .map_err(|e| format!("快进合并失败: {}", e))?;
 
         repo.set_head(reference.name().unwrap_or("refs/heads/main"))
             .map_err(|e| format!("设置 HEAD 失败: {}", e))?;
@@ -98,7 +158,7 @@ pub fn pull(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
         repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))
             .map_err(|e| format!("检出失败: {}", e))?;
 
-        return Ok("Fast-forward merged.".to_string());
+        return Ok("快进合并完成".to_string());
     }
 
     if analysis.is_normal() {
@@ -115,7 +175,7 @@ pub fn pull(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
             .map_err(|e| format!("无法获取索引: {}", e))?;
 
         if index.has_conflicts() {
-            return Ok("Merge conflicts detected. Please resolve manually.".to_string());
+            return Ok("检测到合并冲突，请手动解决".to_string());
         }
 
         let tree_oid = index
@@ -153,10 +213,10 @@ pub fn pull(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
         repo.cleanup_state()
             .map_err(|e| format!("清理状态失败: {}", e))?;
 
-        return Ok("Merge completed.".to_string());
+        return Ok("合并完成".to_string());
     }
 
-    Ok("Pull completed.".to_string())
+    Ok("拉取完成".to_string())
 }
 
 pub fn push(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) -> Result<(), String> {
@@ -176,15 +236,26 @@ pub fn push(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
 
     let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
 
-    // Load GitHub token for HTTPS authentication
-    let token = crate::github::auth::load_token().ok().flatten();
+    // Load platform tokens for HTTPS authentication
+    let github_token = crate::github::auth::load_token().ok().flatten();
+    let gitee_token = crate::gitee::auth::token_store().load().ok().flatten();
     let remote_url = remote.pushurl().map(|u| u.to_string()).or_else(|| remote.url().map(|u| u.to_string()));
+    let remote_host = remote_url.as_ref().and_then(|u| extract_host(u));
+    let is_https = remote_url.as_ref().map_or(false, |u| u.starts_with("https://"));
 
     let mut cb = RemoteCallbacks::new();
     cb.credentials(move |_url, username_from_url, allowed| {
-        if let (Some(ref token), Some(ref url)) = (&token, &remote_url) {
-            if url.starts_with("https://") && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
-                return Cred::userpass_plaintext("x-access-token", token);
+        if is_https && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+            if let Some(ref host) = remote_host {
+                if host == "github.com" || host.ends_with(".github.com") {
+                    if let Some(ref token) = github_token {
+                        return Cred::userpass_plaintext("x-access-token", token);
+                    }
+                } else if host == "gitee.com" || host.ends_with(".gitee.com") {
+                    if let Some(ref token) = gitee_token {
+                        return Cred::userpass_plaintext("oauth2", token);
+                    }
+                }
             }
         }
         let user = username_from_url.unwrap_or("git");

@@ -91,6 +91,9 @@ pub fn get_branch_list(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
 }
 
 pub fn create_branch(repo: &Repository, name: &str, from: Option<&str>) -> Result<(), String> {
+    // Validate branch name
+    crate::git::validate::validate_ref_name(name)?;
+
     let target = match from {
         Some(ref_name) => {
             let obj = repo
@@ -182,9 +185,66 @@ pub fn delete_branch(repo: &Repository, name: &str) -> Result<(), String> {
         .find_branch(name, git2::BranchType::Local)
         .map_err(|e| format!("无法找到分支 {}: {}", name, e))?;
 
+    // Check if this is the current branch
+    let head = repo.head().ok();
+    if let Some(h) = head {
+        if let Some(shorthand) = h.shorthand() {
+            if shorthand == name {
+                return Err(format!("无法删除当前检出的分支 '{}'，请先切换到其他分支", name));
+            }
+        }
+    }
+
     branch
         .delete()
         .map_err(|e| format!("删除分支失败: {}", e))?;
+
+    Ok(())
+}
+
+pub fn delete_remote_branch(repo: &Repository, remote_name: &str, branch_name: &str) -> Result<(), String> {
+    let mut remote = repo
+        .find_remote(remote_name)
+        .map_err(|e| format!("无法找到远程 {}: {}", remote_name, e))?;
+
+    let refspec = format!(":refs/heads/{}", branch_name);
+
+    // Try loading tokens for HTTPS authentication (supports GitHub + Gitee)
+    let github_token = crate::github::auth::load_token().ok().flatten();
+    let gitee_token = crate::gitee::auth::token_store().load().ok().flatten();
+    let remote_url = remote.url().map(|u| u.to_string());
+    let remote_host = remote_url.as_ref().and_then(|u| crate::git::remote::extract_host(u));
+    let is_https = remote_url.as_ref().map_or(false, |u| u.starts_with("https://"));
+
+    let mut cb = git2::RemoteCallbacks::new();
+    cb.credentials(move |_url, username_from_url, allowed| {
+        if is_https && allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+            if let Some(ref host) = remote_host {
+                if host == "github.com" || host.ends_with(".github.com") {
+                    if let Some(ref token) = github_token {
+                        return git2::Cred::userpass_plaintext("x-access-token", token);
+                    }
+                } else if host == "gitee.com" || host.ends_with(".gitee.com") {
+                    if let Some(ref token) = gitee_token {
+                        return git2::Cred::userpass_plaintext("oauth2", token);
+                    }
+                }
+            }
+        }
+        let user = username_from_url.unwrap_or("git");
+        git2::Cred::ssh_key_from_agent(user).or_else(|_| git2::Cred::default())
+    });
+
+    let mut push_opts = git2::PushOptions::new();
+    push_opts.remote_callbacks(cb);
+
+    remote
+        .push(&[&refspec], Some(&mut push_opts))
+        .map_err(|e| format!("删除远程分支失败: {}", e))?;
+
+    remote
+        .disconnect()
+        .map_err(|e| format!("断开远程连接失败: {}", e))?;
 
     Ok(())
 }

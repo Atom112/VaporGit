@@ -7,6 +7,7 @@ import Home from "./routes/Home";
 import Repository from "./routes/Repository";
 import Settings from "./routes/Settings";
 import GitHubPRs from "./routes/GitHubPRs";
+import GiteePRs from "./routes/GiteePRs";
 
 render(() => (
   <Router root={App}>
@@ -14,5 +15,6 @@ render(() => (
     <Route path="/repository" component={Repository} />
     <Route path="/settings" component={Settings} />
     <Route path="/pulls" component={GitHubPRs} />
+    <Route path="/gitee-pulls" component={GiteePRs} />
   </Router>
 ), document.getElementById("root") as HTMLElement);

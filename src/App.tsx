@@ -5,15 +5,19 @@ import Titlebar from "./components/layout/Titlebar";
 import PageTransition from "./components/layout/PageTransition";
 import ToastContainer from "./components/ui/ToastContainer";
 import UpdateNotification from "./components/ui/UpdateNotification";
-import { githubCheckAuth, checkUpdate } from "./lib/tauriCommands";
+import { githubCheckAuth, giteeCheckAuth, checkUpdate } from "./lib/tauriCommands";
 import { setAuthenticated } from "./stores/githubStore";
+import { setGiteeAuthenticated } from "./stores/giteeStore";
 import { showUpdate } from "./stores/updateStore";
 import { settingsStore } from "./stores/settingsStore";
+import WelcomeDialog from "./components/tutorial/WelcomeDialog";
+import TutorialOverlay from "./components/tutorial/TutorialOverlay";
 
 export default function App(props: { children?: any }) {
   const [systemDark, setSystemDark] = createSignal(
     window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
+  const [showWelcome, setShowWelcome] = createSignal(false);
 
   onMount(() => {
     const handler = (e: MouseEvent) => e.preventDefault();
@@ -36,6 +40,7 @@ export default function App(props: { children?: any }) {
     document.documentElement.setAttribute("data-theme", effective);
   });
 
+  // Auth checks
   onMount(async () => {
     try {
       const status = await githubCheckAuth();
@@ -44,6 +49,17 @@ export default function App(props: { children?: any }) {
       }
     } catch {
       // No stored session — not authenticated, that's fine
+    }
+  });
+
+  onMount(async () => {
+    try {
+      const status = await giteeCheckAuth();
+      if (status.authenticated && status.user) {
+        setGiteeAuthenticated(status.user);
+      }
+    } catch {
+      // ignore
     }
   });
 
@@ -58,6 +74,14 @@ export default function App(props: { children?: any }) {
     }
   });
 
+  // Tutorial welcome dialog
+  onMount(() => {
+    const { tutorialCompleted, tutorialDismissed } = settingsStore;
+    if (!tutorialCompleted && !tutorialDismissed) {
+      setTimeout(() => setShowWelcome(true), 500);
+    }
+  });
+
   return (
     <div class="h-screen w-screen flex flex-col bg-white/10 backdrop-blur-2xl text-white/90 overflow-hidden">
       <Titlebar />
@@ -69,6 +93,8 @@ export default function App(props: { children?: any }) {
       </div>
       <ToastContainer />
       <UpdateNotification />
+      {showWelcome() && <WelcomeDialog onClose={() => setShowWelcome(false)} />}
+      <TutorialOverlay />
     </div>
   );
 }

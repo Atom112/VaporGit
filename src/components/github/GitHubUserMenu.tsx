@@ -1,9 +1,11 @@
 import { Component, createSignal, onCleanup } from 'solid-js';
+import { useNavigate } from '@solidjs/router';
 import { githubStore, clearAuth } from '../../stores/githubStore';
 import { githubLogout } from '../../lib/tauriCommands';
 import { tt } from '../../i18n';
 
 const GitHubUserMenu: Component = () => {
+  const navigate = useNavigate();
   const [open, setOpen] = createSignal(false);
 
   const handleLogout = async () => {
@@ -14,6 +16,17 @@ const GitHubUserMenu: Component = () => {
     }
     clearAuth();
     setOpen(false);
+  };
+
+  const handleSwitch = async () => {
+    try {
+      await githubLogout();
+    } catch {
+      // ignore
+    }
+    clearAuth();
+    setOpen(false);
+    navigate('/settings');
   };
 
   // Close dropdown when clicking outside
@@ -58,6 +71,15 @@ const GitHubUserMenu: Component = () => {
             <p class="text-sm text-white font-medium truncate">{user()?.name ?? user()?.login}</p>
             <p class="text-xs text-gray-400 truncate">{user()?.login}</p>
           </div>
+          <button
+            onClick={handleSwitch}
+            class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            {tt('settings.switchAccount')}
+          </button>
           <button
             onClick={handleLogout}
             class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"

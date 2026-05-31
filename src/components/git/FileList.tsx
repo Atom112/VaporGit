@@ -1,4 +1,4 @@
-import { Component, For, Show } from 'solid-js';
+import { Component, createSignal, For, Show } from 'solid-js';
 import type { FileStatus } from '../../lib/types';
 import { tt, ttf } from '../../i18n';
 
@@ -10,6 +10,8 @@ interface FileListProps {
   onStageAll: () => void;
   onUnstageAll: () => void;
   onSelectFile: (path: string) => void;
+  onDiscard?: (file: FileStatus) => void;
+  onDiscardAll?: () => void;
 }
 
 const statusLabel = (status: FileStatus['status']): string => {
@@ -56,6 +58,35 @@ const statusColor = (status: FileStatus['status']): string => {
 };
 
 const FileList: Component<FileListProps> = (props) => {
+  // Discard confirmation dialog state
+  const [discardTarget, setDiscardTarget] = createSignal<{ type: 'file'; file: FileStatus } | { type: 'all' } | null>(null);
+  const [discardPhase, setDiscardPhase] = createSignal<'enter' | 'exit' | null>(null);
+
+  const openDiscardConfirm = (target: { type: 'file'; file: FileStatus } | { type: 'all' }) => {
+    setDiscardTarget(target);
+    setDiscardPhase('enter');
+  };
+
+  const closeDiscardConfirm = () => {
+    if (discardPhase() === 'exit') return;
+    setDiscardPhase('exit');
+    setTimeout(() => {
+      setDiscardPhase(null);
+      setDiscardTarget(null);
+    }, 120);
+  };
+
+  const handleDiscardConfirm = () => {
+    const target = discardTarget();
+    if (!target) return;
+    if (target.type === 'file') {
+      props.onDiscard?.(target.file);
+    } else {
+      props.onDiscardAll?.();
+    }
+    closeDiscardConfirm();
+  };
+
   return (
     <div class="flex flex-col h-full">
       {/* Unstaged files (top) */}
@@ -65,12 +96,22 @@ const FileList: Component<FileListProps> = (props) => {
             <span class="text-xs font-semibold opacity-60 uppercase">
               {ttf('repo.changedCount', props.unstagedFiles.length)}
             </span>
-            <button
-              class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-              onClick={props.onStageAll}
-            >
-              {tt('repo.stageAll')}
-            </button>
+            <div class="flex gap-2">
+              <Show when={props.onDiscardAll}>
+                <button
+                  class="text-xs text-red-400 hover:text-red-300 transition-colors"
+                  onClick={() => openDiscardConfirm({ type: 'all' })}
+                >
+                  {tt('repo.discardAll')}
+                </button>
+              </Show>
+              <button
+                class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                onClick={props.onStageAll}
+              >
+                {tt('repo.stageAll')}
+              </button>
+            </div>
           </div>
           <For each={props.unstagedFiles}>
             {(file) => (
@@ -94,15 +135,28 @@ const FileList: Component<FileListProps> = (props) => {
                   </Show>
                   {file.path}
                 </span>
-                <button
-                  class="text-[11px] px-2 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-colors shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    props.onToggleStage(file);
-                  }}
-                >
-                  {tt('repo.stage')}
-                </button>
+                <div class="flex gap-1 shrink-0">
+                  <Show when={props.onDiscard}>
+                    <button
+                      class="text-[11px] px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDiscardConfirm({ type: 'file', file });
+                      }}
+                    >
+                      {tt('repo.discard')}
+                    </button>
+                  </Show>
+                  <button
+                    class="text-[11px] px-2 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      props.onToggleStage(file);
+                    }}
+                  >
+                    {tt('repo.stage')}
+                  </button>
+                </div>
               </div>
             )}
           </For>
@@ -163,6 +217,48 @@ const FileList: Component<FileListProps> = (props) => {
       <Show when={props.stagedFiles.length === 0 && props.unstagedFiles.length === 0}>
         <div class="flex-1 flex items-center justify-center p-4 text-sm opacity-40">
           {tt('repo.clean')}
+        </div>
+      </Show>
+
+      {/* Discard confirmation dialog */}
+      <Show when={discardPhase() && discardTarget()}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div class={`w-80 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
+            discardPhase() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
+          }`}>
+            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <h2 class="text-sm font-bold text-red-400">{tt('repo.discard')}</h2>
+              <button
+                class="text-xs opacity-50 hover:text-red-400 transition-colors"
+                onClick={closeDiscardConfirm}
+              >
+                {tt('common.close')}
+              </button>
+            </div>
+            <div class="p-4 space-y-4">
+              <Show when={discardTarget()?.type === 'file'} fallback={
+                <p class="text-sm">{ttf('repo.discardAllConfirm', props.unstagedFiles.length)}</p>
+              }>
+                <p class="text-sm">
+                  {ttf('repo.discardConfirm', (discardTarget() as any)?.file?.path ?? '')}
+                </p>
+              </Show>
+              <div class="flex gap-2 justify-end">
+                <button
+                  class="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm transition-colors"
+                  onClick={closeDiscardConfirm}
+                >
+                  {tt('common.cancel')}
+                </button>
+                <button
+                  class="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium transition-colors"
+                  onClick={handleDiscardConfirm}
+                >
+                  {tt('common.confirm')}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </Show>
     </div>

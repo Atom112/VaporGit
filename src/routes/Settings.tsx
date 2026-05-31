@@ -1,24 +1,29 @@
 import { Component, createSignal, Show } from 'solid-js';
-import { settingsStore, updateSettings } from '../stores/settingsStore';
+import { settingsStore, updateSettings, resetTutorial } from '../stores/settingsStore';
 import { githubStore, clearAuth } from '../stores/githubStore';
-import { githubLogout, checkUpdate } from '../lib/tauriCommands';
+import { giteeStore, clearGiteeAuth } from '../stores/giteeStore';
+import { githubLogout, giteeLogout, checkUpdate } from '../lib/tauriCommands';
+import { startTutorial } from '../stores/tutorialStore';
 import { showUpdate } from '../stores/updateStore';
 import { addToast } from '../stores/toastStore';
 import CustomSelect from '../components/ui/CustomSelect';
 import GitHubLogin from '../components/github/GitHubLogin';
+import GiteeLogin from '../components/gitee/GiteeLogin';
 import { version } from '../../package.json';
 import { i18nState, setLang, tt } from '../i18n';
 
 const Settings: Component = () => {
   const [checking, setChecking] = createSignal(false);
 
-  const handleLogout = async () => {
-    try {
-      await githubLogout();
-    } catch {
-      // ignore
+  const handleSwitchAccount = async () => {
+    if (githubStore.authenticated) {
+      try { await githubLogout(); } catch { /* ignore */ }
+      clearAuth();
     }
-    clearAuth();
+    if (giteeStore.authenticated) {
+      try { await giteeLogout(); } catch { /* ignore */ }
+      clearGiteeAuth();
+    }
   };
 
   const handleCheckUpdate = async () => {
@@ -44,39 +49,77 @@ const Settings: Component = () => {
         <h1 class="text-2xl font-bold mb-6">{tt('settings.title')}</h1>
 
         <div class="space-y-6">
-          {/* GitHub Account */}
+          {/* Platform Account */}
           <div class="p-4 rounded-xl bg-white/5 border border-white/10">
-            <h2 class="text-sm font-medium mb-3">{tt('settings.github')}</h2>
-            {githubStore.authenticated && githubStore.user ? (
+            <h2 class="text-sm font-medium mb-3">{tt('settings.account')}</h2>
+
+            {/* Logged into GitHub */}
+            <Show when={githubStore.authenticated && githubStore.user}>
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                  {githubStore.user.avatarUrl ? (
-                    <img src={githubStore.user.avatarUrl} alt="" class="w-10 h-10 rounded-full" />
+                  {githubStore.user!.avatarUrl ? (
+                    <img src={githubStore.user!.avatarUrl} alt="" class="w-10 h-10 rounded-full" />
                   ) : (
                     <div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
                       <span class="text-lg text-cyan-400 font-medium">
-                        {githubStore.user.login?.charAt(0).toUpperCase()}
+                        {githubStore.user!.login?.charAt(0).toUpperCase()}
                       </span>
                     </div>
                   )}
                   <div>
-                    <p class="text-sm text-white font-medium">{githubStore.user.name ?? githubStore.user.login}</p>
-                    <p class="text-xs text-gray-400">{githubStore.user.login}</p>
-                    {githubStore.user.email && (
-                      <p class="text-xs text-gray-500">{githubStore.user.email}</p>
+                    <p class="text-sm text-white font-medium">{githubStore.user!.name ?? githubStore.user!.login}</p>
+                    <p class="text-xs text-gray-400">{githubStore.user!.login}</p>
+                    {githubStore.user!.email && (
+                      <p class="text-xs text-gray-500">{githubStore.user!.email}</p>
                     )}
                   </div>
                 </div>
+              </div>
+            </Show>
+
+            {/* Logged into Gitee */}
+            <Show when={giteeStore.authenticated && giteeStore.user}>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  {giteeStore.user!.avatarUrl ? (
+                    <img src={giteeStore.user!.avatarUrl} alt="" class="w-10 h-10 rounded-full" />
+                  ) : (
+                    <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                      <span class="text-lg text-red-400 font-medium">
+                        {giteeStore.user!.login?.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <p class="text-sm text-white font-medium">{giteeStore.user!.name ?? giteeStore.user!.login}</p>
+                    <p class="text-xs text-gray-400">{giteeStore.user!.login}</p>
+                    {giteeStore.user!.email && (
+                      <p class="text-xs text-gray-500">{giteeStore.user!.email}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Show>
+
+            {/* Logged in: show switch button */}
+            <Show when={githubStore.authenticated || giteeStore.authenticated}>
+              <div class="mt-3 flex justify-end">
                 <button
-                  onClick={handleLogout}
+                  onClick={handleSwitchAccount}
                   class="px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 >
-                  {tt('github.logout')}
+                  {tt('settings.switchAccount')}
                 </button>
               </div>
-            ) : (
-              <GitHubLogin />
-            )}
+            </Show>
+
+            {/* Not logged in: show both login options */}
+            <Show when={!githubStore.authenticated && !giteeStore.authenticated}>
+              <div class="space-y-2">
+                <GitHubLogin />
+                <GiteeLogin />
+              </div>
+            </Show>
           </div>
 
           {/* Language */}
@@ -144,6 +187,20 @@ const Settings: Component = () => {
               onInput={(e) => updateSettings({ defaultRemoteName: e.currentTarget.value })}
             />
             <p class="text-xs opacity-40 mt-1">{tt('settings.remoteNameDesc')}</p>
+          </div>
+
+          {/* Tutorial */}
+          <div class="pt-2">
+            <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+              <h2 class="text-sm font-medium mb-1">{tt('settings.tutorial')}</h2>
+              <p class="text-xs opacity-60 mb-3">{tt('settings.tutorialDesc')}</p>
+              <button
+                class="px-4 py-2 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 text-sm font-medium transition-colors"
+                onClick={() => { resetTutorial(); startTutorial(); }}
+              >
+                {tt('settings.restartTutorial')}
+              </button>
+            </div>
           </div>
 
           {/* Check for updates */}

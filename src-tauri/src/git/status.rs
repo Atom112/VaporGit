@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use git2::{Repository, StatusOptions, StatusShow};
 use crate::models::status::{FileStatus, StatusKind};
 use crate::models::conflict::ConflictEntry;
@@ -131,6 +132,11 @@ pub fn stage_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus
         .workdir()
         .ok_or_else(|| "无法获取工作目录".to_string())?;
 
+    // Validate all paths first
+    for file in files {
+        validate_path_in_workdir(workdir, file)?;
+    }
+
     // First pass: remove all files that no longer exist on disk.
     // Doing this BEFORE add_path helps git2 detect renames in the
     // second pass (the index sees old paths cleared first).
@@ -245,6 +251,141 @@ pub fn get_conflicts(repo: &Repository) -> Result<Vec<ConflictEntry>, String> {
     }
 
     Ok(result)
+}
+
+pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Result<String, String> {
+    let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+
+    let conflicts = index.conflicts()
+        .map_err(|e| format!("无法获取冲突迭代器: {}", e))?;
+
+    for conflict_result in conflicts {
+        let conflict = match conflict_result {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let conflict_path = conflict
+            .ancestor
+            .as_ref()
+            .or_else(|| conflict.our.as_ref())
+            .or_else(|| conflict.their.as_ref())
+            .map(|e| std::str::from_utf8(&e.path).unwrap_or(""))
+            .unwrap_or("")
+            .to_string();
+
+        if conflict_path != file {
+            continue;
+        }
+
+        let entry = match stage {
+            "ours" => conflict.our,
+            "theirs" => conflict.their,
+            "ancestor" => conflict.ancestor,
+            _ => return Err("无效的阶段参数，请使用 'ours'、'theirs' 或 'ancestor'".to_string()),
+        };
+
+        if let Some(e) = entry {
+            let blob = repo.find_blob(e.id).map_err(|_| format!("无法读取文件 '{}' 的内容", file))?;
+            if blob.is_binary() {
+                return Ok("[二进制文件]".to_string());
+            }
+            let content = std::str::from_utf8(blob.content())
+                .map_err(|_| "文件内容不是有效的 UTF-8 文本".to_string())?;
+            return Ok(content.to_string());
+        }
+    }
+
+    Ok(String::new())
+}
+
+/// Validate that a path is within the repository workdir.
+/// Returns the canonicalized absolute path if valid, or an error.
+fn validate_path_in_workdir(workdir: &Path, file: &str) -> Result<PathBuf, String> {
+    let path = Path::new(file);
+    if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return Err(format!("路径 '{}' 包含 '..'，不允许操作", file));
+    }
+    if path.is_absolute() {
+        return Err(format!("路径 '{}' 是绝对路径，请使用相对路径", file));
+    }
+    let abs_path = workdir.join(path);
+    // Normalize to canonical if it exists, otherwise check prefix
+    let canonical = abs_path.canonicalize().unwrap_or_else(|_| abs_path.clone());
+    let workdir_canonical = workdir.canonicalize().map_err(|e| format!("无法规范化工作目录: {}", e))?;
+    if !canonical.starts_with(&workdir_canonical) {
+        return Err(format!("路径 '{}' 在仓库工作目录之外", file));
+    }
+    Ok(canonical)
+}
+
+pub fn discard_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus>, String> {
+    let workdir = repo.workdir().ok_or_else(|| "无法获取工作目录".to_string())?;
+    let workdir_canonical = workdir.canonicalize().map_err(|e| format!("无法规范化工作目录: {}", e))?;
+    let head = repo.head().ok();
+    let head_tree = head.as_ref().and_then(|h| h.peel_to_tree().ok());
+
+    let mut tracked = Vec::new();
+    let mut untracked = Vec::new();
+
+    for file in files {
+        // Validate path is within workdir
+        let _validated_path = validate_path_in_workdir(workdir, file)?;
+
+        let path = std::path::Path::new(file);
+
+        // Check for directory: refuse recursive deletion — user should discard individual files
+        let abs_path = workdir_canonical.join(path);
+        if abs_path.is_dir() {
+            return Err(format!("路径 '{}' 是目录，不支持递归丢弃。请单独选择文件操作。", file));
+        }
+
+        if head_tree.as_ref().map_or(false, |tree| tree.get_path(path).is_ok()) {
+            tracked.push(file.clone());
+        } else {
+            untracked.push(file.clone());
+        }
+    }
+
+    // Checkout tracked files from HEAD (restores working tree + index)
+    if !tracked.is_empty() {
+        let mut checkout = git2::build::CheckoutBuilder::new();
+        checkout.force().update_index(true);
+        for f in &tracked {
+            checkout.path(std::path::Path::new(f.as_str()));
+        }
+        repo.checkout_head(Some(&mut checkout))
+            .map_err(|e| format!("无法撤销文件更改: {}", e))?;
+    }
+
+    // Delete untracked/new files from disk and remove from index
+    if !untracked.is_empty() {
+        for file in &untracked {
+            let path = std::path::Path::new(file);
+            let abs_path = workdir_canonical.join(path);
+            // Double-check: validated earlier, but guard against TOCTOU
+            if !abs_path.starts_with(&workdir_canonical) {
+                continue;
+            }
+            if abs_path.exists() {
+                // Only delete files, not directories (directories were rejected above,
+                // but check again for safety in case a directory was created between validation and now)
+                if abs_path.is_dir() {
+                    return Err(format!("目录 '{}' 不会自动删除，请手动清理", file));
+                }
+                std::fs::remove_file(&abs_path)
+                    .map_err(|e| format!("无法删除文件 '{}': {}", file, e))?;
+            }
+        }
+        let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+        for file in &untracked {
+            index.remove_path(std::path::Path::new(file)).ok();
+        }
+        index.write().map_err(|e| format!("写入索引失败: {}", e))?;
+        index.read(true).map_err(|e| format!("重读索引失败: {}", e))?;
+    }
+
+    get_status(repo)
 }
 
 pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Result<(), String> {

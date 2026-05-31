@@ -23,6 +23,14 @@ import type {
   AuthStatus,
   GitHubReleaseAsset,
   UpdateInfo,
+  GiteeUser,
+  GiteeAuthStatus,
+  GiteeRepo,
+  GiteeBranch,
+  GiteePullRequest,
+  GiteePullRequestFile,
+  GiteePRComment,
+  GiteeMergePullResult,
 } from './types';
 
 export async function openRepo(path: string): Promise<RepoInfo> {
@@ -135,6 +143,10 @@ export async function deleteBranch(path: string, name: string): Promise<void> {
   return invoke('delete_branch', { path, name });
 }
 
+export async function deleteRemoteBranch(path: string, remoteName: string, branchName: string): Promise<void> {
+  return invoke('delete_remote_branch', { path, remoteName, branchName });
+}
+
 export async function fetch(path: string, remote?: string): Promise<void> {
   return invoke('fetch', { path, remote: remote ?? null });
 }
@@ -155,6 +167,14 @@ export async function push(
   return invoke('push', { path, remote: remote ?? null, branch: branch ?? null });
 }
 
+export async function pushWithAutoCreate(
+  path: string,
+  remote?: string,
+  branch?: string
+): Promise<string> {
+  return invoke('push_with_auto_create', { path, remote: remote ?? null, branch: branch ?? null });
+}
+
 export async function getRemotes(path: string): Promise<RemoteInfo[]> {
   return invoke('get_remotes', { path });
 }
@@ -165,6 +185,14 @@ export async function checkSubmodules(path: string): Promise<string[]> {
 
 export async function getConflicts(path: string): Promise<ConflictEntry[]> {
   return invoke('get_conflicts', { path });
+}
+
+export async function getConflictContent(path: string, file: string, stage: string): Promise<string> {
+  return invoke('get_conflict_content', { path, file, stage });
+}
+
+export async function discardFiles(path: string, files: string[]): Promise<FileStatus[]> {
+  return invoke('discard_files', { path, files });
 }
 
 export async function resolveConflict(path: string, file: string, resolution: string): Promise<void> {
@@ -360,4 +388,105 @@ export async function githubStartDownload(asset: GitHubReleaseAsset): Promise<st
 
 export async function githubInstallUpdate(installerPath: string): Promise<void> {
   return invoke('github_install_update', { installerPath });
+}
+
+// === Gitee ===
+
+export async function giteeLogin(): Promise<GiteeUser> {
+  return invoke('gitee_login');
+}
+
+export async function giteeCheckAuth(): Promise<GiteeAuthStatus> {
+  return invoke('gitee_check_auth');
+}
+
+export async function giteeLogout(): Promise<void> {
+  return invoke('gitee_logout');
+}
+
+export async function giteeGetUser(): Promise<GiteeUser> {
+  return invoke('gitee_get_user');
+}
+
+export async function giteeListRepos(page?: number, perPage?: number): Promise<GiteeRepo[]> {
+  return invoke('gitee_list_repos', { page: page ?? null, perPage: perPage ?? null });
+}
+
+export async function giteeGetRepo(owner: string, repo: string): Promise<GiteeRepo> {
+  return invoke('gitee_get_repo', { owner, repo });
+}
+
+export async function giteeCreateRepo(name: string, description: string | null, private_: boolean): Promise<GiteeRepo> {
+  return invoke('gitee_create_repo', { name, description, private: private_ });
+}
+
+export async function giteeListBranches(owner: string, repo: string): Promise<GiteeBranch[]> {
+  return invoke('gitee_list_branches', { owner, repo });
+}
+
+export async function giteeListPulls(
+  owner: string,
+  repo: string,
+  state?: string,
+  page?: number,
+  perPage?: number
+): Promise<GiteePullRequest[]> {
+  return invoke('gitee_list_pulls', {
+    owner,
+    repo,
+    state: state ?? null,
+    page: page ?? null,
+    perPage: perPage ?? null,
+  });
+}
+
+export async function giteeGetPull(owner: string, repo: string, number: number): Promise<GiteePullRequest> {
+  return invoke('gitee_get_pull', { owner, repo, number });
+}
+
+export async function giteeCreatePull(
+  owner: string,
+  repo: string,
+  request: { title: string; head: string; base: string; body?: string | null; draft?: boolean | null }
+): Promise<GiteePullRequest> {
+  return invoke('gitee_create_pull', { owner, repo, request });
+}
+
+export async function giteeMergePull(
+  owner: string,
+  repo: string,
+  number: number,
+  request: { mergeMethod?: string | null }
+): Promise<GiteeMergePullResult> {
+  return invoke('gitee_merge_pull', { owner, repo, number, request });
+}
+
+export async function giteeGetPullFiles(
+  owner: string,
+  repo: string,
+  number: number
+): Promise<GiteePullRequestFile[]> {
+  return invoke('gitee_get_pull_files', { owner, repo, number });
+}
+
+export async function giteeGetPullDiff(owner: string, repo: string, number: number): Promise<string> {
+  return invoke('gitee_get_pull_diff', { owner, repo, number });
+}
+
+export async function giteeListPullComments(
+  owner: string,
+  repo: string,
+  number: number
+): Promise<GiteePRComment[]> {
+  return invoke('gitee_list_pull_comments', { owner, repo, number });
+}
+
+// === Tutorial ===
+
+export async function createDemoRepo(): Promise<string> {
+  return invoke('create_demo_repo');
+}
+
+export async function deleteDir(path: string): Promise<void> {
+  return invoke('delete_dir', { path });
 }

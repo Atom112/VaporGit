@@ -21,16 +21,18 @@ import {
   removeRecentRepo,
   checkoutBranch,
   createBranch,
+  deleteBranch,
   cherryPick,
   undo as undoLast,
   redo as redoLast,
   fetch as fetchRemote,
   pull as pullRemote,
-  push as pushRemote,
+  pushWithAutoCreate,
   getRemotes,
   checkSubmodules,
   openTerminal,
   closeTerminal,
+  discardFiles,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
 import FileList from '../components/git/FileList';
@@ -42,7 +44,9 @@ import StatusBar from '../components/layout/StatusBar';
 import StashPanel from '../components/git/StashPanel';
 import ConflictResolver from '../components/git/ConflictResolver';
 import PRCreateDialog from '../components/github/PRCreateDialog';
+import GiteePRCreateDialog from '../components/gitee/GiteePRCreateDialog';
 import { githubStore } from '../stores/githubStore';
+import { giteeStore } from '../stores/giteeStore';
 import InteractiveRebase from '../components/git/InteractiveRebase';
 import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
 import TerminalPanel from '../components/terminal/TerminalPanel';
@@ -144,7 +148,8 @@ const Repository: Component = () => {
         setShowConflictResolver(true);
       }
     } catch (e) {
-      console.error('Failed to refresh status:', e);
+      console.error('刷新状态失败:', e);
+      addToast(ttf('repo.refreshFailed', describeError(e)), 'error');
     }
   };
 
@@ -161,7 +166,7 @@ const Repository: Component = () => {
       }
       setCommitPage(reset ? 1 : page + 1);
     } catch (e) {
-      console.error('Failed to load history:', e);
+      console.error('加载历史失败:', e);
     }
   };
 
@@ -173,8 +178,11 @@ const Repository: Component = () => {
       const data = await getCommitGraph(path);
       setCommitStore({ graphData: data, graphLoading: false });
     } catch (e) {
-      console.error('Failed to load commit graph:', e);
+      console.error('加载提交图失败:', e);
       setCommitStore({ graphLoading: false });
+      if (!silent) {
+        addToast(ttf('repo.graphLoadFailed', describeError(e)), 'error');
+      }
     }
   };
 
@@ -186,13 +194,16 @@ const Repository: Component = () => {
       const branches = await getBranchList(path);
       setCommitStore({ branches, branchesLoading: false });
     } catch (e) {
-      console.error('Failed to load branches:', e);
+      console.error('加载分支列表失败:', e);
       setCommitStore({ branchesLoading: false });
+      if (!silent) {
+        addToast(ttf('repo.branchesLoadFailed', describeError(e)), 'error');
+      }
     }
   };
 
   const refreshAll = async () => {
-    await Promise.all([refreshStatus(), refreshHistory(), refreshGraph(), refreshBranches()]);
+    await Promise.all([refreshStatus(), refreshHistory(), refreshGraph(true), refreshBranches(true)]);
     // Check for submodules
     const path = repoPath();
     if (path) {
@@ -201,7 +212,7 @@ const Repository: Component = () => {
         if (subs.length > 0) {
           addToast(`检测到 ${subs.length} 个子模块：${subs.join(', ')}。请在子模块目录中单独操作。`, 'info');
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore — submodule check is non-critical */ }
     }
   };
 
@@ -298,7 +309,8 @@ const Repository: Component = () => {
         setShowConflictResolver(true);
       }
     } catch (e) {
-      console.error('Stage/unstage failed:', e);
+      console.error('暂存/取消暂存失败:', e);
+      addToast(ttf('repo.stageFailed', describeError(e)), 'error');
     } finally {
       setStaging(false);
     }
@@ -324,7 +336,7 @@ const Repository: Component = () => {
       addToast(`已暂存 ${unstaged.length} 个文件`, 'success');
     } catch (e) {
       console.error('Stage all failed:', e);
-      addToast(`暂存失败: ${e}`, 'error');
+      addToast(ttf('repo.stageAllFailed', describeError(e)), 'error');
     } finally {
       setStaging(false);
     }
@@ -346,9 +358,35 @@ const Repository: Component = () => {
       }
     } catch (e) {
       console.error('Unstage all failed:', e);
-      addToast(`取消暂存失败: ${e}`, 'error');
+      addToast(ttf('repo.unstageAllFailed', describeError(e)), 'error');
     } finally {
       setStaging(false);
+    }
+  };
+
+  const handleDiscard = async (file: FileStatus) => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      const updated = await discardFiles(path, [file.path]);
+      setDiffStore({ fileStatuses: updated });
+    } catch (e) {
+      addToast(`放弃更改失败: ${describeError(e)}`, 'error');
+    }
+  };
+
+  const handleDiscardAll = async () => {
+    const path = repoPath();
+    if (!path) return;
+    const unstaged = diffStore.fileStatuses.filter((f) => !f.staged);
+    if (unstaged.length === 0) return;
+    try {
+      const paths = unstaged.map((f) => f.path);
+      const updated = await discardFiles(path, paths);
+      setDiffStore({ fileStatuses: updated });
+      addToast(`已放弃 ${unstaged.length} 个文件的更改`, 'success');
+    } catch (e) {
+      addToast(`放弃更改失败: ${describeError(e)}`, 'error');
     }
   };
 
@@ -381,8 +419,9 @@ const Repository: Component = () => {
       const result = await getFileDiff(path, filePath);
       setDiffStore({ diffResult: result, diffLoading: false });
     } catch (e) {
-      console.error('Failed to load diff:', e);
+      console.error('加载文件差异失败:', e);
       setDiffStore({ diffLoading: false });
+      addToast(ttf('repo.diffLoadFailed', describeError(e)), 'error');
     }
   };
 
@@ -401,7 +440,8 @@ const Repository: Component = () => {
       const detail = await getCommitDetail(path, c.id);
       setCommitDetail(detail);
     } catch (e) {
-      console.error('Failed to load commit detail:', e);
+      console.error('加载提交详情失败:', e);
+      addToast(ttf('repo.commitDetailLoadFailed', describeError(e)), 'error');
     } finally {
       setCommitLoading(false);
     }
@@ -442,7 +482,8 @@ const Repository: Component = () => {
         });
         setCommitDetail(detail);
       } catch (e) {
-        console.error('Failed to load commit detail from graph:', e);
+        console.error('从图形加载提交详情失败:', e);
+        addToast(ttf('repo.commitDetailLoadFailed', describeError(e)), 'error');
       } finally {
         setCommitLoading(false);
       }
@@ -469,8 +510,9 @@ const Repository: Component = () => {
       );
       setDiffStore({ diffResult: result, diffLoading: false });
     } catch (e) {
-      console.error('Failed to load commit file diff:', e);
+      console.error('加载提交文件差异失败:', e);
       setDiffStore({ diffLoading: false });
+      addToast(ttf('repo.diffLoadFailed', describeError(e)), 'error');
     }
   };
 
@@ -529,10 +571,24 @@ const Repository: Component = () => {
     setRemoteActionLoading(true);
     try {
       const result = await pullRemote(path, settingsStore.defaultRemoteName);
-      addToast(result, 'success');
+      // After pull, refresh to detect conflicts
       await refreshAll();
+      const statuses = diffStore.fileStatuses;
+      const hasConflicts = statuses.some((f) => f.status === 'CONFLICTED');
+      if (hasConflicts) {
+        addToast(tt('repo.conflictPullDetected'), 'info');
+        setShowConflictResolver(true);
+      } else {
+        addToast(result, 'success');
+      }
     } catch (e) {
       addToast(ttf('repo.pullFailed', describeError(e)), 'error');
+      // Also check for conflicts on error (e.g. merge conflicts returned as errors)
+      await refreshStatus();
+      const statuses = diffStore.fileStatuses;
+      if (statuses.some((f) => f.status === 'CONFLICTED')) {
+        setShowConflictResolver(true);
+      }
     } finally {
       setRemoteActionLoading(false);
     }
@@ -543,8 +599,12 @@ const Repository: Component = () => {
     if (!path || remoteActionLoading()) return;
     setRemoteActionLoading(true);
     try {
-      await pushRemote(path, settingsStore.defaultRemoteName);
-      addToast(tt('repo.pushSuccess'), 'success');
+      const result = await pushWithAutoCreate(path, settingsStore.defaultRemoteName);
+      if (result === 'auto_created_and_pushed') {
+        addToast(tt('repo.pushAutoCreateSuccess'), 'success');
+      } else {
+        addToast(tt('repo.pushSuccess'), 'success');
+      }
       await refreshGraph(true);
     } catch (e) {
       addToast(ttf('repo.pushFailed', describeError(e)), 'error');
@@ -562,7 +622,7 @@ const Repository: Component = () => {
       addToast(`已撤销提交: ${msg.slice(0, 50)}`, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`撤销失败: ${e}`, 'error');
+      addToast(ttf('repo.undoFailed', describeError(e)), 'error');
     } finally {
       setUndoLoading(false);
     }
@@ -577,7 +637,7 @@ const Repository: Component = () => {
       addToast(`已重做提交: ${msg.slice(0, 50)}`, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`重做失败: ${e}`, 'error');
+      addToast(ttf('repo.redoFailed', describeError(e)), 'error');
     } finally {
       setUndoLoading(false);
     }
@@ -596,6 +656,7 @@ const Repository: Component = () => {
   };
 
   // ── PR creation from commit detail ──
+  const [prCreatePlatform, setPrCreatePlatform] = createSignal<'github' | 'gitee'>('github');
   const handleCreatePullRequest = async () => {
     const path = repoPath();
     if (!path) return;
@@ -606,13 +667,21 @@ const Repository: Component = () => {
         addToast('未找到 origin 远程仓库', 'error');
         return;
       }
-      const match = origin.url.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
-      if (!match) {
-        addToast('远程仓库不是 GitHub 地址', 'error');
+      const ghMatch = origin.url.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+      if (ghMatch) {
+        setPrCreatePlatform('github');
+        setPrCreateInfo({ owner: ghMatch[1], repo: ghMatch[2].replace(/\.git$/, '') });
+        setShowPRCreate(true);
         return;
       }
-      setPrCreateInfo({ owner: match[1], repo: match[2].replace(/\.git$/, '') });
-      setShowPRCreate(true);
+      const gtMatch = origin.url.match(/gitee\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+      if (gtMatch) {
+        setPrCreatePlatform('gitee');
+        setPrCreateInfo({ owner: gtMatch[1], repo: gtMatch[2].replace(/\.git$/, '') });
+        setShowPRCreate(true);
+        return;
+      }
+      addToast('远程仓库不是 GitHub 或 Gitee 地址', 'error');
     } catch (e) {
       addToast(`获取远程仓库信息失败: ${describeError(e)}`, 'error');
     }
@@ -627,7 +696,7 @@ const Repository: Component = () => {
       addToast('已检出到提交 ' + commitId.slice(0, 8), 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`检出失败: ${e}`, 'error');
+      addToast(ttf('commit.checkoutFailed', describeError(e)), 'error');
     }
   };
 
@@ -650,7 +719,7 @@ const Repository: Component = () => {
       setCreateBranchDialog(null);
       await refreshAll();
     } catch (e) {
-      addToast(`创建分支失败: ${e}`, 'error');
+      addToast(ttf('commit.createBranchFailed', describeError(e)), 'error');
     } finally {
       setCreateBranchLoading(false);
     }
@@ -664,7 +733,31 @@ const Repository: Component = () => {
       addToast(result, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(`Cherry-pick 失败: ${e}`, 'error');
+      addToast(ttf('commit.cherryPickFailed', describeError(e)), 'error');
+    }
+  };
+
+  const handleGraphCheckoutBranch = async (branchName: string) => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      await checkoutBranch(path, branchName);
+      addToast(ttf('repo.switchBranchSuccess', branchName), 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(ttf('repo.switchBranchFailed', describeError(e)), 'error');
+    }
+  };
+
+  const handleGraphDeleteBranch = async (branchName: string) => {
+    const path = repoPath();
+    if (!path) return;
+    try {
+      await deleteBranch(path, branchName);
+      addToast(ttf('commit.deleteBranchSuccess', branchName), 'success');
+      await refreshAll();
+    } catch (e) {
+      addToast(ttf('commit.deleteBranchFailed', describeError(e)), 'error');
     }
   };
 
@@ -685,7 +778,7 @@ const Repository: Component = () => {
     try {
       await openTerminal(path);
     } catch (e) {
-      addToast(`打开终端失败: ${e}`, 'error');
+      addToast(ttf('repo.terminalOpenFailed', describeError(e)), 'error');
       handleCloseTerminal();
     }
   };
@@ -704,28 +797,30 @@ const Repository: Component = () => {
   return (
     <div class="h-full flex flex-col">
       <Show when={repoPath()} fallback={
-        <div class="flex-1 flex flex-col items-center justify-center p-8 overflow-auto animate-tree-enter">
-          <div class="max-w-xl w-full">
-            <h1 class="text-2xl font-bold mb-6 text-center">{tt('repo.noRepoOpen')}</h1>
+        <div class="flex-1 flex flex-col p-8 overflow-hidden animate-tree-enter">
+          <div class="max-w-xl w-full mx-auto flex-1 flex flex-col min-h-0">
+            <div class="shrink-0">
+              <h1 class="text-2xl font-bold mb-6 text-center">{tt('repo.noRepoOpen')}</h1>
 
-            <Show when={repoErrorPhase() !== 'closed'}>
-              <div class={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm space-y-2 ${
-                repoErrorPhase() === 'enter' ? 'animate-error-enter' : 'animate-error-exit'
-              }`}>
-                <p>{repoError()}</p>
-                <Show when={failedRepoPath()}>
-                  <button
-                    class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
-                    onClick={handleRemoveFailedRepo}
-                  >
-                    {tt('common.delete')}
-                  </button>
-                </Show>
-              </div>
-            </Show>
+              <Show when={repoErrorPhase() !== 'closed'}>
+                <div class={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm space-y-2 ${
+                  repoErrorPhase() === 'enter' ? 'animate-error-enter' : 'animate-error-exit'
+                }`}>
+                  <p>{repoError()}</p>
+                  <Show when={failedRepoPath()}>
+                    <button
+                      class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors"
+                      onClick={handleRemoveFailedRepo}
+                    >
+                      {tt('common.delete')}
+                    </button>
+                  </Show>
+                </div>
+              </Show>
+            </div>
 
             <div
-              class={`p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm mb-6 text-center ${
+              class={`p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm mb-6 text-center shrink-0 ${
                 repoStore.loading ? 'opacity-50 pointer-events-none' : ''
               }`}
               onClick={handleOpenRepo}
@@ -738,24 +833,42 @@ const Repository: Component = () => {
             </div>
 
             <Show when={recentRepos().length > 0}>
-              <h2 class="text-sm font-semibold mb-3 opacity-60 uppercase tracking-wider text-center">{tt('home.recentRepos')}</h2>
-              <div class="space-y-2">
+              <div class="flex-1 flex flex-col min-h-0">
+                <h2 class="text-sm font-semibold mb-3 opacity-60 uppercase tracking-wider text-center shrink-0">{tt('home.recentRepos')}</h2>
+                <div class="overflow-y-auto min-h-0 space-y-2 pr-1">
                 <For each={recentRepos()}>
                   {(repo) => (
                     <div
-                      class={`p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-between ${
+                      class={`p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center gap-2 ${
                         repoStore.loading ? 'opacity-50 pointer-events-none' : ''
                       }`}
                       onClick={() => handleRecentClick(repo)}
                     >
-                      <div class="flex-1 min-w-0">
+                      <div class="flex-1 min-w-0 overflow-hidden">
                         <span class="font-medium">{repo.name}</span>
-                        <span class="ml-3 text-xs opacity-50 truncate align-middle">{repo.path}</span>
+                        <span class="text-xs opacity-50 block truncate">{repo.path}</span>
                       </div>
-                      <span class="text-xs opacity-40 shrink-0">{repo.lastOpened}</span>
+                      <span class="text-xs opacity-40 shrink-0 whitespace-nowrap">{repo.lastOpened}</span>
+                      <button
+                        class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-xs text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await removeRecentRepo(repo.path);
+                            const repos = await getRecentRepos();
+                            setRecentRepos(repos);
+                          } catch { /* ignore */ }
+                        }}
+                        title={tt('common.delete')}
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
                   )}
                 </For>
+                </div>
               </div>
             </Show>
           </div>
@@ -848,19 +961,19 @@ const Repository: Component = () => {
                         <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('repo.noCommits')}</div>
                       }
                     >
-                      <div class="flex flex-col h-full">
-                        <div class="flex-1 min-h-0">
-                          <CommitGraph
-                            graphData={commitStore.graphData!}
-                            selectedNodeId={commitStore.selectedNode?.id}
-                            onSelectNode={handleSelectGraphNode}
-                            repoPath={repoPath() ?? undefined}
-                            onCheckout={handleGraphCheckout}
-                            onCreateBranch={handleGraphCreateBranch}
-                            onCherryPick={handleGraphCherryPick}
-                            onCreatePullRequest={handleCreatePullRequest}
-                          />
-                        </div>
+                      <div id="commit-graph-area" class="flex flex-col h-full">
+                        <CommitGraph
+                          graphData={commitStore.graphData!}
+                          selectedNodeId={commitStore.selectedNode?.id}
+                          onSelectNode={handleSelectGraphNode}
+                          repoPath={repoPath() ?? undefined}
+                          onCheckout={handleGraphCheckout}
+                          onCreateBranch={handleGraphCreateBranch}
+                          onCherryPick={handleGraphCherryPick}
+                          onCreatePullRequest={handleCreatePullRequest}
+                          onCheckoutBranch={handleGraphCheckoutBranch}
+                          onDeleteBranch={handleGraphDeleteBranch}
+                        />
                         <Show when={commitStore.graphData?.truncated}>
                           <div class="shrink-0 px-3 py-1.5 text-xs text-yellow-400/70 bg-yellow-400/5 border-t border-yellow-400/10 text-center">
                             {tt('repo.graphTruncated')}
@@ -929,7 +1042,7 @@ const Repository: Component = () => {
 
           {/* Diff: File diff view */}
           <Show when={leftMode() === 'diff'}>
-            <div class="flex-1 flex flex-col animate-content-enter">
+            <div class="flex-1 flex flex-col min-h-0 overflow-hidden animate-content-enter">
               <Show
                 when={diffStore.diffResult || diffStore.diffLoading}
                 fallback={
@@ -964,7 +1077,7 @@ const Repository: Component = () => {
           style={{ width: `${rightWidth()}px` }}
         >
           {/* Remote toolbar */}
-          <div class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
+          <div id="remote-actions" class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
             <div class="flex gap-1.5">
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
@@ -1000,6 +1113,17 @@ const Repository: Component = () => {
                 <A
                   class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors flex items-center justify-center gap-1"
                   href="/pulls"
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  {tt('repo.prs')}
+                </A>
+              )}
+              {giteeStore.authenticated && (
+                <A
+                  class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors flex items-center justify-center gap-1"
+                  href="/gitee-pulls"
                 >
                   <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -1051,7 +1175,7 @@ const Repository: Component = () => {
           </div>
 
           {/* Commit input */}
-          <div class="p-3 border-b border-white/10 shrink-0">
+          <div id="commit-area" class="p-3 border-b border-white/10 shrink-0">
             <textarea
               class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm resize-none focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
               rows={3}
@@ -1074,7 +1198,7 @@ const Repository: Component = () => {
           </div>
 
           {/* File list */}
-          <div class="flex-1 overflow-auto">
+          <div id="file-list-area" class="flex-1 overflow-auto">
             <FileList
               stagedFiles={stagedFiles()}
               unstagedFiles={unstagedFiles()}
@@ -1083,6 +1207,8 @@ const Repository: Component = () => {
               onStageAll={handleStageAll}
               onUnstageAll={handleUnstageAll}
               onSelectFile={handleSelectFile}
+              onDiscard={handleDiscard}
+              onDiscardAll={handleDiscardAll}
             />
           </div>
 
@@ -1131,8 +1257,20 @@ const Repository: Component = () => {
       </Show>
 
       {/* PR Create Dialog */}
-      <Show when={showPRCreate() && prCreateInfo() && githubStore.authenticated}>
+      <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'github' && githubStore.authenticated}>
         <PRCreateDialog
+          owner={prCreateInfo()!.owner}
+          repo={prCreateInfo()!.repo}
+          defaultBase="main"
+          onClose={() => setShowPRCreate(false)}
+          onCreated={() => {
+            setShowPRCreate(false);
+            addToast(tt('pr.createdGeneric'), 'success');
+          }}
+        />
+      </Show>
+      <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'gitee' && giteeStore.authenticated}>
+        <GiteePRCreateDialog
           owner={prCreateInfo()!.owner}
           repo={prCreateInfo()!.repo}
           defaultBase="main"
