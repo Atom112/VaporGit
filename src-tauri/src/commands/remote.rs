@@ -13,6 +13,36 @@ pub async fn get_remotes(path: String) -> Result<Vec<RemoteInfo>, String> {
 }
 
 #[tauri::command]
+pub async fn add_remote(path: String, name: String, url: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::remote::add_remote(&repo, &name, &url)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn set_remote_url(path: String, name: String, url: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::remote::set_remote_url(&repo, &name, &url)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn delete_remote(path: String, name: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::remote::delete_remote(&repo, &name)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
 pub async fn fetch(path: String, remote: Option<String>) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;

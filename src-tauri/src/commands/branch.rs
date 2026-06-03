@@ -1,5 +1,5 @@
 use crate::git;
-use crate::models::branch::BranchInfo;
+use crate::models::branch::{BranchDiffSummary, BranchInfo};
 
 #[tauri::command]
 pub async fn get_branch_list(path: String) -> Result<Vec<BranchInfo>, String> {
@@ -56,6 +56,20 @@ pub async fn delete_remote_branch(path: String, remote_name: String, branch_name
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;
         git::branch::delete_remote_branch(&repo, &remote_name, &branch_name)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn compare_branches(
+    path: String,
+    base_branch: String,
+    target_branch: String,
+) -> Result<BranchDiffSummary, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::branch::compare_branches(&repo, &base_branch, &target_branch)
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))?

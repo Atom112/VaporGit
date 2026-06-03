@@ -11,6 +11,7 @@ import {
   stageFiles,
   unstageFiles,
   commit,
+  amendCommit,
   getCommitHistory,
   getCommitDetail,
   getFileDiff,
@@ -33,6 +34,7 @@ import {
   openTerminal,
   closeTerminal,
   discardFiles,
+  searchCommitHistory,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
 import FileList from '../components/git/FileList';
@@ -42,12 +44,15 @@ import BranchList from '../components/git/BranchList';
 import DiffView from '../components/git/DiffView';
 import StatusBar from '../components/layout/StatusBar';
 import StashPanel from '../components/git/StashPanel';
+import RemoteManager from '../components/git/RemoteManager';
 import ConflictResolver from '../components/git/ConflictResolver';
 import PRCreateDialog from '../components/github/PRCreateDialog';
 import GiteePRCreateDialog from '../components/gitee/GiteePRCreateDialog';
 import { githubStore } from '../stores/githubStore';
 import { giteeStore } from '../stores/giteeStore';
 import InteractiveRebase from '../components/git/InteractiveRebase';
+import MergeDialog from '../components/git/MergeDialog';
+import BranchCompareDialog from '../components/git/BranchCompareDialog';
 import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
 import TerminalPanel from '../components/terminal/TerminalPanel';
 import { tt, ttf } from '../i18n';
@@ -67,6 +72,7 @@ const Repository: Component = () => {
   const [staging, setStaging] = createSignal(false);
   const [commitError, setCommitError] = createSignal<string | null>(null);
   const [commitLoading, setCommitLoading] = createSignal(false);
+  const [amendMode, setAmendMode] = createSignal(false);
   const [createBranchDialog, setCreateBranchDialog] = createSignal<{ commitId: string } | null>(null);
   const [createBranchName, setCreateBranchName] = createSignal('');
   const [createBranchLoading, setCreateBranchLoading] = createSignal(false);
@@ -98,6 +104,13 @@ const Repository: Component = () => {
   const [showStashPanel, setShowStashPanel] = createSignal(false);
   const [showConflictResolver, setShowConflictResolver] = createSignal(false);
   const [showRebaseDialog, setShowRebaseDialog] = createSignal(false);
+  const [showMergeDialog, setShowMergeDialog] = createSignal(false);
+  const [showRemoteManager, setShowRemoteManager] = createSignal(false);
+  const [showBranchCompare, setShowBranchCompare] = createSignal(false);
+  const [searchQuery, setSearchQuery] = createSignal('');
+  const [searchResults, setSearchResults] = createSignal<CommitInfo[] | null>(null);
+  const [searchLoading, setSearchLoading] = createSignal(false);
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   // PR creation from commit detail context menu
   const [prCreateInfo, setPrCreateInfo] = createSignal<{owner: string; repo: string} | null>(null);
@@ -214,6 +227,31 @@ const Repository: Component = () => {
         }
       } catch { /* ignore — submodule check is non-critical */ }
     }
+  };
+
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (searchTimer) clearTimeout(searchTimer);
+
+    if (!query.trim()) {
+      setSearchResults(null);
+      setSearchLoading(false);
+      return;
+    }
+
+    searchTimer = setTimeout(async () => {
+      const path = repoPath();
+      if (!path) return;
+      setSearchLoading(true);
+      try {
+        const results = await searchCommitHistory(path, query.trim(), 0, 100);
+        setSearchResults(results);
+      } catch (e) {
+        console.error('搜索提交失败:', e);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
   };
 
   onMount(async () => {
@@ -397,9 +435,15 @@ const Repository: Component = () => {
 
     setCommitError(null);
     try {
-      await commit(path, message);
-      addToast('提交成功', 'success');
+      if (amendMode()) {
+        await amendCommit(path, message);
+        addToast(tt('repo.amendSuccess'), 'success');
+      } else {
+        await commit(path, message);
+        addToast(tt('repo.commitSuccess'), 'success');
+      }
       setCommitMessage('');
+      setAmendMode(false);
       await refreshAll();
     } catch (e) {
       setCommitError(String(e));
@@ -948,7 +992,48 @@ const Repository: Component = () => {
 
               {/* Tab content */}
               <Show when={leftTab() === 'graph'}>
-                <div class="flex-1 min-h-0 animate-content-enter">
+                <div class="flex-1 min-h-0 animate-content-enter flex flex-col">
+                  {/* Search bar */}
+                  <div class="shrink-0 px-3 py-2 border-b border-white/10">
+                    <div class="relative">
+                      <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <input
+                        class="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white/10 border border-white/10 text-white text-xs focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
+                        placeholder={tt('repo.searchCommitsPlaceholder')}
+                        value={searchQuery()}
+                        onInput={(e) => handleSearch(e.currentTarget.value)}
+                      />
+                      <Show when={searchLoading()}>
+                        <div class="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-cyan-400/50 border-t-transparent rounded-full animate-spin" />
+                      </Show>
+                    </div>
+                  </div>
+                  <Show
+                    when={!searchResults()}
+                    fallback={
+                      <div class="flex-1 flex flex-col min-h-0">
+                        <div class="shrink-0 px-3 py-1.5 text-xs text-white/50">
+                          {ttf('repo.searchResults', searchResults()!.length)}
+                        </div>
+                        <div class="flex-1 overflow-y-auto">
+                          <For each={searchResults()}>
+                            {(c) => (
+                              <div
+                                class="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-white/5 transition-colors border-b border-white/5"
+                                onClick={() => handleSelectCommit(c)}
+                              >
+                                <span class="font-mono text-cyan-400/70 shrink-0">{c.shortId}</span>
+                                <span class="truncate flex-1">{c.message}</span>
+                                <span class="text-white/40 shrink-0 text-[10px]">{c.author}</span>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </div>
+                    }
+                  >
                   <Show
                     when={!commitStore.graphLoading}
                     fallback={
@@ -982,10 +1067,11 @@ const Repository: Component = () => {
                       </div>
                     </Show>
                   </Show>
-                </div>
-              </Show>
+                </Show>
+              </div>
+            </Show>
 
-              <Show when={leftTab() === 'branches'}>
+            <Show when={leftTab() === 'branches'}>
                 <div class="flex-1 min-h-0 animate-content-enter">
                   <Show
                     when={!commitStore.branchesLoading}
@@ -1076,11 +1162,12 @@ const Repository: Component = () => {
           class="flex flex-col bg-white/5 overflow-hidden shrink-0"
           style={{ width: `${rightWidth()}px` }}
         >
-          {/* Remote toolbar */}
-          <div id="remote-actions" class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
+          {/* Toolbar (max 4 buttons per row) */}
+          <div id="toolbar" class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
+            {/* Row 1: Remote ops */}
             <div class="flex gap-1.5">
               <button
-                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handleFetch}
                 disabled={remoteActionLoading()}
               >
@@ -1090,7 +1177,7 @@ const Repository: Component = () => {
                 {remoteActionLoading() ? tt('repo.fetching') : tt('repo.fetch')}
               </button>
               <button
-                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handlePull}
                 disabled={remoteActionLoading()}
               >
@@ -1100,7 +1187,7 @@ const Repository: Component = () => {
                 {remoteActionLoading() ? tt('repo.pulling') : tt('repo.pull')}
               </button>
               <button
-                class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handlePush}
                 disabled={remoteActionLoading()}
               >
@@ -1109,32 +1196,20 @@ const Repository: Component = () => {
                 </svg>
                 {remoteActionLoading() ? tt('repo.pushing') : tt('repo.push')}
               </button>
-              {githubStore.authenticated && (
-                <A
-                  class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors flex items-center justify-center gap-1"
-                  href="/pulls"
-                >
-                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                  </svg>
-                  {tt('repo.prs')}
-                </A>
-              )}
-              {giteeStore.authenticated && (
-                <A
-                  class="flex-1 py-2 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors flex items-center justify-center gap-1"
-                  href="/gitee-pulls"
-                >
-                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                  </svg>
-                  {tt('repo.prs')}
-                </A>
-              )}
+              <button
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
+                onClick={() => setShowRemoteManager(true)}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                {tt('repo.remotes')}
+              </button>
             </div>
+            {/* Row 2: History ops */}
             <div class="flex gap-1.5">
               <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-30"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handleUndo}
                 disabled={undoLoading()}
               >
@@ -1144,7 +1219,7 @@ const Repository: Component = () => {
                 {undoLoading() ? '...' : tt('repo.undo')}
               </button>
               <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-30"
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
                 onClick={handleRedo}
                 disabled={undoLoading()}
               >
@@ -1164,6 +1239,18 @@ const Repository: Component = () => {
               </button>
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
+                onClick={() => setShowMergeDialog(true)}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                {tt('repo.merge')}
+              </button>
+            </div>
+            {/* Row 3: Advanced ops */}
+            <div class="flex gap-1.5">
+              <button
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
                 onClick={() => setShowRebaseDialog(true)}
               >
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1171,6 +1258,37 @@ const Repository: Component = () => {
                 </svg>
                 {tt('repo.rebase')}
               </button>
+              <button
+                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
+                onClick={() => setShowBranchCompare(true)}
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                </svg>
+                {tt('repo.compareBranches')}
+              </button>
+              {githubStore.authenticated && (
+                <A
+                  class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
+                  href="/pulls"
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  {tt('repo.prs')}
+                </A>
+              )}
+              {giteeStore.authenticated && (
+                <A
+                  class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
+                  href="/gitee-pulls"
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  {tt('repo.prs')}
+                </A>
+              )}
             </div>
           </div>
 
@@ -1183,13 +1301,24 @@ const Repository: Component = () => {
               value={commitMessage()}
               onInput={(e) => setCommitMessage(e.currentTarget.value)}
             />
-            <div class="flex gap-2 mt-2">
+            <div class="flex gap-2 mt-2 items-center">
+              <label class="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/70 cursor-pointer select-none" onClick={() => setAmendMode(!amendMode())}>
+                <div class={`w-3.5 h-3.5 rounded border ${amendMode() ? 'bg-cyan-500/40 border-cyan-400/60' : 'border-white/30'} flex items-center justify-center transition-colors`}>
+                  {amendMode() && (
+                    <svg class="w-2.5 h-2.5 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <span>{tt('repo.amend')}</span>
+                <span class="text-white/30">({tt('repo.amendDesc')})</span>
+              </label>
               <button
                 class="flex-1 py-1.5 px-3 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors"
                 onClick={handleCommit}
                 disabled={!commitMessage().trim() || stagedFiles().length === 0}
               >
-                {tt('repo.commit')}
+                {amendMode() ? tt('repo.amend') : tt('repo.commit')}
               </button>
             </div>
             {commitError() && (
@@ -1240,6 +1369,14 @@ const Repository: Component = () => {
         />
       </Show>
 
+      <Show when={showRemoteManager() && repoPath()}>
+        <RemoteManager
+          repoPath={repoPath()!}
+          onClose={() => setShowRemoteManager(false)}
+          onRefresh={refreshStatus}
+        />
+      </Show>
+
       <Show when={showConflictResolver() && repoPath()}>
         <ConflictResolver
           repoPath={repoPath()!}
@@ -1253,6 +1390,21 @@ const Repository: Component = () => {
           repoPath={repoPath()!}
           onClose={() => setShowRebaseDialog(false)}
           onRefresh={handleRebaseRefresh}
+        />
+      </Show>
+
+      <Show when={showMergeDialog() && repoPath()}>
+        <MergeDialog
+          repoPath={repoPath()!}
+          onClose={() => setShowMergeDialog(false)}
+          onRefresh={refreshAll}
+        />
+      </Show>
+
+      <Show when={showBranchCompare() && repoPath()}>
+        <BranchCompareDialog
+          repoPath={repoPath()!}
+          onClose={() => setShowBranchCompare(false)}
         />
       </Show>
 

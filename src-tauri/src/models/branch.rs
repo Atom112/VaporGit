@@ -11,3 +11,22 @@ pub struct BranchInfo {
     pub behind: usize,
     pub last_commit: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchDiffSummary {
+    pub ahead: usize,
+    pub behind: usize,
+    pub files: Vec<BranchFileChange>,
+    pub base_branch: String,
+    pub target_branch: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchFileChange {
+    pub file_path: String,
+    pub status: String,
+    pub additions: u32,
+    pub deletions: u32,
+}
