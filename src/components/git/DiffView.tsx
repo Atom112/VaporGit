@@ -1,6 +1,9 @@
 import { Component, For, Show, createSignal, createResource, createEffect } from 'solid-js';
 import type { DiffHunk, DiffResult } from '../../lib/types';
-import { getFileContent, getFileBase64, checkLfs } from '../../lib/tauriCommands';
+import { getFileContent, getFileBase64, checkLfs, stageHunk, stageLine } from '../../lib/tauriCommands';
+import { addToast } from '../../stores/toastStore';
+import { tt, ttf } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
 import 'highlight.js/styles/github-dark.css';
 import { detectLanguage, highlightLine, highlightFull } from '../../lib/syntax';
 import { settingsStore } from '../../stores/settingsStore';
@@ -12,6 +15,7 @@ interface DiffViewProps {
   onBack?: () => void;
   commitId?: string;
   repoPath?: string;
+  onRefreshStatus?: () => void;
 }
 
 interface LineNumPair {
@@ -243,9 +247,23 @@ const DiffView: Component<DiffViewProps> = (props) => {
                 }
               >
                 {viewMode() === 'unified' ? (
-                  <UnifiedView diffResult={props.diffResult!} lang={lang()} />
+                  <UnifiedView
+                    diffResult={props.diffResult!}
+                    lang={lang()}
+                    repoPath={props.repoPath}
+                    filePath={props.filePath}
+                    onRefreshStatus={props.onRefreshStatus}
+                    commitId={props.commitId}
+                  />
                 ) : viewMode() === 'split' ? (
-                  <SplitView diffResult={props.diffResult!} lang={lang()} />
+                  <SplitView
+                    diffResult={props.diffResult!}
+                    lang={lang()}
+                    repoPath={props.repoPath}
+                    filePath={props.filePath}
+                    onRefreshStatus={props.onRefreshStatus}
+                    commitId={props.commitId}
+                  />
                 ) : (
                   <Show when={fullContent() !== undefined} fallback={
                     <div class="flex items-center justify-center h-full opacity-40">加载完整文件...</div>
@@ -270,16 +288,68 @@ const DiffView: Component<DiffViewProps> = (props) => {
   );
 };
 
-/* ── Unified view: show hunks with side-by-side line numbers ── */
-const UnifiedView: Component<{ diffResult: DiffResult; lang: string | null }> = (props) => {
+/* ── Unified view with hunk/line staging ── */
+interface StageableViewProps {
+  diffResult: DiffResult;
+  lang: string | null;
+  repoPath?: string;
+  filePath: string;
+  onRefreshStatus?: () => void;
+  commitId?: string;
+}
+
+const UnifiedView: Component<StageableViewProps> = (props) => {
+  const [stagingHunk, setStagingHunk] = createSignal<number | null>(null);
+  const [stagingLine, setStagingLine] = createSignal<{ hunk: number; line: number } | null>(null);
+
+  const handleStageHunk = async (hunkIndex: number) => {
+    if (!props.repoPath) return;
+    setStagingHunk(hunkIndex);
+    try {
+      await stageHunk(props.repoPath, props.filePath, hunkIndex);
+      addToast(tt('repo.hunkStaged'), 'success');
+      props.onRefreshStatus?.();
+    } catch (e) {
+      addToast(`暂存 hunk 失败: ${describeError(e)}`, 'error');
+    } finally {
+      setStagingHunk(null);
+    }
+  };
+
+  const handleStageLine = async (hunkIndex: number, lineIndex: number) => {
+    if (!props.repoPath) return;
+    setStagingLine({ hunk: hunkIndex, line: lineIndex });
+    try {
+      await stageLine(props.repoPath, props.filePath, hunkIndex, lineIndex);
+      addToast(tt('repo.lineStaged'), 'success');
+      props.onRefreshStatus?.();
+    } catch (e) {
+      addToast(`暂存行失败: ${describeError(e)}`, 'error');
+    } finally {
+      setStagingLine(null);
+    }
+  };
+
+  // Only show stage buttons when viewing working tree changes (no commitId)
+  const showStageButtons = () => !props.commitId && props.repoPath;
+
   return (
     <For each={props.diffResult.hunks}>
-      {(hunk) => {
+      {(hunk, hunkIdx) => {
         const lineNums = computeLineNums(hunk);
         return (
           <div class="border-b border-white/5">
-            <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400 font-semibold sticky top-0">
-              {hunk.header}
+            <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400 font-semibold sticky top-0 flex items-center gap-2 group">
+              <span class="flex-1">{hunk.header}</span>
+              <Show when={showStageButtons()}>
+                <button
+                  class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  onClick={() => handleStageHunk(hunkIdx())}
+                  disabled={stagingHunk() === hunkIdx()}
+                >
+                  {stagingHunk() === hunkIdx() ? '...' : `+ ${tt('repo.stageHunk')}`}
+                </button>
+              </Show>
             </div>
             <For each={hunk.lines}>
               {(line, idx) => {
@@ -296,8 +366,21 @@ const UnifiedView: Component<{ diffResult: DiffResult; lang: string | null }> = 
                   prefix = '-';
                   prefixColor = 'text-red-400';
                 }
+                const isStagingLine = showStageButtons() && (line.kind === 'addition' || line.kind === 'deletion');
                 return (
-                  <div class={`flex items-stretch ${bgClass}`}>
+                  <div class={`flex items-stretch ${bgClass} group/line`}>
+                    <Show when={isStagingLine}>
+                      <div class="w-4 shrink-0 flex items-center justify-center opacity-0 group-hover/line:opacity-100 transition-opacity">
+                        <button
+                          class="text-[10px] leading-none text-green-400 hover:text-green-300"
+                          onClick={() => handleStageLine(hunkIdx(), idx())}
+                          disabled={stagingLine()?.hunk === hunkIdx() && stagingLine()?.line === idx()}
+                          title={tt('repo.stageLine')}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </Show>
                     <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
                       {nums.oldLine ?? ''}
                     </div>
@@ -364,15 +447,33 @@ const FullFileView: Component<{ diffResult: DiffResult; fullContent: string; lan
   );
 };
 
-/* ── Side-by-side Split view ── */
+/* ── Side-by-side Split view with hunk/line staging ── */
 interface SplitRow {
   left: { content: string; kind: string; lineNum: number | null } | null;
   right: { content: string; kind: string; lineNum: number | null } | null;
 }
 
-const SplitView: Component<{ diffResult: DiffResult; lang: string | null }> = (props) => {
+const SplitView: Component<StageableViewProps> = (props) => {
   let leftRef!: HTMLDivElement;
   let rightRef!: HTMLDivElement;
+
+  const [stagingHunk, setStagingHunk] = createSignal<number | null>(null);
+
+  const handleStageHunk = async (hunkIndex: number) => {
+    if (!props.repoPath) return;
+    setStagingHunk(hunkIndex);
+    try {
+      await stageHunk(props.repoPath, props.filePath, hunkIndex);
+      addToast(tt('repo.hunkStaged'), 'success');
+      props.onRefreshStatus?.();
+    } catch (e) {
+      addToast(`暂存 hunk 失败: ${describeError(e)}`, 'error');
+    } finally {
+      setStagingHunk(null);
+    }
+  };
+
+  const showStageButtons = () => !props.commitId && props.repoPath;
 
   const splitRows = (): SplitRow[] => {
     const rows: SplitRow[] = [];
@@ -414,23 +515,43 @@ const SplitView: Component<{ diffResult: DiffResult; lang: string | null }> = (p
     <div class="flex h-full">
       {/* Left: old */}
       <div ref={leftRef} class="w-1/2 overflow-auto border-r border-white/10" onScroll={() => handleScroll('left')}>
-        <div class="bg-white/5 px-3 py-1 text-xs text-red-400 font-semibold sticky top-0 z-10">旧版本</div>
-        <For each={splitRows()}>
-          {(row) => {
-            const seg = row.left;
-            if (!seg) {
-              return <div class="flex h-5 bg-black/20"><div class="w-12 shrink-0" /><span class="opacity-25">│</span><div class="w-12 shrink-0" /></div>;
-            }
-            return (
-              <div class={`flex items-stretch ${seg.kind === 'deletion' ? 'bg-red-500/10' : ''}`}>
-                <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
-                  {seg.lineNum ?? ''}
-                </div>
-                <span class="opacity-25 select-none leading-normal">│</span>
-                <span class="whitespace-pre-wrap break-all leading-normal" innerHTML={highlightLine(seg.content, props.lang)} />
+        <div class="bg-white/5 px-3 py-1 text-xs text-red-400 font-semibold sticky top-0 z-10 flex items-center gap-2">
+          <span class="flex-1">旧版本</span>
+        </div>
+        <For each={props.diffResult.hunks}>
+          {(hunk, hunkIdx) => (
+            <>
+              <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400/60 flex items-center gap-2">
+                <span class="flex-1">{hunk.header}</span>
+                <Show when={showStageButtons()}>
+                  <button
+                    class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-opacity shrink-0"
+                    onClick={() => handleStageHunk(hunkIdx())}
+                    disabled={stagingHunk() === hunkIdx()}
+                  >
+                    {stagingHunk() === hunkIdx() ? '...' : `+ ${tt('repo.stageHunk')}`}
+                  </button>
+                </Show>
               </div>
-            );
-          }}
+              <For each={hunk.lines}>
+                {(line) => {
+                  const seg = line.kind === 'addition' ? null : { content: line.content, kind: line.kind, lineNum: 0 };
+                  if (!seg) {
+                    return <div class="flex h-5 bg-black/20"><div class="w-12 shrink-0" /><span class="opacity-25">│</span><div class="w-12 shrink-0" /></div>;
+                  }
+                  return (
+                    <div class={`flex items-stretch ${seg.kind === 'deletion' ? 'bg-red-500/10' : ''}`}>
+                      <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
+                        {seg.lineNum ?? ''}
+                      </div>
+                      <span class="opacity-25 select-none leading-normal">│</span>
+                      <span class="whitespace-pre-wrap break-all leading-normal" innerHTML={highlightLine(seg.content, props.lang)} />
+                    </div>
+                  );
+                }}
+              </For>
+            </>
+          )}
         </For>
       </div>
 

@@ -14,6 +14,14 @@ interface FileListProps {
   onDiscardAll?: () => void;
 }
 
+interface FileNode {
+  name: string;
+  path: string;
+  isDir: boolean;
+  children: FileNode[];
+  file?: FileStatus;
+}
+
 const statusLabel = (status: FileStatus['status']): string => {
   switch (status) {
     case 'WT_NEW':
@@ -57,10 +65,51 @@ const statusColor = (status: FileStatus['status']): string => {
   }
 };
 
+function buildFileTree(files: FileStatus[]): FileNode[] {
+  const root: FileNode[] = [];
+  const dirMap: Record<string, FileNode> = {};
+
+  for (const file of files) {
+    const parts = file.path.replace(/\\/g, '/').split('/');
+    if (parts.length === 1) {
+      root.push({ name: file.path, path: file.path, isDir: false, children: [], file });
+    } else {
+      // Ensure directory hierarchy exists
+      let parent = root;
+      let currentPath = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
+        if (!dirMap[currentPath]) {
+          const dirNode: FileNode = { name: parts[i], path: currentPath, isDir: true, children: [] };
+          dirMap[currentPath] = dirNode;
+          parent.push(dirNode);
+        }
+        parent = dirMap[currentPath].children;
+      }
+      parent.push({ name: parts[parts.length - 1], path: file.path, isDir: false, children: [], file });
+    }
+  }
+
+  // Sort: directories first, then files, both alphabetically
+  const sortNodes = (nodes: FileNode[]) => {
+    nodes.sort((a, b) => {
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const node of nodes) {
+      if (node.isDir) sortNodes(node.children);
+    }
+  };
+  sortNodes(root);
+
+  return root;
+}
+
 const FileList: Component<FileListProps> = (props) => {
-  // Discard confirmation dialog state
   const [discardTarget, setDiscardTarget] = createSignal<{ type: 'file'; file: FileStatus } | { type: 'all' } | null>(null);
   const [discardPhase, setDiscardPhase] = createSignal<'enter' | 'exit' | null>(null);
+  const [treeMode, setTreeMode] = createSignal(false);
+  const [expandedDirs, setExpandedDirs] = createSignal<Set<string>>(new Set());
 
   const openDiscardConfirm = (target: { type: 'file'; file: FileStatus } | { type: 'all' }) => {
     setDiscardTarget(target);
@@ -87,6 +136,110 @@ const FileList: Component<FileListProps> = (props) => {
     closeDiscardConfirm();
   };
 
+  const toggleDir = (path: string) => {
+    const next = new Set(expandedDirs());
+    if (next.has(path)) {
+      next.delete(path);
+    } else {
+      next.add(path);
+    }
+    setExpandedDirs(next);
+  };
+
+  const renderFileRow = (file: FileStatus, indent: number) => (
+    <div
+      class={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/10 transition-colors text-sm ${
+        props.selectedFile === file.path ? 'bg-white/10' : ''
+      }`}
+      style={{ 'padding-left': `${8 + indent * 16}px` }}
+      onClick={() => props.onSelectFile(file.path)}
+    >
+      <span
+        class={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold bg-white/10 ${statusColor(
+          file.status
+        )}`}
+      >
+        {statusLabel(file.status)}
+      </span>
+      <span class="truncate flex-1" title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}>
+        <Show when={file.oldPath}>
+          <span class="opacity-50 line-through mr-1">{file.oldPath}</span>
+          <span class="opacity-40 mx-0.5">→</span>
+        </Show>
+        {file.path}
+      </span>
+      <div class="flex gap-1 shrink-0">
+        <Show when={props.onDiscard && !file.staged}>
+          <button
+            class="text-[11px] px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              openDiscardConfirm({ type: 'file', file });
+            }}
+          >
+            {tt('repo.discard')}
+          </button>
+        </Show>
+        <button
+          class={`text-[11px] px-2 py-0.5 rounded transition-colors shrink-0 ${
+            file.staged
+              ? 'bg-white/10 hover:bg-white/20 text-white/70'
+              : 'bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300'
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onToggleStage(file);
+          }}
+        >
+          {file.staged ? tt('repo.unstage') : tt('repo.stage')}
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderTreeNode = (node: FileNode, indent: number) => {
+    if (!node.isDir) {
+      return node.file ? renderFileRow(node.file, indent) : null;
+    }
+
+    const expanded = expandedDirs().has(node.path);
+    return (
+      <>
+        <div
+          class="flex items-center gap-1 px-3 py-1 cursor-pointer hover:bg-white/10 transition-colors text-sm text-white/60"
+          style={{ 'padding-left': `${8 + indent * 16}px` }}
+          onClick={() => toggleDir(node.path)}
+        >
+          <svg
+            class={`w-3 h-3 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <svg class="w-3.5 h-3.5 shrink-0 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+          </svg>
+          <span class="truncate">{node.name}</span>
+        </div>
+        <Show when={expanded}>
+          <For each={node.children}>{(child) => renderTreeNode(child, indent + 1)}</For>
+        </Show>
+      </>
+    );
+  };
+
+  const renderFileList = (files: FileStatus[]) => {
+    if (!treeMode()) {
+      return (
+        <For each={files}>
+          {(file) => renderFileRow(file, 0)}
+        </For>
+      );
+    }
+    const tree = buildFileTree(files);
+    return <For each={tree}>{(node) => renderTreeNode(node, 0)}</For>;
+  };
+
   return (
     <div class="flex flex-col h-full">
       {/* Unstaged files (top) */}
@@ -96,7 +249,7 @@ const FileList: Component<FileListProps> = (props) => {
             <span class="text-xs font-semibold opacity-60 uppercase">
               {ttf('repo.changedCount', props.unstagedFiles.length)}
             </span>
-            <div class="flex gap-2">
+            <div class="flex gap-2 items-center">
               <Show when={props.onDiscardAll}>
                 <button
                   class="text-xs text-red-400 hover:text-red-300 transition-colors"
@@ -111,55 +264,20 @@ const FileList: Component<FileListProps> = (props) => {
               >
                 {tt('repo.stageAll')}
               </button>
+              <button
+                class={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                  treeMode() ? 'bg-cyan-500/30 text-cyan-300' : 'bg-white/10 text-white/50 hover:text-white/70'
+                }`}
+                onClick={() => setTreeMode(!treeMode())}
+                title={treeMode() ? 'Flat view' : 'Tree view'}
+              >
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />
+                </svg>
+              </button>
             </div>
           </div>
-          <For each={props.unstagedFiles}>
-            {(file) => (
-              <div
-                class={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/10 transition-colors text-sm ${
-                  props.selectedFile === file.path ? 'bg-white/10' : ''
-                }`}
-                onClick={() => props.onSelectFile(file.path)}
-              >
-                <span
-                  class={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold bg-white/10 ${statusColor(
-                    file.status
-                  )}`}
-                >
-                  {statusLabel(file.status)}
-                </span>
-                <span class="truncate flex-1" title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}>
-                  <Show when={file.oldPath}>
-                    <span class="opacity-50 line-through mr-1">{file.oldPath}</span>
-                    <span class="opacity-40 mx-0.5">→</span>
-                  </Show>
-                  {file.path}
-                </span>
-                <div class="flex gap-1 shrink-0">
-                  <Show when={props.onDiscard}>
-                    <button
-                      class="text-[11px] px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openDiscardConfirm({ type: 'file', file });
-                      }}
-                    >
-                      {tt('repo.discard')}
-                    </button>
-                  </Show>
-                  <button
-                    class="text-[11px] px-2 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onToggleStage(file);
-                    }}
-                  >
-                    {tt('repo.stage')}
-                  </button>
-                </div>
-              </div>
-            )}
-          </For>
+          {renderFileList(props.unstagedFiles)}
         </div>
       </Show>
 
@@ -170,47 +288,27 @@ const FileList: Component<FileListProps> = (props) => {
             <span class="text-xs font-semibold opacity-60 uppercase">
               {ttf('repo.stagedCount', props.stagedFiles.length)}
             </span>
-            <button
-              class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-              onClick={props.onUnstageAll}
-            >
-              {tt('repo.unstageAll')}
-            </button>
-          </div>
-          <For each={props.stagedFiles}>
-            {(file) => (
-              <div
-                class={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/10 transition-colors text-sm ${
-                  props.selectedFile === file.path ? 'bg-white/10' : ''
-                }`}
-                onClick={() => props.onSelectFile(file.path)}
+            <div class="flex gap-2 items-center">
+              <button
+                class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                onClick={props.onUnstageAll}
               >
-                <span
-                  class={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold bg-white/10 ${statusColor(
-                    file.status
-                  )}`}
-                >
-                  {statusLabel(file.status)}
-                </span>
-                <span class="truncate flex-1" title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}>
-                  <Show when={file.oldPath}>
-                    <span class="opacity-50 line-through mr-1">{file.oldPath}</span>
-                    <span class="opacity-40 mx-0.5">→</span>
-                  </Show>
-                  {file.path}
-                </span>
-                <button
-                  class="text-[11px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/70 transition-colors shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    props.onToggleStage(file);
-                  }}
-                >
-                  {tt('repo.unstage')}
-                </button>
-              </div>
-            )}
-          </For>
+                {tt('repo.unstageAll')}
+              </button>
+              <button
+                class={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                  treeMode() ? 'bg-cyan-500/30 text-cyan-300' : 'bg-white/10 text-white/50 hover:text-white/70'
+                }`}
+                onClick={() => setTreeMode(!treeMode())}
+                title={treeMode() ? 'Flat view' : 'Tree view'}
+              >
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {renderFileList(props.stagedFiles)}
         </div>
       </Show>
 

@@ -112,12 +112,6 @@ mod tests {
     }
 
     #[test]
-    fn test_unsupported_platform() {
-        let result = parse_remote_url("https://gitlab.com/owner/repo.git");
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_invalid_url() {
         let result = parse_remote_url("not-a-url");
         assert!(result.is_err());

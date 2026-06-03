@@ -66,3 +66,15 @@ pub struct GraphEdge {
     pub from: String,
     pub to: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebaseEntry {
+    pub commit_id: String,
+    pub short_id: String,
+    pub message: String,
+    pub author: String,
+    pub timestamp: i64,
+    pub action: String,
+    pub new_message: Option<String>,
+}

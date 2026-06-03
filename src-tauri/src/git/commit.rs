@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use git2::{Oid, Repository, Sort};
-use crate::models::commit::{CommitInfo, CommitDetail, FileChange, CommitGraphData, GraphNode, GraphEdge};
+use crate::models::commit::{CommitInfo, CommitDetail, FileChange, CommitGraphData, GraphNode, GraphEdge, RebaseEntry};
 
 pub fn commit(repo: &Repository, message: &str) -> Result<CommitInfo, String> {
     let signature = repo
@@ -39,6 +39,47 @@ pub fn commit(repo: &Repository, message: &str) -> Result<CommitInfo, String> {
         .map_err(|e| format!("无法找到提交: {}", e))?;
 
     commit_to_info(&commit)
+}
+
+/// Search commit history by message and/or author.
+/// Performs case-insensitive substring matching.
+pub fn search_commit_history(
+    repo: &Repository,
+    query: &str,
+    page: u32,
+    page_size: u32,
+) -> Result<Vec<CommitInfo>, String> {
+    let mut revwalk = repo
+        .revwalk()
+        .map_err(|e| format!("无法创建 revwalk: {}", e))?;
+
+    revwalk.set_sorting(Sort::TIME).map_err(|e| format!("无法设置排序: {}", e))?;
+    revwalk
+        .push_head()
+        .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+
+    let query_lower = query.to_lowercase();
+
+    // Walk all commits, filter by query, then paginate
+    let query = query_lower;
+    let mut matching: Vec<CommitInfo> = Vec::new();
+    for oid_result in revwalk {
+        let oid = oid_result.map_err(|e| format!("遍历提交失败: {}", e))?;
+        let commit = repo.find_commit(oid).map_err(|e| format!("无法找到提交: {}", e))?;
+
+        let msg = commit.message().unwrap_or("").to_lowercase();
+        let author = commit.author().name().unwrap_or("").to_lowercase();
+
+        if msg.contains(&query) || author.contains(&query) {
+            matching.push(commit_to_info(&commit)?);
+        }
+    }
+
+    let skip = (page * page_size) as usize;
+    let take = page_size as usize;
+    let paginated: Vec<CommitInfo> = matching.into_iter().skip(skip).take(take).collect();
+
+    Ok(paginated)
 }
 
 pub fn get_commit_history(
@@ -600,6 +641,45 @@ pub fn revert_commit(repo: &Repository, commit_id: &str) -> Result<String, Strin
     Ok(format!("成功 revert 提交 {}", msg))
 }
 
+/// Amend the last commit (replace HEAD with a new commit using the current index).
+pub fn amend_commit(repo: &Repository, message: &str) -> Result<CommitInfo, String> {
+    let head = repo.head().map_err(|e| format!("无法获取 HEAD: {}", e))?;
+    let head_commit = head.peel_to_commit().map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+
+    let signature = repo
+        .signature()
+        .map_err(|e| format!("无法获取签名: {}", e))?;
+
+    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let tree_oid = index
+        .write_tree()
+        .map_err(|e| format!("无法写入树: {}", e))?;
+    let tree = repo
+        .find_tree(tree_oid)
+        .map_err(|e| format!("无法找到树: {}", e))?;
+
+    // Collect parents from HEAD's parents (same parents, replacing HEAD itself)
+    let parent_commits: Vec<git2::Commit> = head_commit.parents().collect();
+    let parents: Vec<&git2::Commit> = parent_commits.iter().collect();
+
+    let new_oid = repo
+        .commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message,
+            &tree,
+            parents.as_slice(),
+        )
+        .map_err(|e| format!("修改提交失败: {}", e))?;
+
+    let new_commit = repo
+        .find_commit(new_oid)
+        .map_err(|e| format!("无法找到新提交: {}", e))?;
+
+    commit_to_info(&new_commit)
+}
+
 /// Undo the last commit via soft reset (keeps changes staged).
 ///
 /// NOTE: This is a soft reset — index and working tree are preserved.
@@ -691,4 +771,258 @@ pub fn redo(repo: &Repository) -> Result<String, String> {
         .map_err(|e| format!("重置索引失败: {}", e))?;
 
     Ok(commit_msg)
+}
+
+/// List commits that will be affected by a rebase from current HEAD onto `onto_branch`.
+/// Returns commits in order from oldest to newest (the order they will be applied).
+pub fn list_rebase_commits(
+    repo: &Repository,
+    onto_branch: &str,
+) -> Result<Vec<RebaseEntry>, String> {
+    let onto_obj = repo
+        .revparse_single(onto_branch)
+        .map_err(|e| format!("无法解析目标分支 '{}': {}", onto_branch, e))?;
+    let onto_commit = onto_obj
+        .peel_to_commit()
+        .map_err(|e| format!("无法获取目标分支提交: {}", e))?;
+
+    let head = repo
+        .head()
+        .map_err(|e| format!("无法获取 HEAD: {}", e))?;
+    let head_commit = head
+        .peel_to_commit()
+        .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+
+    // Find merge base
+    let merge_base_oid = repo
+        .merge_base(onto_commit.id(), head_commit.id())
+        .map_err(|e| format!("无法计算合并基础: {}", e))?;
+
+    // Walk from HEAD to merge_base (exclusive)
+    let mut revwalk = repo
+        .revwalk()
+        .map_err(|e| format!("无法创建 revwalk: {}", e))?;
+    revwalk
+        .push(head_commit.id())
+        .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+    revwalk.set_sorting(Sort::TOPOLOGICAL)
+        .map_err(|e| format!("无法设置排序: {}", e))?;
+
+    // Collect commits until we hit the merge base
+    let mut entries: Vec<RebaseEntry> = Vec::new();
+    for oid_result in revwalk {
+        let oid = oid_result.map_err(|e| format!("遍历提交失败: {}", e))?;
+        if oid == merge_base_oid {
+            break;
+        }
+
+        let commit = repo
+            .find_commit(oid)
+            .map_err(|e| format!("无法找到提交: {}", e))?;
+
+        let id_str = oid.to_string();
+        let short_id = id_str[..8.min(id_str.len())].to_string();
+        let msg = commit
+            .message()
+            .unwrap_or("")
+            .lines()
+            .next()
+            .unwrap_or("")
+            .to_string();
+        let author = commit.author().name().unwrap_or("Unknown").to_string();
+
+        entries.push(RebaseEntry {
+            commit_id: id_str,
+            short_id,
+            message: msg,
+            author,
+            timestamp: commit.time().seconds(),
+            action: "pick".to_string(),
+            new_message: None,
+        });
+    }
+
+    // Reverse so oldest commit is first (rebase applies from oldest to newest)
+    entries.reverse();
+
+    if entries.is_empty() {
+        return Err("当前分支已基于目标分支的最新提交，无需变基".to_string());
+    }
+
+    Ok(entries)
+}
+
+/// Perform an interactive rebase with the given entries.
+/// Each entry specifies an action: pick, squash, reword, drop, fixup.
+/// The entries are applied in the order given (oldest to newest).
+pub fn perform_interactive_rebase(
+    repo: &Repository,
+    onto_branch: &str,
+    entries: &[RebaseEntry],
+) -> Result<String, String> {
+    let onto_obj = repo
+        .revparse_single(onto_branch)
+        .map_err(|e| format!("无法解析目标分支 '{}': {}", onto_branch, e))?;
+    let onto_commit = onto_obj
+        .peel_to_commit()
+        .map_err(|e| format!("无法获取目标分支提交: {}", e))?;
+
+    let signature = repo
+        .signature()
+        .map_err(|e| format!("无法获取签名: {}", e))?;
+
+    // Soft reset HEAD to the onto branch (this moves HEAD, keeps index + worktree)
+    let mut checkout = git2::build::CheckoutBuilder::new();
+    repo.reset(
+        onto_commit.as_object(),
+        git2::ResetType::Soft,
+        Some(&mut checkout),
+    )
+    .map_err(|e| format!("重置到目标分支失败: {}", e))?;
+
+    let mut last_commit_oid: Option<git2::Oid> = None;
+    let mut squashed_tree: Option<git2::Tree> = None;
+    let mut total_applied = 0u32;
+
+    for entry in entries {
+        match entry.action.as_str() {
+            "drop" => continue,
+            "pick" | "squash" | "fixup" | "reword" => {
+                let commit_oid = git2::Oid::from_str(&entry.commit_id)
+                    .map_err(|e| format!("无效的提交 ID: {}", e))?;
+                let commit = repo
+                    .find_commit(commit_oid)
+                    .map_err(|e| format!("无法找到提交: {}", e))?;
+
+                let is_squash = entry.action == "squash" || entry.action == "fixup";
+
+                // Cherry-pick the commit
+                let mut cp_opts = git2::CherrypickOptions::new();
+                cp_opts.checkout_builder(git2::build::CheckoutBuilder::new());
+                repo.cherrypick(&commit, Some(&mut cp_opts))
+                    .map_err(|e| format!("Cherry-pick 提交 {} 失败: {}", entry.short_id, e))?;
+
+                // Check for conflicts
+                let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+                if index.has_conflicts() {
+                    repo.cleanup_state().ok();
+                    repo.reset(onto_commit.as_object(), git2::ResetType::Soft, None).ok();
+                    return Err(format!(
+                        "变基过程中出现冲突 (提交 {})，已中止。请手动解决冲突后使用终端执行 git rebase --continue",
+                        entry.short_id
+                    ));
+                }
+
+                let tree_oid = index
+                    .write_tree()
+                    .map_err(|e| format!("无法写入树: {}", e))?;
+                drop(index);
+
+                let tree = repo
+                    .find_tree(tree_oid)
+                    .map_err(|e| format!("无法找到树: {}", e))?;
+
+                if is_squash {
+                    // For squash/fixup: store the tree and keep the last commit
+                    // We don't commit yet — we'll combine with the previous one
+                    squashed_tree = Some(tree);
+                    continue;
+                }
+
+                // Regular pick or reword: create a commit
+                let msg = if entry.action == "reword" {
+                    entry
+                        .new_message
+                        .as_deref()
+                        .unwrap_or(commit.message().unwrap_or(""))
+                } else {
+                    commit.message().unwrap_or("")
+                };
+
+                let head_commit = repo
+                    .head()
+                    .map_err(|e| format!("无法获取 HEAD: {}", e))?
+                    .peel_to_commit()
+                    .ok();
+
+                let parents: Vec<&git2::Commit> = head_commit.iter().collect();
+
+                let new_oid = repo
+                    .commit(Some("HEAD"), &signature, &signature, msg, &tree, parents.as_slice())
+                    .map_err(|e| format!("创建提交失败: {}", e))?;
+
+                last_commit_oid = Some(new_oid);
+                total_applied += 1;
+            }
+            _ => return Err(format!("未知的操作: {}", entry.action)),
+        }
+    }
+
+    // Handle trailing squash/fixup: combine with the last commit
+    if let Some(tree) = squashed_tree {
+        if let Some(prev_oid) = last_commit_oid {
+            // Amend the last commit with the combined tree
+            let prev_commit = repo
+                .find_commit(prev_oid)
+                .map_err(|e| format!("无法找到前一个提交: {}", e))?;
+            let parent_refs: Vec<git2::Commit> = prev_commit.parents().collect();
+            let parents: Vec<&git2::Commit> = parent_refs.iter().collect();
+
+            // For squash: keep the last entry's message
+            let last_squash_entry = entries
+                .iter()
+                .filter(|e| e.action == "squash" || e.action == "fixup")
+                .last();
+
+            let msg = match last_squash_entry {
+                Some(e) if e.action == "fixup" => {
+                    // Fixup: keep the original previous commit message
+                    prev_commit.message().unwrap_or("").to_string()
+                }
+                Some(e) => {
+                    // Squash: use the squashed commit's message
+                    let commit = repo
+                        .find_commit(git2::Oid::from_str(&e.commit_id).unwrap())
+                        .ok();
+                    commit
+                        .and_then(|c| c.message().map(|m| m.to_string()))
+                        .unwrap_or_else(|| e.message.clone())
+                }
+                None => prev_commit.message().unwrap_or("").to_string(),
+            };
+
+            repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                &msg,
+                &tree,
+                parents.as_slice(),
+            )
+            .map_err(|e| format!("创建组合提交失败: {}", e))?;
+
+            total_applied += 1;
+        } else {
+            // No previous commit, create a new one directly
+            let msg = entries
+                .iter()
+                .find(|e| e.action == "squash" || e.action == "fixup")
+                .map(|e| e.message.clone())
+                .unwrap_or_else(|| "squash".to_string());
+
+            let head_commit = repo
+                .head()
+                .map_err(|e| format!("无法获取 HEAD: {}", e))?
+                .peel_to_commit()
+                .ok();
+            let parents: Vec<&git2::Commit> = head_commit.iter().collect();
+
+            repo.commit(Some("HEAD"), &signature, &signature, &msg, &tree, parents.as_slice())
+                .map_err(|e| format!("创建提交失败: {}", e))?;
+
+            total_applied += 1;
+        }
+    }
+
+    Ok(format!("变基完成，共处理 {} 个提交", total_applied))
 }

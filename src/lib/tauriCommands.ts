@@ -8,9 +8,11 @@ import type {
   FileStatus,
   DiffResult,
   BranchInfo,
+  BranchDiffSummary,
   RemoteInfo,
   ConflictEntry,
   StashInfo,
+  RebaseEntry,
   GitHubUser,
   GitHubRepo,
   GitHubBranch,
@@ -66,12 +68,25 @@ export async function commit(path: string, message: string): Promise<CommitInfo>
   return invoke('commit', { path, message });
 }
 
+export async function amendCommit(path: string, message: string): Promise<CommitInfo> {
+  return invoke('amend_commit', { path, message });
+}
+
 export async function getCommitHistory(
   path: string,
   page: number,
   pageSize: number
 ): Promise<CommitInfo[]> {
   return invoke('get_commit_history', { path, page, pageSize });
+}
+
+export async function searchCommitHistory(
+  path: string,
+  query: string,
+  page: number,
+  pageSize: number
+): Promise<CommitInfo[]> {
+  return invoke('search_commit_history', { path, query, page, pageSize });
 }
 
 export async function getCommitDetail(
@@ -87,6 +102,14 @@ export async function getFileBase64(path: string, filePath: string, commitId?: s
 
 export async function checkLfs(path: string, filePath: string): Promise<boolean> {
   return invoke('check_lfs', { path, filePath });
+}
+
+export async function stageHunk(path: string, filePath: string, hunkIndex: number): Promise<void> {
+  return invoke('stage_hunk', { path, filePath, hunkIndex });
+}
+
+export async function stageLine(path: string, filePath: string, hunkIndex: number, lineIndex: number): Promise<void> {
+  return invoke('stage_line', { path, filePath, hunkIndex, lineIndex });
 }
 
 export async function getFileDiff(
@@ -135,6 +158,14 @@ export async function checkoutBranch(path: string, name: string): Promise<void> 
   return invoke('checkout_branch', { path, name });
 }
 
+export async function compareBranches(
+  path: string,
+  baseBranch: string,
+  targetBranch: string
+): Promise<BranchDiffSummary> {
+  return invoke('compare_branches', { path, baseBranch, targetBranch });
+}
+
 export async function checkoutRemoteBranch(path: string, name: string): Promise<void> {
   return invoke('checkout_remote_branch', { path, name });
 }
@@ -179,6 +210,18 @@ export async function getRemotes(path: string): Promise<RemoteInfo[]> {
   return invoke('get_remotes', { path });
 }
 
+export async function addRemote(path: string, name: string, url: string): Promise<void> {
+  return invoke('add_remote', { path, name, url });
+}
+
+export async function setRemoteUrl(path: string, name: string, url: string): Promise<void> {
+  return invoke('set_remote_url', { path, name, url });
+}
+
+export async function deleteRemote(path: string, name: string): Promise<void> {
+  return invoke('delete_remote', { path, name });
+}
+
 export async function checkSubmodules(path: string): Promise<string[]> {
   return invoke('check_submodules', { path });
 }
@@ -219,8 +262,20 @@ export async function stashDrop(path: string, index: number): Promise<void> {
   return invoke('stash_drop', { path, index });
 }
 
+export async function mergeBranch(path: string, branchName: string, strategy: string): Promise<string> {
+  return invoke('merge_branch', { path, branchName, strategy });
+}
+
 export async function rebase(path: string, onto: string): Promise<string> {
   return invoke('rebase', { path, onto });
+}
+
+export async function listRebaseCommits(path: string, ontoBranch: string): Promise<RebaseEntry[]> {
+  return invoke('list_rebase_commits', { path, ontoBranch });
+}
+
+export async function performInteractiveRebase(path: string, ontoBranch: string, entries: RebaseEntry[]): Promise<string> {
+  return invoke('perform_interactive_rebase', { path, ontoBranch, entries });
 }
 
 export async function cherryPick(path: string, commitId: string): Promise<string> {

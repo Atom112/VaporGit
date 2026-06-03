@@ -34,6 +34,16 @@ export interface CommitDetail {
   changedFiles: FileChange[];
 }
 
+export interface RebaseEntry {
+  commitId: string;
+  shortId: string;
+  message: string;
+  author: string;
+  timestamp: number;
+  action: 'pick' | 'squash' | 'reword' | 'drop' | 'fixup';
+  newMessage: string | null;
+}
+
 export interface FileChange {
   filePath: string;
   status: string;
@@ -128,6 +138,21 @@ export interface ConflictEntry {
   ancestorMode: number | null;
   oursMode: number | null;
   theirsMode: number | null;
+}
+
+export interface BranchDiffSummary {
+  ahead: number;
+  behind: number;
+  files: BranchFileChange[];
+  baseBranch: string;
+  targetBranch: string;
+}
+
+export interface BranchFileChange {
+  filePath: string;
+  status: string;
+  additions: number;
+  deletions: number;
 }
 
 export interface StashInfo {
@@ -282,44 +307,6 @@ export interface PRComment {
   user: { login: string; id: number; avatarUrl: string };
   createdAt: string;
   updatedAt: string;
-}
-
-// === GitLab types ===
-
-export interface GitLabUser {
-  id: number;
-  username: string;
-  name: string | null;
-  avatarUrl: string;
-  webUrl: string;
-  email: string | null;
-  bio: string | null;
-  publicRepos?: number;
-  createdAt?: string | null;
-}
-
-export interface GitLabAuthStatus {
-  authenticated: boolean;
-  user: GitLabUser | null;
-}
-
-// === GitLab types ===
-
-export interface GitLabUser {
-  id: number;
-  username: string;
-  name: string | null;
-  avatarUrl: string;
-  webUrl: string;
-  email: string | null;
-  bio: string | null;
-  publicRepos?: number;
-  createdAt?: string | null;
-}
-
-export interface GitLabAuthStatus {
-  authenticated: boolean;
-  user: GitLabUser | null;
 }
 
 // === Gitee types ===

@@ -63,6 +63,24 @@ pub fn get_remotes(repo: &Repository) -> Result<Vec<RemoteInfo>, String> {
     Ok(result)
 }
 
+pub fn add_remote(repo: &Repository, name: &str, url: &str) -> Result<(), String> {
+    repo.remote(name, url)
+        .map_err(|e| format!("无法添加远程 {}: {}", name, e))?;
+    Ok(())
+}
+
+pub fn set_remote_url(repo: &Repository, name: &str, url: &str) -> Result<(), String> {
+    repo.remote_set_url(name, url)
+        .map_err(|e| format!("无法设置远程 URL: {}", e))?;
+    Ok(())
+}
+
+pub fn delete_remote(repo: &Repository, name: &str) -> Result<(), String> {
+    repo.remote_delete(name)
+        .map_err(|e| format!("无法删除远程 {}: {}", name, e))?;
+    Ok(())
+}
+
 pub fn fetch(repo: &Repository, remote_name: Option<&str>) -> Result<(), String> {
     let name = remote_name.unwrap_or("origin");
     let mut remote = repo
