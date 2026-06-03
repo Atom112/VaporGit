@@ -28,7 +28,6 @@ import {
   redo as redoLast,
   fetch as fetchRemote,
   pull as pullRemote,
-  pushWithAutoCreate,
   getRemotes,
   checkSubmodules,
   openTerminal,
@@ -46,6 +45,7 @@ import StatusBar from '../components/layout/StatusBar';
 import StashPanel from '../components/git/StashPanel';
 import RemoteManager from '../components/git/RemoteManager';
 import ConflictResolver from '../components/git/ConflictResolver';
+import PushDialog from '../components/git/PushDialog';
 import PRCreateDialog from '../components/github/PRCreateDialog';
 import GiteePRCreateDialog from '../components/gitee/GiteePRCreateDialog';
 import { githubStore } from '../stores/githubStore';
@@ -107,6 +107,7 @@ const Repository: Component = () => {
   const [showMergeDialog, setShowMergeDialog] = createSignal(false);
   const [showRemoteManager, setShowRemoteManager] = createSignal(false);
   const [showBranchCompare, setShowBranchCompare] = createSignal(false);
+  const [showPushDialog, setShowPushDialog] = createSignal(false);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal<CommitInfo[] | null>(null);
   const [searchLoading, setSearchLoading] = createSignal(false);
@@ -633,25 +634,6 @@ const Repository: Component = () => {
       if (statuses.some((f) => f.status === 'CONFLICTED')) {
         setShowConflictResolver(true);
       }
-    } finally {
-      setRemoteActionLoading(false);
-    }
-  };
-
-  const handlePush = async () => {
-    const path = repoPath();
-    if (!path || remoteActionLoading()) return;
-    setRemoteActionLoading(true);
-    try {
-      const result = await pushWithAutoCreate(path, settingsStore.defaultRemoteName);
-      if (result === 'auto_created_and_pushed') {
-        addToast(tt('repo.pushAutoCreateSuccess'), 'success');
-      } else {
-        addToast(tt('repo.pushSuccess'), 'success');
-      }
-      await refreshGraph(true);
-    } catch (e) {
-      addToast(ttf('repo.pushFailed', describeError(e)), 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -1188,7 +1170,7 @@ const Repository: Component = () => {
               </button>
               <button
                 class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
-                onClick={handlePush}
+                onClick={() => setShowPushDialog(true)}
                 disabled={remoteActionLoading()}
               >
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1408,6 +1390,14 @@ const Repository: Component = () => {
         />
       </Show>
 
+      <Show when={showPushDialog() && repoPath()}>
+        <PushDialog
+          repoPath={repoPath()!}
+          onClose={() => setShowPushDialog(false)}
+          onRefresh={refreshAll}
+        />
+      </Show>
+
       {/* PR Create Dialog */}
       <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'github' && githubStore.authenticated}>
         <PRCreateDialog
@@ -1486,7 +1476,7 @@ const Repository: Component = () => {
         disabled={!repoPath()}
         onFetch={handleFetch}
         onPull={handlePull}
-        onPush={handlePush}
+        onPush={() => setShowPushDialog(true)}
         onCommit={handleCommit}
         onUndo={handleUndo}
         onRedo={handleRedo}

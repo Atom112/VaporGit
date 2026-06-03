@@ -129,6 +129,23 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/** Highlight multiple lines in a single hljs call. Returns array of HTML strings, one per line.
+ *  This is significantly faster than calling highlightLine() per line because hljs
+ *  lexer initialization and multi-line context parsing are shared across all lines.
+ */
+export function highlightLines(lines: string[], lang: string | null): string[] {
+  if (!lang) return lines.map(escapeHtml);
+  try {
+    if (!hljs.getLanguage(lang)) return lines.map(escapeHtml);
+    const joined = lines.join('\n');
+    if (!joined) return [];
+    const result = hljs.highlight(joined, { language: lang, ignoreIllegals: true }).value;
+    return result.split('\n');
+  } catch {
+    return lines.map(escapeHtml);
+  }
+}
+
 /** Highlight a single line of code. Returns HTML string safe for innerHTML. */
 export function highlightLine(content: string, lang: string | null): string {
   const text = content.replace(/\n$/, '');
