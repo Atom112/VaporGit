@@ -473,6 +473,12 @@ const zh = {
     networkError: '网络错误，请检查网络连接',
     timeout: '连接超时，请检查网络连接',
     pushRejected: '推送被拒绝，远程仓库包含本地没有的提交，请先拉取最新代码',
+    notFound: '资源不存在，请检查后重试',
+    alreadyExists: '已存在，请使用其他名称',
+    permissionDenied: '权限不足，请检查您的凭证',
+    mergeConflict: '检测到合并冲突，请解决后再继续',
+    branchNotFound: '分支不存在，可能已被删除',
+    nothingToCommit: '没有可提交的变更，工作区是干净的',
   },
 };
 

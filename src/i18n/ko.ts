@@ -338,6 +338,12 @@ const ko = {
     networkError: '네트워크 오류입니다. 연결을 확인하세요',
     timeout: '시간이 초과되었습니다. 네트워크 연결을 확인하세요',
     pushRejected: '푸시가 거부되었습니다. 원격에 로컬에 없는 변경사항이 있습니다. 먼저 풀을 해주세요',
+    notFound: '리소스를 찾을 수 없습니다. 확인 후 다시 시도하세요',
+    alreadyExists: '이미 존재합니다. 다른 이름을 사용하세요',
+    permissionDenied: '권한이 거부되었습니다. 자격 증명을 확인하세요',
+    mergeConflict: '병합 충돌이 감지되었습니다. 계속하기 전에 해결하세요',
+    branchNotFound: '브랜치를 찾을 수 없습니다. 삭제되었을 수 있습니다',
+    nothingToCommit: '커밋할 내용이 없습니다. 작업 트리가 깨끗합니다',
   },
 };
 

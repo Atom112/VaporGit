@@ -338,6 +338,12 @@ const zhTW = {
     networkError: '網路錯誤，請檢查網路連線',
     timeout: '連線逾時，請檢查網路連線',
     pushRejected: '推送被拒絕，遠端倉庫包含本地沒有的提交，請先拉取最新程式碼',
+    notFound: '資源不存在，請檢查後重試',
+    alreadyExists: '已存在，請使用其他名稱',
+    permissionDenied: '權限不足，請檢查您的憑證',
+    mergeConflict: '偵測到合併衝突，請解決後再繼續',
+    branchNotFound: '分支不存在，可能已被刪除',
+    nothingToCommit: '沒有可提交的變更，工作區是乾淨的',
   },
 };
 

@@ -38,7 +38,7 @@ const PushDialog: Component<Props> = (props) => {
         }
       })
       .catch((e) => {
-        addToast(`加载分支列表失败: ${e}`, 'error');
+        addToast(`加载分支列表失败: ${describeError(e)}`, 'error');
       })
       .finally(() => setBranchesLoading(false));
   });

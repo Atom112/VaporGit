@@ -473,6 +473,12 @@ const en = {
     networkError: 'Network error, please check your connection',
     timeout: 'Connection timed out, please check your connection',
     pushRejected: 'Push rejected, remote has changes not in your local branch, please pull first',
+    notFound: 'Resource not found, please check and try again',
+    alreadyExists: 'Already exists, please use a different name',
+    permissionDenied: 'Permission denied, please check your credentials',
+    mergeConflict: 'Merge conflict detected, please resolve before continuing',
+    branchNotFound: 'Branch not found, it may have been deleted',
+    nothingToCommit: 'Nothing to commit, working tree is clean',
   },
 };
 

@@ -7,6 +7,7 @@ import {
 } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
 import type { BranchInfo, RebaseEntry } from '../../lib/types';
 
 interface Props {
@@ -44,7 +45,7 @@ const InteractiveRebase: Component<Props> = (props) => {
         if (alt) setTargetBranch(alt.name);
       })
       .catch((e) => {
-        addToast(`加载分支列表失败: ${e}`, 'error');
+        addToast(`加载分支列表失败: ${describeError(e)}`, 'error');
       })
       .finally(() => setBranchesLoading(false));
   });
@@ -59,7 +60,7 @@ const InteractiveRebase: Component<Props> = (props) => {
       const result = await listRebaseCommits(props.repoPath, branch);
       setEntries(result);
     } catch (e) {
-      addToast(`加载变基提交列表失败: ${e}`, 'error');
+      addToast(`加载变基提交列表失败: ${describeError(e)}`, 'error');
       setEntries([]);
     } finally {
       setEntriesLoading(false);
@@ -95,7 +96,7 @@ const InteractiveRebase: Component<Props> = (props) => {
       addToast(result, 'success');
       props.onRefresh();
     } catch (e) {
-      const msg = `变基失败: ${e}`;
+      const msg = `变基失败: ${describeError(e)}`;
       setRebaseResult(msg);
       addToast(msg, 'error');
     } finally {
@@ -115,7 +116,7 @@ const InteractiveRebase: Component<Props> = (props) => {
       addToast(result, 'success');
       props.onRefresh();
     } catch (e) {
-      addToast(`Cherry-pick 失败: ${e}`, 'error');
+      addToast(`Cherry-pick 失败: ${describeError(e)}`, 'error');
     } finally {
       setCpLoading(false);
     }

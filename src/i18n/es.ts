@@ -338,6 +338,12 @@ const es = {
     networkError: 'Error de red, verifique su conexión',
     timeout: 'Tiempo de espera agotado, verifique su conexión de red',
     pushRejected: 'Push rechazado, el repositorio remoto tiene cambios que no tiene localmente, haga pull primero',
+    notFound: 'Recurso no encontrado, verifique e intente de nuevo',
+    alreadyExists: 'Ya existe, use un nombre diferente',
+    permissionDenied: 'Permiso denegado, verifique sus credenciales',
+    mergeConflict: 'Conflicto de fusión detectado, resuélvalo antes de continuar',
+    branchNotFound: 'Rama no encontrada, puede haber sido eliminada',
+    nothingToCommit: 'Nada que confirmar, el árbol de trabajo está limpio',
   },
 };
 

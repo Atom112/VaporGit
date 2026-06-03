@@ -338,6 +338,12 @@ const de = {
     networkError: 'Netzwerkfehler, überprüfen Sie Ihre Verbindung',
     timeout: 'Zeitüberschreitung, überprüfen Sie Ihre Netzwerkverbindung',
     pushRejected: 'Push abgelehnt, das Remote-Repository hat Änderungen, die Sie nicht lokal haben. Pullen Sie zuerst',
+    notFound: 'Ressource nicht gefunden, bitte überprüfen und erneut versuchen',
+    alreadyExists: 'Existiert bereits, bitte verwenden Sie einen anderen Namen',
+    permissionDenied: 'Zugriff verweigert, bitte überprüfen Sie Ihre Berechtigungen',
+    mergeConflict: 'Merge-Konflikt erkannt, bitte lösen Sie ihn vor dem Fortfahren',
+    branchNotFound: 'Branch nicht gefunden, möglicherweise wurde er gelöscht',
+    nothingToCommit: 'Nichts zu committen, der Arbeitsbaum ist sauber',
   },
 };
 

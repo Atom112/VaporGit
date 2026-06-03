@@ -338,6 +338,12 @@ const fr = {
     networkError: 'Erreur réseau, vérifiez votre connexion',
     timeout: 'Délai d\'attente dépassé, vérifiez votre connexion réseau',
     pushRejected: 'Push refusé, le dépôt distant a des modifications locales manquantes, tirez d\'abord',
+    notFound: 'Ressource introuvable, veuillez vérifier et réessayer',
+    alreadyExists: 'Existe déjà, veuillez utiliser un nom différent',
+    permissionDenied: 'Permission refusée, veuillez vérifier vos identifiants',
+    mergeConflict: 'Conflit de fusion détecté, veuillez le résoudre avant de continuer',
+    branchNotFound: 'Branche introuvable, elle a peut-être été supprimée',
+    nothingToCommit: 'Rien à valider, l\'arbre de travail est propre',
   },
 };
 

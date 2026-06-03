@@ -338,6 +338,12 @@ const pt = {
     networkError: 'Erro de rede, verifique sua conexão',
     timeout: 'Tempo limite excedido, verifique sua conexão de rede',
     pushRejected: 'Push rejeitado, o repositório remoto tem alterações que você não tem localmente, faça pull primeiro',
+    notFound: 'Recurso não encontrado, verifique e tente novamente',
+    alreadyExists: 'Já existe, use um nome diferente',
+    permissionDenied: 'Permissão negada, verifique suas credenciais',
+    mergeConflict: 'Conflito de mesclagem detectado, resolva antes de continuar',
+    branchNotFound: 'Ramo não encontrado, pode ter sido excluído',
+    nothingToCommit: 'Nada para commitar, árvore de trabalho limpa',
   },
 };
 

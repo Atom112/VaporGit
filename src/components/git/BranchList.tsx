@@ -2,6 +2,7 @@ import { Component, For, Show, createSignal } from 'solid-js';
 import { checkoutBranch, checkoutRemoteBranch, deleteBranch } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
 import type { BranchInfo } from '../../lib/types';
 
 interface BranchListProps {
@@ -28,8 +29,8 @@ const BranchList: Component<BranchListProps> = (props) => {
       addToast(`已切换到分支 ${name}`, 'success');
       await props.onRefresh();
     } catch (e) {
-      addToast(`切换分支失败: ${e}`, 'error');
-      setError(String(e));
+      addToast(`切换分支失败: ${describeError(e)}`, 'error');
+      setError(describeError(e));
     } finally {
       setCheckoutBranchName(null);
     }
@@ -43,8 +44,8 @@ const BranchList: Component<BranchListProps> = (props) => {
       addToast(`已切换到分支 ${name}`, 'success');
       await props.onRefresh();
     } catch (e) {
-      addToast(`切换分支失败: ${e}`, 'error');
-      setError(String(e));
+      addToast(`切换分支失败: ${describeError(e)}`, 'error');
+      setError(describeError(e));
     } finally {
       setCheckoutBranchName(null);
     }
@@ -58,8 +59,8 @@ const BranchList: Component<BranchListProps> = (props) => {
       setConfirmDelete(null);
       props.onRefresh();
     } catch (e) {
-      addToast(`删除分支失败: ${e}`, 'error');
-      setError(String(e));
+      addToast(`删除分支失败: ${describeError(e)}`, 'error');
+      setError(describeError(e));
     }
   };
 

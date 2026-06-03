@@ -1,6 +1,7 @@
 import { Component, createSignal, createEffect, Show, For } from 'solid-js';
 import { stashSave, stashList, stashPop, stashApply, stashDrop } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
+import { describeError } from '../../lib/gitErrorDesc';
 import type { StashInfo } from '../../lib/types';
 
 interface Props {
@@ -51,8 +52,8 @@ const StashPanel: Component<Props> = (props) => {
       await loadStashes();
       props.onRefresh();
     } catch (e) {
-      addToast(`Stash 失败: ${e}`, 'error');
-      setError(String(e));
+      addToast(`Stash 失败: ${describeError(e)}`, 'error');
+      setError(describeError(e));
     } finally {
       setSaveLoading(false);
     }
@@ -67,8 +68,8 @@ const StashPanel: Component<Props> = (props) => {
       await loadStashes();
       props.onRefresh();
     } catch (e) {
-      addToast(`Stash 弹出失败: ${e}`, 'error');
-      setError(String(e));
+      addToast(`Stash 弹出失败: ${describeError(e)}`, 'error');
+      setError(describeError(e));
     } finally {
       setActionLoading(null);
     }
@@ -82,8 +83,8 @@ const StashPanel: Component<Props> = (props) => {
       addToast('Stash 应用成功', 'success');
       props.onRefresh();
     } catch (e) {
-      addToast(`Stash 应用失败: ${e}`, 'error');
-      setError(String(e));
+      addToast(`Stash 应用失败: ${describeError(e)}`, 'error');
+      setError(describeError(e));
     } finally {
       setActionLoading(null);
     }
@@ -97,8 +98,8 @@ const StashPanel: Component<Props> = (props) => {
       addToast('Stash 已删除', 'success');
       await loadStashes();
     } catch (e) {
-      addToast(`Stash 删除失败: ${e}`, 'error');
-      setError(String(e));
+      addToast(`Stash 删除失败: ${describeError(e)}`, 'error');
+      setError(describeError(e));
     } finally {
       setActionLoading(null);
     }

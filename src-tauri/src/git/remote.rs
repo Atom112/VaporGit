@@ -119,7 +119,7 @@ pub fn fetch(repo: &Repository, remote_name: Option<&str>) -> Result<(), String>
 
     remote
         .fetch(&["refs/heads/*:refs/remotes/origin/*"], Some(&mut fetch_opts), None)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("拉取远程数据失败: {}", e))?;
 
     remote
         .disconnect()
@@ -285,7 +285,7 @@ pub fn push(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
 
     remote
         .push(&[&refspec], Some(&mut push_opts))
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("推送失败: {}", e))?;
 
     remote
         .disconnect()
@@ -332,7 +332,7 @@ pub fn push_with_github_token(
 
     remote
         .push(&[&refspec], Some(&mut push_opts))
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("推送失败: {}", e))?;
 
     remote
         .disconnect()

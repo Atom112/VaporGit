@@ -2,6 +2,7 @@ import { Component, createSignal, Show, For, createMemo, onMount } from 'solid-j
 import { getConflicts, resolveConflict, getConflictContent } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt, ttf } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
 import type { ConflictEntry } from '../../lib/types';
 
 interface Props {
@@ -48,7 +49,7 @@ const ConflictResolver: Component<Props> = (props) => {
       setConflicts(list);
       if (list.length === 0) props.onClose();
     } catch (e) {
-      setError(String(e));
+      setError(describeError(e));
     } finally {
       setLoading(false);
     }
@@ -67,7 +68,7 @@ const ConflictResolver: Component<Props> = (props) => {
       setOursContent(ours);
       setTheirsContent(theirs);
     } catch (e) {
-      setError(String(e));
+      setError(describeError(e));
     } finally {
       setContentLoading(false);
     }
@@ -88,7 +89,7 @@ const ConflictResolver: Component<Props> = (props) => {
       }
     } catch (e) {
       addToast(ttf('repo.conflictResolveFailed', String(e)), 'error');
-      setError(String(e));
+      setError(describeError(e));
     } finally {
       setResolving(null);
     }
@@ -101,7 +102,7 @@ const ConflictResolver: Component<Props> = (props) => {
         await resolveConflict(props.repoPath, c.filePath, resolution);
       } catch (e) {
         addToast(ttf('repo.conflictResolveFailed', String(e)), 'error');
-        setError(String(e));
+        setError(describeError(e));
       }
     }
     await loadConflicts();
