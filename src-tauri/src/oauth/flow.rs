@@ -8,8 +8,8 @@ use url::Url;
 
 pub struct ProviderConfig {
     pub provider_name: &'static str,
-    pub client_id: &'static str,
-    pub client_secret: &'static str,
+    pub client_id: String,
+    pub client_secret: String,
     pub authorize_url: &'static str,
     pub token_url: &'static str,
     pub api_url: &'static str,
