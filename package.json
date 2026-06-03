@@ -1,6 +1,6 @@
 {
   "name": "vaporgit",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "A lightweight cross-platform GUI Git desktop client built with Tauri + SolidJS.",
   "type": "module",
   "scripts": {
