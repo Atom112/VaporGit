@@ -1,5 +1,15 @@
 # Changelog / 已实现功能
 
+## v1.2.4 - 2026-06-05
+
+### Fixed
+- 修复 `resolve_conflict` 只更新索引不更新工作区文件，解决后文件仍残留冲突标记
+- 修复冲突弹窗 CONFLICTS 选项卡的冲突 block 解析无效（解析了 stage 内容而非工作区文件）
+- 修复交互式 rebase 冲突中止使用 Soft Reset 导致工作区和 index 残留冲突状态
+- 修复 cherry-pick/revert 冲突时清除 CHERRY_PICK_HEAD/REVERT_HEAD，无法在终端 `--continue`
+- 修复 `normal_merge` 冲突时不列出冲突文件路径
+- 修复 `squash_merge` 冗余 index 访问，静默忽略错误
+
 ## v1.2.2 - 2026-05-31
 
 ### Security
