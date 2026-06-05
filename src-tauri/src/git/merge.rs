@@ -83,8 +83,27 @@ fn normal_merge(repo: &Repository, target_oid: git2::Oid) -> Result<String, Stri
         .map_err(|e| format!("无法获取索引: {}", e))?;
 
     if index.has_conflicts() {
-        // Clean up merge state so the user can resolve conflicts
-        return Ok("合并出现冲突，请解决冲突后提交".to_string());
+        let mut conflict_files: Vec<String> = Vec::new();
+        if let Ok(conflicts) = index.conflicts() {
+            for conflict_result in conflicts {
+                if let Ok(conflict) = conflict_result {
+                    if let Some(entry) = conflict.ancestor
+                        .as_ref()
+                        .or_else(|| conflict.our.as_ref())
+                        .or_else(|| conflict.their.as_ref())
+                    {
+                        let path = std::str::from_utf8(&entry.path).unwrap_or("");
+                        if !path.is_empty() {
+                            conflict_files.push(path.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        conflict_files.sort();
+        conflict_files.dedup();
+        let files_str = conflict_files.join(", ");
+        return Ok(format!("合并出现冲突，请解决冲突后提交。冲突文件: {}", files_str));
     }
 
     let tree_oid = index
@@ -141,11 +160,13 @@ fn squash_merge(repo: &Repository, target_oid: git2::Oid) -> Result<String, Stri
     .map_err(|e| format!("Squash 合并失败: {}", e))?;
 
     // Mark as squash merge in the index
-    if let Ok(index) = repo.index() {
-        if index.has_conflicts() {
-            return Ok("Squash 合并出现冲突，请解决冲突后提交".to_string());
-        }
+    let index = repo
+        .index()
+        .map_err(|e| format!("无法获取索引: {}", e))?;
+    if index.has_conflicts() {
+        return Ok("Squash 合并出现冲突，请解决冲突后提交".to_string());
     }
+    drop(index);
 
     // Don't create a merge commit — let the user commit manually
     repo.cleanup_state()

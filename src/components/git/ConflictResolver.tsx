@@ -37,6 +37,7 @@ const ConflictResolver: Component<Props> = (props) => {
   const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
   const [oursContent, setOursContent] = createSignal<string>('');
   const [theirsContent, setTheirsContent] = createSignal<string>('');
+  const [worktreeContent, setWorktreeContent] = createSignal<string>('');
   const [contentLoading, setContentLoading] = createSignal(false);
   const [resolving, setResolving] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
@@ -60,13 +61,16 @@ const ConflictResolver: Component<Props> = (props) => {
     setContentLoading(true);
     setOursContent('');
     setTheirsContent('');
+    setWorktreeContent('');
     try {
-      const [ours, theirs] = await Promise.all([
+      const [ours, theirs, worktree] = await Promise.all([
         getConflictContent(props.repoPath, filePath, 'ours'),
         getConflictContent(props.repoPath, filePath, 'theirs'),
+        getConflictContent(props.repoPath, filePath, 'worktree'),
       ]);
       setOursContent(ours);
       setTheirsContent(theirs);
+      setWorktreeContent(worktree);
     } catch (e) {
       setError(describeError(e));
     } finally {
@@ -86,6 +90,7 @@ const ConflictResolver: Component<Props> = (props) => {
         setSelectedFile(null);
         setOursContent('');
         setTheirsContent('');
+        setWorktreeContent('');
       }
     } catch (e) {
       addToast(ttf('repo.conflictResolveFailed', String(e)), 'error');
@@ -117,7 +122,7 @@ const ConflictResolver: Component<Props> = (props) => {
   const conflictBlocks = createMemo(() => {
     const content = activeTab() === 'local' ? oursContent() :
                     activeTab() === 'remote' ? theirsContent() :
-                    oursContent(); // default to ours for conflict parsing
+                    worktreeContent(); // working tree has actual conflict markers
     if (!content) return [];
     return parseConflictMarkers(content);
   });

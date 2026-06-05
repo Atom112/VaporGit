@@ -254,6 +254,16 @@ pub fn get_conflicts(repo: &Repository) -> Result<Vec<ConflictEntry>, String> {
 }
 
 pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Result<String, String> {
+    // "worktree" reads from the working tree file (contains conflict markers)
+    if stage == "worktree" {
+        let workdir = repo
+            .workdir()
+            .ok_or_else(|| "无法获取工作目录".to_string())?;
+        let abs_path = workdir.join(file);
+        return std::fs::read_to_string(&abs_path)
+            .map_err(|e| format!("无法读取工作目录文件 '{}': {}", file, e));
+    }
+
     let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
 
     let conflicts = index.conflicts()
@@ -458,6 +468,17 @@ pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Resu
     index
         .add(&idx_entry)
         .map_err(|e| format!("无法添加解决后的条目: {}", e))?;
+
+    // Write the resolved blob content to the working tree file
+    let blob = repo
+        .find_blob(entry_id)
+        .map_err(|e| format!("无法读取已解决的文件内容: {}", e))?;
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| "无法获取工作目录".to_string())?;
+    let abs_path = workdir.join(path);
+    std::fs::write(&abs_path, blob.content())
+        .map_err(|e| format!("无法写入已解决的文件 '{}': {}", file, e))?;
 
     index
         .write()

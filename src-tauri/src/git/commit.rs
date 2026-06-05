@@ -526,8 +526,7 @@ pub fn cherry_pick(repo: &Repository, commit_id: &str) -> Result<String, String>
     // Check for conflicts
     let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
     if index.has_conflicts() {
-        repo.cleanup_state().ok();
-        return Ok("Cherry-pick 出现冲突，请手动解决后提交".to_string());
+        return Ok("Cherry-pick 出现冲突，解决后可在终端执行 git cherry-pick --continue 或直接提交".to_string());
     }
     drop(index);
 
@@ -590,8 +589,7 @@ pub fn revert_commit(repo: &Repository, commit_id: &str) -> Result<String, Strin
     // Check for conflicts
     let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
     if index.has_conflicts() {
-        repo.cleanup_state().ok();
-        return Ok("Revert 出现冲突，请手动解决后提交".to_string());
+        return Ok("Revert 出现冲突，解决后可在终端执行 git revert --continue 或直接提交".to_string());
     }
     drop(index);
 
@@ -906,9 +904,9 @@ pub fn perform_interactive_rebase(
                 let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
                 if index.has_conflicts() {
                     repo.cleanup_state().ok();
-                    repo.reset(onto_commit.as_object(), git2::ResetType::Soft, None).ok();
+                    repo.reset(onto_commit.as_object(), git2::ResetType::Hard, None).ok();
                     return Err(format!(
-                        "变基过程中出现冲突 (提交 {})，已中止。请手动解决冲突后使用终端执行 git rebase --continue",
+                        "变基过程中出现冲突 (提交 {})，已中止。工作区已重置到目标分支。",
                         entry.short_id
                     ));
                 }
