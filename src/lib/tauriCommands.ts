@@ -11,6 +11,8 @@ import type {
   BranchDiffSummary,
   RemoteInfo,
   ConflictEntry,
+  ConflictBlockDetail,
+  BlockResolution,
   StashInfo,
   RebaseEntry,
   GitHubUser,
@@ -240,6 +242,14 @@ export async function discardFiles(path: string, files: string[]): Promise<FileS
 
 export async function resolveConflict(path: string, file: string, resolution: string): Promise<void> {
   return invoke('resolve_conflict', { path, file, resolution });
+}
+
+export async function getConflictBlocks(path: string, file: string): Promise<ConflictBlockDetail[]> {
+  return invoke('get_conflict_blocks', { path, file });
+}
+
+export async function resolveConflictBlocks(path: string, file: string, resolutions: BlockResolution[]): Promise<void> {
+  return invoke('resolve_conflict_blocks', { path, file, resolutions });
 }
 
 export async function stashSave(path: string, message?: string): Promise<void> {

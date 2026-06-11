@@ -289,7 +289,7 @@ const Repository: Component = () => {
       refreshAll();
     } catch (e) {
       setRepoStore({ loading: false });
-      showRepoError(String(e));
+      showRepoError(describeError(e));
     }
   };
 
@@ -308,7 +308,7 @@ const Repository: Component = () => {
       refreshAll();
     } catch (e) {
       setRepoStore({ loading: false });
-      showRepoError(String(e), repo.path);
+      showRepoError(describeError(e), repo.path);
     }
   };
 
@@ -447,7 +447,7 @@ const Repository: Component = () => {
       setAmendMode(false);
       await refreshAll();
     } catch (e) {
-      setCommitError(String(e));
+      setCommitError(describeError(e));
     }
   };
 

@@ -1,5 +1,33 @@
 # Changelog / 已实现功能
 
+## v1.2.5 - 2026-06-11
+
+### Added
+- 逐冲突块解决功能：重构冲突解决弹窗，支持对单个文件中每一处冲突独立选择 Ours / Theirs / 手动编辑
+- 内联合并编辑器：文件内容按"文本段 + 冲突块"分段展示，每块可单独操作
+- 冲突块间导航：◀ ▶ 按钮快速跳转，自动滚动到目标块
+- 手动编辑模式：展开 textarea 自由编辑合并后的内容，支持应用和重置
+- 语法高亮：冲突块代码使用 highlight.js 高亮显示
+- 后端 `resolve_conflict_blocks` API：接收逐块解决指令，批量替换冲突标记并更新索引
+
+### Changed
+- 重构 `ConflictResolver.tsx`，移除旧的三标签页结构（LOCAL / REMOTE / CONFLICTS）
+- 重建 `tauri.conf.json` 中 `small-letter` 配置结构
+
+### i18n
+- 新增 18 个冲突解决相关翻译键，覆盖全部 12 种语言
+- 为 ar/de/es/fr/ja/ko/pt/ru 8 种语言补充缺失的本地化翻译
+
+## v1.2.4 - 2026-06-05
+
+### Fixed
+- 修复 `resolve_conflict` 只更新索引不更新工作区文件，解决后文件仍残留冲突标记
+- 修复冲突弹窗 CONFLICTS 选项卡的冲突 block 解析无效（解析了 stage 内容而非工作区文件）
+- 修复交互式 rebase 冲突中止使用 Soft Reset 导致工作区和 index 残留冲突状态
+- 修复 cherry-pick/revert 冲突时清除 CHERRY_PICK_HEAD/REVERT_HEAD，无法在终端 `--continue`
+- 修复 `normal_merge` 冲突时不列出冲突文件路径
+- 修复 `squash_merge` 冗余 index 访问，静默忽略错误
+
 ## v1.2.2 - 2026-05-31
 
 ### Security

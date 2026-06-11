@@ -1,6 +1,7 @@
 import { Component, createEffect, createMemo, createSignal, Show, For, onCleanup } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { tt } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
 import type { GraphNode, CommitGraphData } from '../../lib/types';
 import { revertCommit, createTag, deleteRemoteBranch as deleteRemoteBranchCmd, getRemotes } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
@@ -467,7 +468,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
       }
       closeDeleteBranchDialog();
     } catch (e) {
-      setDeleteError(String(e));
+      setDeleteError(describeError(e));
     } finally {
       setDeleteLoading(false);
     }
@@ -515,7 +516,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
       addToast(result, 'success');
       closeRevertDialog();
     } catch (e) {
-      setRevertError(String(e));
+      setRevertError(describeError(e));
     } finally {
       setRevertLoading(false);
     }
@@ -560,7 +561,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
       addToast(result, 'success');
       closeTagDialog();
     } catch (e) {
-      setTagError(String(e));
+      setTagError(describeError(e));
     } finally {
       setTagLoading(false);
     }

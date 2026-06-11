@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use git2::{Repository, StatusOptions, StatusShow};
 use crate::models::status::{FileStatus, StatusKind};
-use crate::models::conflict::ConflictEntry;
+use crate::models::conflict::{BlockResolution, ConflictBlockDetail, ConflictEntry};
 
 /// Read working-tree + index status using git2's `Diff` API for rename
 /// detection — the same approach GitKraken uses (content-based similarity
@@ -254,6 +254,16 @@ pub fn get_conflicts(repo: &Repository) -> Result<Vec<ConflictEntry>, String> {
 }
 
 pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Result<String, String> {
+    // "worktree" reads from the working tree file (contains conflict markers)
+    if stage == "worktree" {
+        let workdir = repo
+            .workdir()
+            .ok_or_else(|| "无法获取工作目录".to_string())?;
+        let abs_path = workdir.join(file);
+        return std::fs::read_to_string(&abs_path)
+            .map_err(|e| format!("无法读取工作目录文件 '{}': {}", file, e));
+    }
+
     let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
 
     let conflicts = index.conflicts()
@@ -459,8 +469,181 @@ pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Resu
         .add(&idx_entry)
         .map_err(|e| format!("无法添加解决后的条目: {}", e))?;
 
+    // Write the resolved blob content to the working tree file
+    let blob = repo
+        .find_blob(entry_id)
+        .map_err(|e| format!("无法读取已解决的文件内容: {}", e))?;
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| "无法获取工作目录".to_string())?;
+    let abs_path = workdir.join(path);
+    std::fs::write(&abs_path, blob.content())
+        .map_err(|e| format!("无法写入已解决的文件 '{}': {}", file, e))?;
+
     index
         .write()
         .map_err(|e| format!("写入索引失败: {}", e))?;
     Ok(())
+}
+
+/// Parse the working tree file content and return structured info about each
+/// conflict block, including line number ranges for UI navigation.
+pub fn get_conflict_blocks(repo: &Repository, file: &str) -> Result<Vec<ConflictBlockDetail>, String> {
+    use regex::Regex;
+
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| "无法获取工作目录".to_string())?;
+    let abs_path = workdir.join(file);
+    let content = std::fs::read_to_string(&abs_path)
+        .map_err(|e| format!("无法读取文件 '{}': {}", file, e))?;
+
+    // Regex to match conflict markers: <<<<<<< ... ======= ... >>>>>>>
+    let re = Regex::new(r"(?m)^<<<<<<< .*?\n([\s\S]*?)=======\n([\s\S]*?)>>>>>>> .*?$")
+        .map_err(|e| format!("正则表达式错误: {}", e))?;
+
+    // Compute line mapping by finding byte offsets of each line
+    let lines: Vec<&str> = content.lines().collect();
+
+    let mut blocks = Vec::new();
+
+    for (block_index, cap) in re.captures_iter(&content).enumerate() {
+        let match_start = cap.get(0).map(|m| m.start()).unwrap_or(0);
+        let match_end = cap.get(0).map(|m| m.end()).unwrap_or(0);
+
+        // Convert byte offset to 1-based line number
+        let start_line = byte_offset_to_line(&lines, match_start);
+        let end_line = byte_offset_to_line(&lines, match_end);
+
+        let ours_content = cap[1].to_string();
+        let theirs_content = cap[2].to_string();
+
+        blocks.push(ConflictBlockDetail {
+            block_index,
+            ours_content,
+            theirs_content,
+            start_line: start_line as u32,
+            end_line: end_line as u32,
+        });
+    }
+
+    Ok(blocks)
+}
+
+/// Apply per-block resolutions to a conflicted file, write the result to the
+/// working tree, and update the index to mark the conflict as resolved.
+///
+/// `resolutions` is a list of `BlockResolution` entries — one per conflict block.
+/// Unresolved blocks will keep their original conflict-marker content (which
+/// git will still treat as conflicted), but for a complete resolution the caller
+/// should provide an entry for every block.
+pub fn resolve_conflict_blocks(
+    repo: &Repository,
+    file: &str,
+    resolutions: &[BlockResolution],
+) -> Result<(), String> {
+    use regex::Regex;
+
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| "无法获取工作目录".to_string())?;
+    let abs_path = workdir.join(file);
+    let content = std::fs::read_to_string(&abs_path)
+        .map_err(|e| format!("无法读取文件 '{}': {}", file, e))?;
+
+    // Regex to match conflict markers
+    let re = Regex::new(r"(?m)^<<<<<<< .*?\n([\s\S]*?)=======\n([\s\S]*?)>>>>>>> .*?$")
+        .map_err(|e| format!("正则表达式错误: {}", e))?;
+
+    // Build a resolution map keyed by block_index
+    use std::collections::HashMap;
+    let resolution_map: HashMap<usize, &BlockResolution> = resolutions
+        .iter()
+        .map(|r| (r.block_index, r))
+        .collect();
+
+    // Process the file: iterate over all conflict blocks and replace them
+    // We build the result by assembling parts of the original content
+    let mut result = String::new();
+    let mut last_end = 0;
+    let mut block_idx = 0;
+
+    for cap in re.captures_iter(&content) {
+        let m = cap.get(0).unwrap();
+        let match_start = m.start();
+        let match_end = m.end();
+
+        // Append text between last block and this block
+        result.push_str(&content[last_end..match_start]);
+
+        let ours_text = &cap[1];
+        let theirs_text = &cap[2];
+
+        let replacement = match resolution_map.get(&block_idx) {
+            Some(r) => match r.action.as_str() {
+                "ours" => ours_text.to_string(),
+                "theirs" => theirs_text.to_string(),
+                "manual" => {
+                    // Strip any conflict markers the user might have typed in their manual content
+                    let clean = r.custom_content
+                        .replace("<<<<<<<", "««««««<")
+                        .replace("=======", "=======")
+                        .replace(">>>>>>>", "»»»»»»>");
+                    clean
+                }
+                _ => ours_text.to_string(),
+            },
+            None => {
+                // Block not resolved — keep original conflict markers
+                m.as_str().to_string()
+            }
+        };
+
+        result.push_str(&replacement);
+        last_end = match_end;
+        block_idx += 1;
+    }
+
+    // Append remaining content after the last block
+    result.push_str(&content[last_end..]);
+
+    // Write the resolved content to the working tree file
+    std::fs::write(&abs_path, &result)
+        .map_err(|e| format!("无法写入已解决的文件 '{}': {}", file, e))?;
+
+    // Update the index: remove conflicted entries and add the resolved file
+    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let path = std::path::Path::new(file);
+
+    // Remove the existing conflicted entries
+    index
+        .remove_path(path)
+        .map_err(|e| format!("无法移除冲突条目: {}", e))?;
+
+    // Add the resolved file content to the index
+    index
+        .add_path(path)
+        .map_err(|e| format!("无法添加已解决的文件到索引: {}", e))?;
+
+    index
+        .write()
+        .map_err(|e| format!("写入索引失败: {}", e))?;
+
+    Ok(())
+}
+
+/// Convert a byte offset into a 1-based line number by counting newlines
+/// up to that offset. `lines` is the result of `content.lines()` collected
+/// into a Vec.
+fn byte_offset_to_line(lines: &[&str], byte_offset: usize) -> usize {
+    let mut accumulated = 0;
+    for (i, line) in lines.iter().enumerate() {
+        // Each line in `lines()` excludes the trailing newline, so we add 1 for it
+        let line_len = line.len() + 1; // +1 for the newline character
+        if accumulated + line_len > byte_offset {
+            return i + 1; // 1-based
+        }
+        accumulated += line_len;
+    }
+    lines.len()
 }
