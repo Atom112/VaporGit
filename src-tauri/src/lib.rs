@@ -13,7 +13,7 @@ use commands::tag::create_tag;
 use commands::terminal::{close_terminal, open_terminal, resize_terminal, write_terminal};
 use commands::diff::{check_lfs, get_file_base64, get_file_content, get_file_diff};
 use commands::remote::{add_remote, delete_remote, fetch, get_remotes, pull, push, push_with_auto_create, set_remote_url};
-use commands::repo::{check_submodules, clone_repo, discard_files, get_conflict_content, get_conflicts, get_recent_repos, get_status, init_repo, open_repo, remove_recent_repo, resolve_conflict, save_repo_path, stage_files, unstage_files};
+use commands::repo::{check_submodules, clone_repo, discard_files, get_conflict_blocks, get_conflict_content, get_conflicts, get_recent_repos, get_status, init_repo, open_repo, remove_recent_repo, resolve_conflict, resolve_conflict_blocks, save_repo_path, stage_files, unstage_files};
 use commands::splashscreen::close_splashscreen;
 use commands::stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_save};
 use commands::tutorial::{create_demo_repo, delete_dir};
@@ -113,6 +113,8 @@ pub fn run() {
             get_conflicts,
             get_conflict_content,
             resolve_conflict,
+            get_conflict_blocks,
+            resolve_conflict_blocks,
             // discard
             discard_files,
             // github

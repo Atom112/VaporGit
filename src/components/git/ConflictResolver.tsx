@@ -1,9 +1,10 @@
 import { Component, createSignal, Show, For, createMemo, onMount } from 'solid-js';
-import { getConflicts, resolveConflict, getConflictContent } from '../../lib/tauriCommands';
+import { getConflicts, resolveConflict, getConflictContent, resolveConflictBlocks } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt, ttf } from '../../i18n';
 import { describeError } from '../../lib/gitErrorDesc';
-import type { ConflictEntry } from '../../lib/types';
+import type { ConflictEntry, BlockResolution } from '../../lib/types';
+import { detectLanguage, highlightLines } from '../../lib/syntax';
 
 interface Props {
   repoPath: string;
@@ -12,6 +13,7 @@ interface Props {
 }
 
 interface ConflictBlock {
+  index: number;
   ours: string;
   theirs: string;
   fullMatch: string;
@@ -21,8 +23,10 @@ function parseConflictMarkers(content: string): ConflictBlock[] {
   const blocks: ConflictBlock[] = [];
   const regex = /<<<<<<< .*?\n([\s\S]*?)=======\n([\s\S]*?)>>>>>>> .*?(?:\n|$)/g;
   let match;
+  let index = 0;
   while ((match = regex.exec(content)) !== null) {
     blocks.push({
+      index: index++,
       ours: match[1],
       theirs: match[2],
       fullMatch: match[0],
@@ -35,13 +39,21 @@ const ConflictResolver: Component<Props> = (props) => {
   const [conflicts, setConflicts] = createSignal<ConflictEntry[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
-  const [oursContent, setOursContent] = createSignal<string>('');
-  const [theirsContent, setTheirsContent] = createSignal<string>('');
   const [worktreeContent, setWorktreeContent] = createSignal<string>('');
   const [contentLoading, setContentLoading] = createSignal(false);
   const [resolving, setResolving] = createSignal<string | null>(null);
+  const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-  const [activeTab, setActiveTab] = createSignal<'local' | 'remote' | 'conflicts'>('conflicts');
+
+  // Per-block resolution state
+  // null = not yet resolved, otherwise the chosen BlockResolution
+  const [blockResolutions, setBlockResolutions] = createSignal<Record<number, BlockResolution>>({});
+  // Which block is being manually edited (expanded edit box)
+  const [editingBlock, setEditingBlock] = createSignal<number | null>(null);
+  // Current manual edit content per block
+  const [manualContent, setManualContent] = createSignal<Record<number, string>>({});
+  // Current block index for navigation
+  const [currentBlockIndex, setCurrentBlockIndex] = createSignal<number>(0);
 
   const loadConflicts = async () => {
     setLoading(true);
@@ -59,23 +71,117 @@ const ConflictResolver: Component<Props> = (props) => {
   const loadFileContent = async (filePath: string) => {
     setSelectedFile(filePath);
     setContentLoading(true);
-    setOursContent('');
-    setTheirsContent('');
     setWorktreeContent('');
+    setBlockResolutions({});
+    setEditingBlock(null);
+    setManualContent({});
+    setCurrentBlockIndex(0);
     try {
-      const [ours, theirs, worktree] = await Promise.all([
-        getConflictContent(props.repoPath, filePath, 'ours'),
-        getConflictContent(props.repoPath, filePath, 'theirs'),
-        getConflictContent(props.repoPath, filePath, 'worktree'),
-      ]);
-      setOursContent(ours);
-      setTheirsContent(theirs);
+      const worktree = await getConflictContent(props.repoPath, filePath, 'worktree');
       setWorktreeContent(worktree);
     } catch (e) {
       setError(describeError(e));
     } finally {
       setContentLoading(false);
     }
+  };
+
+  /// Resolve a single block with a given action
+  const resolveBlock = (blockIndex: number, action: 'ours' | 'theirs' | 'manual', customContent = '') => {
+    setBlockResolutions(prev => ({
+      ...prev,
+      [blockIndex]: { blockIndex, action, customContent },
+    }));
+    setEditingBlock(null);
+  };
+
+  /// Remove a per-block resolution (un-resolve)
+  const unresolveBlock = (blockIndex: number) => {
+    setBlockResolutions(prev => {
+      const next = { ...prev };
+      delete next[blockIndex];
+      return next;
+    });
+  };
+
+  /// Start editing a block manually
+  const startManualEdit = (blockIndex: number, initialContent: string) => {
+    setEditingBlock(blockIndex);
+    setManualContent(prev => {
+      // Only set if not already set
+      if (!(blockIndex in prev)) {
+        return { ...prev, [blockIndex]: initialContent };
+      }
+      return prev;
+    });
+  };
+
+  /// Update manual content for a block
+  const updateManualContent = (blockIndex: number, content: string) => {
+    setManualContent(prev => ({ ...prev, [blockIndex]: content }));
+  };
+
+  /// Save all block resolutions to the backend
+  const handleSaveFile = async () => {
+    const file = selectedFile();
+    if (!file) return;
+
+    const res = blockResolutions();
+    const resolutions = Object.values(res);
+
+    if (resolutions.length === 0) {
+      addToast(tt('repo.conflictResolveBlockFirst'), 'info');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await resolveConflictBlocks(props.repoPath, file, resolutions);
+      addToast(ttf('repo.conflictResolved', file), 'success');
+      await loadConflicts();
+      props.onRefresh();
+      if (selectedFile() === file) {
+        setSelectedFile(null);
+        setWorktreeContent('');
+        setBlockResolutions({});
+        setEditingBlock(null);
+        setManualContent({});
+        setCurrentBlockIndex(0);
+      }
+    } catch (e) {
+      addToast(ttf('repo.conflictResolveFailed', String(e)), 'error');
+      setError(describeError(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /// Resolve all blocks in the current file with the same action
+  const handleResolveAllBlocks = async (action: 'ours' | 'theirs') => {
+    const blocks = conflictBlocks();
+    const resolutions: Record<number, BlockResolution> = {};
+    for (const block of blocks) {
+      if (action === 'ours') {
+        resolutions[block.index] = { blockIndex: block.index, action: 'ours', customContent: '' };
+      } else {
+        resolutions[block.index] = { blockIndex: block.index, action: 'theirs', customContent: '' };
+      }
+    }
+    setBlockResolutions(resolutions);
+    setEditingBlock(null);
+  };
+
+  /// Navigate to a specific block
+  const goToBlock = (index: number) => {
+    const blocks = conflictBlocks();
+    if (index < 0) index = 0;
+    if (index >= blocks.length) index = blocks.length - 1;
+    setCurrentBlockIndex(index);
+
+    // Scroll the block into view
+    const el = document.getElementById(`conflict-block-${index}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   const handleResolve = async (file: string, resolution: string) => {
@@ -88,8 +194,6 @@ const ConflictResolver: Component<Props> = (props) => {
       props.onRefresh();
       if (selectedFile() === file) {
         setSelectedFile(null);
-        setOursContent('');
-        setTheirsContent('');
         setWorktreeContent('');
       }
     } catch (e) {
@@ -120,27 +224,72 @@ const ConflictResolver: Component<Props> = (props) => {
 
   // Parse conflict blocks from the working tree file content
   const conflictBlocks = createMemo(() => {
-    const content = activeTab() === 'local' ? oursContent() :
-                    activeTab() === 'remote' ? theirsContent() :
-                    worktreeContent(); // working tree has actual conflict markers
+    const content = worktreeContent();
     if (!content) return [];
     return parseConflictMarkers(content);
   });
 
-  const renderContent = (content: string) => {
-    if (!content) {
-      return (
-        <div class="flex items-center justify-center h-full text-sm opacity-40">
-          {tt('repo.conflictNoConflicts')}
-        </div>
-      );
-    }
-    return (
-      <pre class="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all select-text">
-        {content.length > 50000 ? content.slice(0, 50000) + '\n... (truncated)' : content}
-      </pre>
-    );
+  // Count resolved blocks
+  const resolvedCount = createMemo(() => {
+    const res = blockResolutions();
+    const blocks = conflictBlocks();
+    return blocks.filter(b => b.index in res).length;
+  });
+
+  // Compute resolution state for display
+  const blockState = (blockIndex: number) => {
+    const res = blockResolutions();
+    if (!(blockIndex in res)) return 'unresolved';
+    return res[blockIndex].action;
   };
+
+  // Syntax highlighting language
+  const lang = createMemo(() => {
+    const file = selectedFile();
+    return file ? detectLanguage(file) : null;
+  });
+
+  // Pre-compute highlighted lines for ours/theirs content of all blocks
+  const blockHighlights = createMemo(() => {
+    const blocks = conflictBlocks();
+    return blocks.map(b => ({
+      ours: highlightLines(b.ours.split('\n'), lang()),
+      theirs: highlightLines(b.theirs.split('\n'), lang()),
+    }));
+  });
+
+  // Split worktree content around conflict blocks for inline display.
+  // Tracks block index sequentially as we iterate through regex matches.
+  const contentSegments = createMemo(() => {
+    const content = worktreeContent();
+    if (!content) return [];
+    const blocks = conflictBlocks();
+    if (blocks.length === 0) return [{ type: 'text' as const, content }];
+
+    const segments: Array<{ type: 'text' | 'block'; content?: string; blockIndex?: number }> = [];
+    let lastEnd = 0;
+    let blockIdx = 0;
+
+    const regex = /<<<<<<< .*?\n[\s\S]*?=======\n[\s\S]*?>>>>>>> .*?(?:\n|$)/g;
+    let match;
+
+    while ((match = regex.exec(content)) !== null) {
+      // Text before this block
+      if (match.index > lastEnd) {
+        segments.push({ type: 'text', content: content.slice(lastEnd, match.index) });
+      }
+      segments.push({ type: 'block', blockIndex: blockIdx });
+      lastEnd = match.index + match[0].length;
+      blockIdx++;
+    }
+
+    // Text after last block
+    if (lastEnd < content.length) {
+      segments.push({ type: 'text', content: content.slice(lastEnd) });
+    }
+
+    return segments;
+  });
 
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -172,7 +321,7 @@ const ConflictResolver: Component<Props> = (props) => {
           </div>
         )}
 
-        {/* Main content: file list + content view */}
+        {/* Main content: file list + inline merge editor */}
         <div class="flex-1 flex min-h-0">
           {/* Left: file list */}
           <div class="w-56 shrink-0 border-r border-white/10 flex flex-col">
@@ -222,20 +371,24 @@ const ConflictResolver: Component<Props> = (props) => {
                           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <span class="font-mono truncate flex-1">{conflict.filePath}</span>
-                        <button
-                          class="px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 disabled:opacity-30 shrink-0 transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleResolve(conflict.filePath, 'ours'); }}
-                          disabled={resolving() === conflict.filePath}
-                        >
-                          {tt('repo.conflictUseOurs')}
-                        </button>
-                        <button
-                          class="px-1.5 py-0.5 rounded bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 disabled:opacity-30 shrink-0 transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleResolve(conflict.filePath, 'theirs'); }}
-                          disabled={resolving() === conflict.filePath}
-                        >
-                          {tt('repo.conflictUseTheirs')}
-                        </button>
+                        <Show when={selectedFile() !== conflict.filePath}>
+                          <div class="flex gap-1 shrink-0">
+                            <button
+                              class="px-1 py-0.5 rounded text-[10px] bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 disabled:opacity-30 transition-colors"
+                              onClick={(e) => { e.stopPropagation(); handleResolve(conflict.filePath, 'ours'); }}
+                              disabled={resolving() === conflict.filePath}
+                            >
+                              {tt('repo.conflictUseOurs')}
+                            </button>
+                            <button
+                              class="px-1 py-0.5 rounded text-[10px] bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 disabled:opacity-30 transition-colors"
+                              onClick={(e) => { e.stopPropagation(); handleResolve(conflict.filePath, 'theirs'); }}
+                              disabled={resolving() === conflict.filePath}
+                            >
+                              {tt('repo.conflictUseTheirs')}
+                            </button>
+                          </div>
+                        </Show>
                       </div>
                     )}
                   </For>
@@ -244,7 +397,7 @@ const ConflictResolver: Component<Props> = (props) => {
             </div>
           </div>
 
-          {/* Right: content comparison view */}
+          {/* Right: inline merge editor */}
           <div class="flex-1 flex flex-col min-h-0">
             <Show
               when={selectedFile()}
@@ -254,46 +407,38 @@ const ConflictResolver: Component<Props> = (props) => {
                 </div>
               }
             >
-              {/* File name header */}
-              <div class="px-4 py-2 border-b border-white/10 bg-white/5 shrink-0">
-                <span class="text-xs font-mono font-medium opacity-80">{selectedFile()}</span>
+              {/* File name header with block navigation */}
+              <div class="px-4 py-2 border-b border-white/10 bg-white/5 shrink-0 flex items-center gap-3">
+                <span class="text-xs font-mono font-medium opacity-80 flex-1">{selectedFile()}</span>
+                <Show when={conflictBlocks().length > 0}>
+                  <div class="flex items-center gap-1 text-xs">
+                    <button
+                      class="px-1.5 py-0.5 rounded opacity-50 hover:opacity-100 hover:bg-white/10 transition-all disabled:opacity-20"
+                      onClick={() => goToBlock(currentBlockIndex() - 1)}
+                      disabled={currentBlockIndex() <= 0}
+                      title={tt('repo.conflictPrevBlock')}
+                    >
+                      ◀
+                    </button>
+                    <span class="opacity-60 whitespace-nowrap px-1">
+                      {ttf('repo.conflictBlockNav', currentBlockIndex() + 1, conflictBlocks().length)}
+                    </span>
+                    <button
+                      class="px-1.5 py-0.5 rounded opacity-50 hover:opacity-100 hover:bg-white/10 transition-all disabled:opacity-20"
+                      onClick={() => goToBlock(currentBlockIndex() + 1)}
+                      disabled={currentBlockIndex() >= conflictBlocks().length - 1}
+                      title={tt('repo.conflictNextBlock')}
+                    >
+                      ▶
+                    </button>
+                  </div>
+                  <span class="text-[10px] opacity-40">
+                    {ttf('repo.conflictResolveCount', resolvedCount(), conflictBlocks().length)}
+                  </span>
+                </Show>
               </div>
 
-              {/* Tab bar */}
-              <div class="flex border-b border-white/10 shrink-0">
-                <button
-                  class={`px-4 py-1.5 text-xs font-medium transition-colors ${
-                    activeTab() === 'local'
-                      ? 'text-cyan-400 border-b-2 border-b-cyan-400'
-                      : 'opacity-50 hover:opacity-80'
-                  }`}
-                  onClick={() => setActiveTab('local')}
-                >
-                  {tt('repo.conflictLocal')}
-                </button>
-                <button
-                  class={`px-4 py-1.5 text-xs font-medium transition-colors ${
-                    activeTab() === 'remote'
-                      ? 'text-purple-400 border-b-2 border-b-purple-400'
-                      : 'opacity-50 hover:opacity-80'
-                  }`}
-                  onClick={() => setActiveTab('remote')}
-                >
-                  {tt('repo.conflictRemote')}
-                </button>
-                <button
-                  class={`px-4 py-1.5 text-xs font-medium transition-colors ${
-                    activeTab() === 'conflicts'
-                      ? 'text-yellow-400 border-b-2 border-b-yellow-400'
-                      : 'opacity-50 hover:opacity-80'
-                  }`}
-                  onClick={() => setActiveTab('conflicts')}
-                >
-                  {tt('repo.conflictFinal')}
-                </button>
-              </div>
-
-              {/* Content area */}
+              {/* Content area: inline merge editor */}
               <div class="flex-1 overflow-auto p-4">
                 <Show
                   when={!contentLoading()}
@@ -303,125 +448,71 @@ const ConflictResolver: Component<Props> = (props) => {
                     </div>
                   }
                 >
-                  {/* LOCAL tab */}
-                  <Show when={activeTab() === 'local'}>
-                    <div class="h-full">
-                      <div class="p-3 rounded-lg bg-[#2a2a2e] border border-white/10 overflow-auto max-h-full">
-                        {renderContent(oursContent())}
+                  <Show
+                    when={worktreeContent()}
+                    fallback={
+                      <div class="flex items-center justify-center h-full text-sm opacity-40">
+                        {tt('repo.conflictNoConflicts')}
                       </div>
-                    </div>
-                  </Show>
-
-                  {/* REMOTE tab */}
-                  <Show when={activeTab() === 'remote'}>
-                    <div class="h-full">
-                      <div class="p-3 rounded-lg bg-[#2a2a2e] border border-white/10 overflow-auto max-h-full">
-                        {renderContent(theirsContent())}
-                      </div>
-                    </div>
-                  </Show>
-
-                  {/* CONFLICTS tab - show parsed conflict blocks */}
-                  <Show when={activeTab() === 'conflicts'}>
-                    <Show
-                      when={conflictBlocks().length > 0}
-                      fallback={
-                        <Show when={oursContent() || theirsContent()}>
-                          <div class="space-y-3">
-                            <div class="p-3 rounded-lg bg-[#2a2a2e] border border-white/10">
-                              <div class="flex gap-2 items-center mb-2">
-                                <span class="text-xs font-semibold text-cyan-400">{tt('repo.conflictLocal')}</span>
-                                <button
-                                  class="ml-auto px-2 py-0.5 text-xs rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors"
-                                  onClick={() => handleResolve(selectedFile()!, 'ours')}
-                                  disabled={resolving() === selectedFile()}
-                                >
-                                  {tt('repo.conflictUseOurs')}
-                                </button>
-                              </div>
-                              <pre class="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all max-h-60 overflow-auto">
-                                {oursContent()}
+                    }
+                  >
+                    {/* Inline content segments: text and conflict blocks */}
+                    <div class="space-y-2">
+                      <For each={contentSegments()}>
+                        {(segment) => (
+                          <>
+                            {segment.type === 'text' ? (
+                              <pre class="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all select-text px-3 py-1.5 rounded-lg bg-[#2a2a2e] border border-white/5 opacity-80">
+                                {segment.content}
                               </pre>
-                            </div>
-                            <div class="p-3 rounded-lg bg-[#2a2a2e] border border-white/10">
-                              <div class="flex gap-2 items-center mb-2">
-                                <span class="text-xs font-semibold text-purple-400">{tt('repo.conflictRemote')}</span>
-                                <button
-                                  class="ml-auto px-2 py-0.5 text-xs rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 transition-colors"
-                                  onClick={() => handleResolve(selectedFile()!, 'theirs')}
-                                  disabled={resolving() === selectedFile()}
-                                >
-                                  {tt('repo.conflictUseTheirs')}
-                                </button>
-                              </div>
-                              <pre class="text-xs font-mono leading-relaxed whitespace-pre-wrap break-all max-h-60 overflow-auto">
-                                {theirsContent()}
-                              </pre>
-                            </div>
+                            ) : (
+                              <Show when={segment.blockIndex !== undefined && segment.blockIndex >= 0}>
+                                <ConflictBlockCard
+                                  block={conflictBlocks()[segment.blockIndex!]}
+                                  highlights={blockHighlights()[segment.blockIndex!]}
+                                  resolution={blockState(segment.blockIndex!)}
+                                  isEditing={editingBlock() === segment.blockIndex}
+                                  manualContent={manualContent()[segment.blockIndex!] ?? conflictBlocks()[segment.blockIndex!]?.ours ?? ''}
+                                  isFocused={currentBlockIndex() === segment.blockIndex}
+                                  onUseOurs={() => resolveBlock(segment.blockIndex!, 'ours')}
+                                  onUseTheirs={() => resolveBlock(segment.blockIndex!, 'theirs')}
+                                  onManualEdit={() => startManualEdit(segment.blockIndex!, conflictBlocks()[segment.blockIndex!]?.ours ?? '')}
+                                  onUpdateManual={(v) => updateManualContent(segment.blockIndex!, v)}
+                                  onApplyManual={() => {
+                                    const content = manualContent()[segment.blockIndex!];
+                                    if (content !== undefined) {
+                                      resolveBlock(segment.blockIndex!, 'manual', content);
+                                    }
+                                  }}
+                                  onUnresolve={() => unresolveBlock(segment.blockIndex!)}
+                                />
+                              </Show>
+                            )}
+                          </>
+                        )}
+                      </For>
+                    </div>
+
+                    {/* Empty state: no conflict blocks found but file has content */}
+                    <Show when={conflictBlocks().length === 0 && worktreeContent()}>
+                      <div class="flex items-center justify-center h-32 text-sm opacity-40">
+                        <div class="text-center">
+                          <p class="mb-2">{tt('repo.conflictNoMarkers')}</p>
+                          <div class="flex gap-2 justify-center">
+                            <button
+                              class="px-3 py-1 text-xs rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors"
+                              onClick={() => resolveConflict(props.repoPath, selectedFile()!, 'ours')}
+                            >
+                              {tt('repo.conflictUseOurs')}
+                            </button>
+                            <button
+                              class="px-3 py-1 text-xs rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 transition-colors"
+                              onClick={() => resolveConflict(props.repoPath, selectedFile()!, 'theirs')}
+                            >
+                              {tt('repo.conflictUseTheirs')}
+                            </button>
                           </div>
-                        </Show>
-                      }
-                    >
-                      <div class="space-y-4">
-                        <div class="flex gap-2">
-                          <button
-                            class="flex-1 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
-                            onClick={() => handleResolve(selectedFile()!, 'ours')}
-                            disabled={resolving() === selectedFile()}
-                          >
-                            {tt('repo.conflictUseOurs')}
-                          </button>
-                          <button
-                            class="flex-1 py-1.5 text-xs rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 disabled:opacity-30 transition-colors"
-                            onClick={() => handleResolve(selectedFile()!, 'theirs')}
-                            disabled={resolving() === selectedFile()}
-                          >
-                            {tt('repo.conflictUseTheirs')}
-                          </button>
                         </div>
-                        <For each={conflictBlocks()}>
-                          {(block, index) => (
-                            <div class="p-3 rounded-lg bg-[#2a2a2e] border border-yellow-500/20">
-                              <div class="flex items-center justify-between mb-2">
-                                <span class="text-[10px] font-semibold opacity-60">
-                                  {tt('repo.conflictFinal')} #{index() + 1}
-                                </span>
-                              </div>
-                              <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                  <div class="flex items-center gap-2 mb-1">
-                                    <span class="text-[10px] font-semibold text-cyan-400">{tt('repo.conflictLocal')}</span>
-                                    <button
-                                      class="ml-auto px-1.5 py-0.5 text-[10px] rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-colors"
-                                      onClick={() => handleResolve(selectedFile()!, 'ours')}
-                                      disabled={resolving() === selectedFile()}
-                                    >
-                                      {tt('repo.conflictUseOurs')}
-                                    </button>
-                                  </div>
-                                  <pre class="text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-40 overflow-auto p-2 rounded bg-black/20 border border-white/5">
-                                    {block.ours}
-                                  </pre>
-                                </div>
-                                <div>
-                                  <div class="flex items-center gap-2 mb-1">
-                                    <span class="text-[10px] font-semibold text-purple-400">{tt('repo.conflictRemote')}</span>
-                                    <button
-                                      class="ml-auto px-1.5 py-0.5 text-[10px] rounded bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 transition-colors"
-                                      onClick={() => handleResolve(selectedFile()!, 'theirs')}
-                                      disabled={resolving() === selectedFile()}
-                                    >
-                                      {tt('repo.conflictUseTheirs')}
-                                    </button>
-                                  </div>
-                                  <pre class="text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-40 overflow-auto p-2 rounded bg-black/20 border border-white/5">
-                                    {block.theirs}
-                                  </pre>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </For>
                       </div>
                     </Show>
                   </Show>
@@ -441,22 +532,205 @@ const ConflictResolver: Component<Props> = (props) => {
               {tt('common.close')}
             </button>
           </div>
-          <Show when={!loading()}>
-            <div class="flex gap-2">
+          <Show when={selectedFile() && !loading() && conflictBlocks().length > 0}>
+            <div class="flex gap-2 items-center">
+              <div class="flex gap-1">
+                <button
+                  class="px-2 py-1 text-xs rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
+                  onClick={() => handleResolveAllBlocks('ours')}
+                >
+                  {tt('repo.conflictUseAllOursBlocks')}
+                </button>
+                <button
+                  class="px-2 py-1 text-xs rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 disabled:opacity-30 transition-colors"
+                  onClick={() => handleResolveAllBlocks('theirs')}
+                >
+                  {tt('repo.conflictUseAllTheirsBlocks')}
+                </button>
+              </div>
               <button
-                class="px-3 py-1 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 disabled:opacity-30 transition-colors"
-                onClick={() => handleResolveAll('ours')}
-                disabled={conflicts().length === 0}
+                class="px-4 py-1.5 text-xs rounded-lg bg-green-600 hover:bg-green-500 text-white disabled:opacity-30 transition-colors font-semibold"
+                onClick={handleSaveFile}
+                disabled={saving() || resolvedCount() === 0}
               >
-                {tt('repo.conflictUseAllOurs')}
+                {saving() ? tt('repo.conflictSaving') : `💾 ${ttf('repo.conflictSaveProgress', resolvedCount(), conflictBlocks().length)}`}
               </button>
+            </div>
+          </Show>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── Conflict Block Card ── */
+interface ConflictBlockCardProps {
+  block: ConflictBlock;
+  highlights: { ours: string[]; theirs: string[] };
+  resolution: string;
+  isEditing: boolean;
+  manualContent: string;
+  isFocused: boolean;
+  onUseOurs: () => void;
+  onUseTheirs: () => void;
+  onManualEdit: () => void;
+  onUpdateManual: (content: string) => void;
+  onApplyManual: () => void;
+  onUnresolve: () => void;
+}
+
+const ConflictBlockCard: Component<ConflictBlockCardProps> = (props) => {
+  const borderColor = () => {
+    switch (props.resolution) {
+      case 'ours': return 'border-cyan-500/50';
+      case 'theirs': return 'border-purple-500/50';
+      case 'manual': return 'border-green-500/50';
+      default: return 'border-yellow-500/30';
+    }
+  };
+
+  const statusLabel = () => {
+    switch (props.resolution) {
+      case 'ours': return tt('repo.conflictBlockResolvedOurs');
+      case 'theirs': return tt('repo.conflictBlockResolvedTheirs');
+      case 'manual': return tt('repo.conflictBlockResolvedManual');
+      default: return tt('repo.conflictBlockUnresolved');
+    }
+  };
+
+  const statusColor = () => {
+    switch (props.resolution) {
+      case 'ours': return 'text-cyan-400';
+      case 'theirs': return 'text-purple-400';
+      case 'manual': return 'text-green-400';
+      default: return 'text-yellow-400';
+    }
+  };
+
+
+  return (
+    <div
+      id={`conflict-block-${props.block.index}`}
+      class={`rounded-lg border ${borderColor()} bg-[#2a2a2e] transition-all duration-200 ${
+        props.isFocused ? 'ring-1 ring-yellow-500/30 shadow-lg shadow-yellow-500/5' : ''
+      }`}
+    >
+      {/* Block header */}
+      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-white/5 bg-white/[0.03]">
+        <span class="text-[10px] font-semibold opacity-60">
+          {`#${props.block.index + 1}`}
+        </span>
+        <span class={`text-[10px] font-medium ${statusColor()}`}>
+          {statusLabel()}
+        </span>
+
+        {/* Actions in header */}
+        <div class="ml-auto flex gap-1">
+          <Show when={props.resolution !== 'unresolved'}>
+            <button
+              class="px-1.5 py-0.5 text-[10px] rounded opacity-40 hover:opacity-100 hover:bg-white/10 transition-all"
+              onClick={props.onUnresolve}
+              title={tt('repo.conflictBlockUnresolved')}
+            >
+              ↩
+            </button>
+          </Show>
+        </div>
+      </div>
+
+      {/* Block content: side-by-side */}
+      <div class="p-3">
+        <div class="grid grid-cols-2 gap-2">
+          {/* OURS */}
+          <div class="min-h-0">
+            <div class="flex items-center gap-1 mb-1">
+              <span class="text-[10px] font-semibold text-cyan-400">Ours</span>
               <button
-                class="px-3 py-1 text-xs rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 disabled:opacity-30 transition-colors"
-                onClick={() => handleResolveAll('theirs')}
-                disabled={conflicts().length === 0}
+                class={`ml-auto px-1.5 py-0.5 text-[10px] rounded transition-colors ${
+                  props.resolution === 'ours'
+                    ? 'bg-cyan-500/30 text-cyan-200 ring-1 ring-cyan-400/50'
+                    : 'bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300'
+                }`}
+                onClick={props.onUseOurs}
               >
-                {tt('repo.conflictUseAllTheirs')}
+                {props.resolution === 'ours' ? `✓ ${tt('repo.conflictUseOurs')}` : tt('repo.conflictUseOurs')}
               </button>
+            </div>
+            <pre class="text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-52 overflow-auto p-2 rounded bg-black/20 border border-white/5">
+              <For each={props.highlights.ours}>
+                {(html) => (
+                  <div innerHTML={html} />
+                )}
+              </For>
+            </pre>
+          </div>
+
+          {/* THEIRS */}
+          <div class="min-h-0">
+            <div class="flex items-center gap-1 mb-1">
+              <span class="text-[10px] font-semibold text-purple-400">Theirs</span>
+              <button
+                class={`ml-auto px-1.5 py-0.5 text-[10px] rounded transition-colors ${
+                  props.resolution === 'theirs'
+                    ? 'bg-purple-500/30 text-purple-200 ring-1 ring-purple-400/50'
+                    : 'bg-purple-500/20 hover:bg-purple-500/40 text-purple-300'
+                }`}
+                onClick={props.onUseTheirs}
+              >
+                {props.resolution === 'theirs' ? `✓ ${tt('repo.conflictUseTheirs')}` : tt('repo.conflictUseTheirs')}
+              </button>
+            </div>
+            <pre class="text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all max-h-52 overflow-auto p-2 rounded bg-black/20 border border-white/5">
+              <For each={props.highlights.theirs}>
+                {(html) => (
+                  <div innerHTML={html} />
+                )}
+              </For>
+            </pre>
+          </div>
+        </div>
+
+        {/* Manual edit section */}
+        <div class="mt-2">
+          <Show
+            when={props.isEditing}
+            fallback={
+              <button
+                class={`w-full py-1 text-[10px] rounded transition-colors ${
+                  props.resolution === 'manual'
+                    ? 'bg-green-500/20 text-green-300 ring-1 ring-green-500/30'
+                    : 'bg-white/5 hover:bg-white/10 opacity-60 hover:opacity-100'
+                }`}
+                onClick={props.onManualEdit}
+              >
+                {props.resolution === 'manual' ? `✏️ ${tt('repo.conflictBlockResolvedManual')}` : `✏️ ${tt('repo.conflictEditManual')}`}
+              </button>
+            }
+          >
+            <div class="space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-semibold text-green-400">{tt('repo.conflictBlockResolvedManual')}</span>
+                <div class="flex gap-1">
+                  <button
+                    class="px-1.5 py-0.5 text-[10px] rounded bg-green-500/30 hover:bg-green-500/50 text-green-200 transition-colors"
+                    onClick={props.onApplyManual}
+                  >
+                    ✓ {tt('repo.conflictApplyManual')}
+                  </button>
+                  <button
+                    class="px-1.5 py-0.5 text-[10px] rounded bg-white/10 hover:bg-white/20 transition-colors"
+                    onClick={() => props.onUpdateManual(props.block.ours)}
+                  >
+                    {tt('repo.conflictResetManual')}
+                  </button>
+                </div>
+              </div>
+              <textarea
+                class="w-full h-32 text-[11px] font-mono leading-relaxed p-2 rounded bg-black/30 border border-green-500/30 text-white placeholder-white/20 resize-y focus:outline-none focus:border-green-500/50"
+                value={props.manualContent}
+                onInput={(e) => props.onUpdateManual(e.currentTarget.value)}
+                placeholder={tt('repo.conflictEditManual')}
+              />
             </div>
           </Show>
         </div>

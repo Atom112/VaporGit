@@ -1,5 +1,5 @@
 use crate::git;
-use crate::models::conflict::ConflictEntry;
+use crate::models::conflict::{BlockResolution, ConflictBlockDetail, ConflictEntry};
 use crate::models::repo::{RecentRepo, RepoInfo};
 use serde::Deserialize;
 use std::fs;
@@ -222,6 +222,26 @@ pub async fn resolve_conflict(path: String, file: String, resolution: String) ->
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;
         git::status::resolve_conflict(&repo, &file, &resolution)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn get_conflict_blocks(path: String, file: String) -> Result<Vec<ConflictBlockDetail>, String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::get_conflict_blocks(&repo, &file)
+    })
+    .await
+    .map_err(|e| format!("内部错误: {}", e))?
+}
+
+#[tauri::command]
+pub async fn resolve_conflict_blocks(path: String, file: String, resolutions: Vec<BlockResolution>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let repo = git::repo::open_repo(&path)?;
+        git::status::resolve_conflict_blocks(&repo, &file, &resolutions)
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))?

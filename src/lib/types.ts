@@ -140,6 +140,20 @@ export interface ConflictEntry {
   theirsMode: number | null;
 }
 
+export interface ConflictBlockDetail {
+  blockIndex: number;
+  oursContent: string;
+  theirsContent: string;
+  startLine: number;
+  endLine: number;
+}
+
+export interface BlockResolution {
+  blockIndex: number;
+  action: 'ours' | 'theirs' | 'manual';
+  customContent: string;
+}
+
 export interface BranchDiffSummary {
   ahead: number;
   behind: number;
