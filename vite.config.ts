@@ -10,6 +10,13 @@ export default defineConfig(async () => ({
   plugins: [tailwindcss(), solid()],
   build: {
     minify: "terser",
+    // Tauri bundles the app shell locally; keep CI quiet unless the bundle grows far beyond today.
+    chunkSizeWarningLimit: 2000,
+    rolldownOptions: {
+      checks: {
+        pluginTimings: false,
+      },
+    },
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

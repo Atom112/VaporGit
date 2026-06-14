@@ -12,7 +12,7 @@ interface TerminalPanelProps {
 }
 
 const TerminalPanel: Component<TerminalPanelProps> = (props) => {
-  let containerRef!: HTMLDivElement;
+  let containerRef: HTMLDivElement | undefined;
   const [fitAddon] = createSignal<FitAddon>(new FitAddon());
   const [terminal] = createSignal<Terminal>(new Terminal({
     cursorBlink: true,
@@ -47,6 +47,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
     const term = terminal();
     const fit = fitAddon();
     term.loadAddon(fit);
+    if (!containerRef) return;
     term.open(containerRef);
 
     // Fit after open (may report 0 cols/rows if hidden; re-fit after animation)
@@ -136,7 +137,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
         </button>
       </div>
       {/* Terminal container */}
-      <div ref={containerRef} class="relative flex-1 min-h-0" />
+      <div ref={(el) => { containerRef = el; }} class="relative flex-1 min-h-0" />
       <style>{`
         .xterm {
           height: 100%;

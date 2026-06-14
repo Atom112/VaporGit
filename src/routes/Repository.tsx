@@ -692,7 +692,7 @@ const Repository: Component = () => {
   };
 
   const handleStashRefresh = async () => {
-    await Promise.all([refreshStatus()]);
+    await refreshStatus();
   };
 
   const handleConflictRefresh = async () => {

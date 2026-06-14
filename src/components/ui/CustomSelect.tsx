@@ -15,8 +15,8 @@ interface CustomSelectProps {
 const CustomSelect: Component<CustomSelectProps> = (props) => {
   const [open, setOpen] = createSignal(false);
   const [exitPhase, setExitPhase] = createSignal(false);
-  let btnRef!: HTMLButtonElement;
-  let panelRef!: HTMLDivElement;
+  let btnRef: HTMLButtonElement | undefined;
+  let panelRef: HTMLDivElement | undefined;
 
   const selected = () => props.options.find((o) => o.value === props.value);
 
@@ -44,7 +44,7 @@ const CustomSelect: Component<CustomSelectProps> = (props) => {
 
   // Close on click outside
   const handleClick = (e: MouseEvent) => {
-    if (open() && !btnRef.contains(e.target as Node) && !panelRef?.contains(e.target as Node)) {
+    if (open() && !btnRef?.contains(e.target as Node) && !panelRef?.contains(e.target as Node)) {
       close();
     }
   };
@@ -65,7 +65,7 @@ const CustomSelect: Component<CustomSelectProps> = (props) => {
   return (
     <div class={`relative ${props.class ?? ''}`}>
       <button
-        ref={btnRef!}
+        ref={(el) => { btnRef = el; }}
         type="button"
         onClick={toggle}
         class="w-full flex items-center justify-between gap-2 p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm cursor-pointer hover:bg-white/15 transition-colors"
@@ -85,7 +85,7 @@ const CustomSelect: Component<CustomSelectProps> = (props) => {
 
       <Show when={open()}>
         <div
-          ref={panelRef!}
+          ref={(el) => { panelRef = el; }}
           class={`absolute left-0 right-0 z-50 mt-1 py-1 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl text-sm overflow-hidden ${
             exitPhase() ? 'animate-context-menu-exit' : 'animate-context-menu-enter'
           }`}

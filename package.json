@@ -46,5 +46,8 @@
     "vite": "^8.0.14",
     "vite-plugin-solid": "^2.11.12",
     "vitest": "^4.1.8"
+  },
+  "allowScripts": {
+    "lefthook@2.1.9": true
   }
 }

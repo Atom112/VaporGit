@@ -49,7 +49,7 @@ function buildFullFileLines(
   hunks: DiffHunk[],
   contentLines: string[],
 ): { oldLine: number | null; newLine: number | null; kind: 'context' | 'addition' | 'deletion' }[] {
-  const annotations: ('context' | 'addition')[] = new Array(contentLines.length).fill('context');
+  const annotations: ('context' | 'addition')[] = Array.from({ length: contentLines.length }, () => 'context');
   const deletions: { beforeNewLine: number }[] = [];
 
   for (const hunk of hunks) {
@@ -469,8 +469,8 @@ interface SplitRow {
 }
 
 const SplitView: Component<StageableViewProps> = (props) => {
-  let leftRef!: HTMLDivElement;
-  let rightRef!: HTMLDivElement;
+  let leftRef: HTMLDivElement | undefined;
+  let rightRef: HTMLDivElement | undefined;
 
   const [stagingHunk, setStagingHunk] = createSignal<number | null>(null);
 
@@ -523,8 +523,8 @@ const SplitView: Component<StageableViewProps> = (props) => {
   });
 
 const handleScroll = (source: 'left' | 'right') => {
-    if (source === 'left' && rightRef) rightRef.scrollTop = leftRef.scrollTop;
-    if (source === 'right' && leftRef) leftRef.scrollTop = rightRef.scrollTop;
+    if (source === 'left' && leftRef && rightRef) rightRef.scrollTop = leftRef.scrollTop;
+    if (source === 'right' && leftRef && rightRef) leftRef.scrollTop = rightRef.scrollTop;
   };
 
   // Compute left-panel per-line highlights per hunk using createMemo
@@ -540,7 +540,7 @@ const handleScroll = (source: 'left' | 'right') => {
   return (
     <div class="flex h-full">
       {/* Left: old */}
-      <div ref={leftRef} class="w-1/2 overflow-auto border-r border-white/10" onScroll={() => handleScroll('left')}>
+      <div ref={(el) => { leftRef = el; }} class="w-1/2 overflow-auto border-r border-white/10" onScroll={() => handleScroll('left')}>
         <div class="bg-white/5 px-3 py-1 text-xs text-red-400 font-semibold sticky top-0 z-10 flex items-center gap-2">
           <span class="flex-1">旧版本</span>
         </div>
@@ -586,7 +586,7 @@ const handleScroll = (source: 'left' | 'right') => {
       </div>
 
       {/* Right: new */}
-      <div ref={rightRef} class="w-1/2 overflow-auto" onScroll={() => handleScroll('right')}>
+      <div ref={(el) => { rightRef = el; }} class="w-1/2 overflow-auto" onScroll={() => handleScroll('right')}>
         <div class="bg-white/5 px-3 py-1 text-xs text-green-400 font-semibold sticky top-0 z-10">新版本</div>
         <For each={rows()}>
           {(row) => {
