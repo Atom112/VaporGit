@@ -112,8 +112,8 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
           transform: 'translateY(100%)',
         } : {}),
         background: 'rgba(30, 30, 46, 0.18)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
+        'backdrop-filter': 'blur(24px)',
+        '-webkit-backdrop-filter': 'blur(24px)',
       }}
     >
       {/* Subtle gradient overlay for acrylic depth */}

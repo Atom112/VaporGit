@@ -32,9 +32,9 @@ const MergeDialog: Component<Props> = (props) => {
     getBranchList(props.repoPath)
       .then((list) => {
         // Store current branch and filter it out from the selector
-        const current = list.find((b) => b.isCurrent);
+        const current = list.find((b) => b.isHead);
         if (current) setCurrentBranch(current.name);
-        setBranches(list.filter((b) => !b.isCurrent));
+        setBranches(list.filter((b) => !b.isHead));
       })
       .catch((e) => {
         addToast(`加载分支列表失败: ${describeError(e)}`, 'error');

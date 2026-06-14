@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: true
+  commands:
+    typescript:
+      run: npm run check
+    frontend-lint:
+      run: npm run lint
+    rust-check:
+      run: cd src-tauri && cargo check

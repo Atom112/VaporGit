@@ -1,5 +1,5 @@
 import { For } from 'solid-js';
-import { toasts, removeToast, markExiting } from '../../stores/toastStore';
+import { toasts, markExiting } from '../../stores/toastStore';
 
 export default function ToastContainer() {
   return (

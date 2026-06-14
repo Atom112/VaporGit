@@ -78,7 +78,7 @@ const RemoteManager: Component<Props> = (props) => {
 
   const handleStartEdit = (remote: RemoteInfo) => {
     setEditingRemote(remote.name);
-    setEditUrl(remote.push_url || remote.url);
+    setEditUrl(remote.pushUrl || remote.url);
   };
 
   const handleSaveEdit = async () => {
@@ -203,8 +203,8 @@ const RemoteManager: Component<Props> = (props) => {
                             <div class="flex-1 min-w-0">
                               <div class="text-sm font-medium">{remote.name}</div>
                               <div class="text-xs opacity-40 mt-1 truncate">{remote.url}</div>
-                              {remote.push_url !== remote.url && (
-                                <div class="text-xs opacity-30 mt-0.5 truncate">push: {remote.push_url}</div>
+                              {remote.pushUrl !== remote.url && (
+                                <div class="text-xs opacity-30 mt-0.5 truncate">push: {remote.pushUrl}</div>
                               )}
                             </div>
                             <div class="flex gap-1 shrink-0">
