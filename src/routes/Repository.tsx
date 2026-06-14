@@ -59,6 +59,7 @@ import { giteeStore } from '../stores/giteeStore';
 import InteractiveRebase from '../components/git/InteractiveRebase';
 import MergeDialog from '../components/git/MergeDialog';
 import BranchCompareDialog from '../components/git/BranchCompareDialog';
+import GitToolsPanel from '../components/git/GitToolsPanel';
 import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
 import TerminalPanel from '../components/terminal/TerminalPanel';
 import { tt, ttf } from '../i18n';
@@ -128,6 +129,8 @@ const Repository: Component = () => {
   const setShowBranchCompare = (open: boolean) => setRepositoryModal('branchCompare', open);
   const showPushDialog = () => repositoryStore.modals.push;
   const setShowPushDialog = (open: boolean) => setRepositoryModal('push', open);
+  const showGitTools = () => repositoryStore.modals.gitTools;
+  const setShowGitTools = (open: boolean) => setRepositoryModal('gitTools', open);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal<CommitInfo[] | null>(null);
   const [searchLoading, setSearchLoading] = createSignal(false);
@@ -1175,6 +1178,7 @@ const Repository: Component = () => {
             onMerge={() => setShowMergeDialog(true)}
             onRebase={() => setShowRebaseDialog(true)}
             onBranchCompare={() => setShowBranchCompare(true)}
+            onGitTools={() => setShowGitTools(true)}
           />
 
           <CommitInput
@@ -1273,6 +1277,15 @@ const Repository: Component = () => {
         <PushDialog
           repoPath={repoPath()!}
           onClose={() => setShowPushDialog(false)}
+          onRefresh={refreshAll}
+        />
+      </Show>
+
+      <Show when={showGitTools() && repoPath()}>
+        <GitToolsPanel
+          repoPath={repoPath()!}
+          selectedFile={diffStore.selectedFile ?? selectedCommitFile() ?? undefined}
+          onClose={() => setShowGitTools(false)}
           onRefresh={refreshAll}
         />
       </Show>

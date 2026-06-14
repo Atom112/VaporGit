@@ -16,6 +16,7 @@ interface RepositoryToolbarProps {
   onMerge: () => void;
   onRebase: () => void;
   onBranchCompare: () => void;
+  onGitTools: () => void;
 }
 
 const ToolbarButton = (props: {
@@ -94,6 +95,12 @@ const CompareIcon = () => (
   </svg>
 );
 
+const ToolIcon = () => (
+  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+  </svg>
+);
+
 const PullRequestLink = (props: { href: string }) => (
   <A
     class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
@@ -153,6 +160,10 @@ const RepositoryToolbar = (props: RepositoryToolbarProps) => (
       <ToolbarButton onClick={props.onBranchCompare} ariaLabel={tt('repo.compareBranches')}>
         <CompareIcon />
         {tt('repo.compareBranches')}
+      </ToolbarButton>
+      <ToolbarButton onClick={props.onGitTools} ariaLabel="Git Tools">
+        <ToolIcon />
+        Tools
       </ToolbarButton>
       {props.githubAuthenticated && <PullRequestLink href="/pulls" />}
       {props.giteeAuthenticated && <PullRequestLink href="/gitee-pulls" />}

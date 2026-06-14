@@ -9,7 +9,8 @@ export type RepositoryModalKey =
   | 'merge'
   | 'remoteManager'
   | 'branchCompare'
-  | 'push';
+  | 'push'
+  | 'gitTools';
 export type RepositoryLoadingKey = 'remoteAction' | 'undo' | 'commit' | 'search' | 'graphMore';
 
 export interface RepositoryPanelState {
@@ -26,6 +27,7 @@ export interface RepositoryModalState {
   remoteManager: boolean;
   branchCompare: boolean;
   push: boolean;
+  gitTools: boolean;
 }
 
 export interface RepositoryLoadingState {
@@ -56,6 +58,7 @@ const defaultRepositoryState: RepositoryState = {
     remoteManager: false,
     branchCompare: false,
     push: false,
+    gitTools: false,
   },
   loading: {
     remoteAction: false,
