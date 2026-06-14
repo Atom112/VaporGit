@@ -57,10 +57,10 @@ pub fn get_file_diff(
 
             if hunks.is_empty() || hunks.last().unwrap().header != header {
                 hunks.push(DiffHunk {
-                    old_start: hunk.old_start() as u32,
-                    old_lines: hunk.old_lines() as u32,
-                    new_start: hunk.new_start() as u32,
-                    new_lines: hunk.new_lines() as u32,
+                    old_start: hunk.old_start(),
+                    old_lines: hunk.old_lines(),
+                    new_start: hunk.new_start(),
+                    new_lines: hunk.new_lines(),
                     header: header.clone(),
                     lines: Vec::new(),
                 });

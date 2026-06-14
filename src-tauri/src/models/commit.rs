@@ -41,6 +41,9 @@ pub struct CommitGraphData {
     pub edges: Vec<GraphEdge>,
     #[serde(default)]
     pub truncated: bool,
+    #[serde(default)]
+    pub has_more: bool,
+    pub next_offset: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

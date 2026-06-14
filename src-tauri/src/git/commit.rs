@@ -195,7 +195,11 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
     })
 }
 
-pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
+pub fn get_commit_graph(
+    repo: &Repository,
+    offset: Option<u32>,
+    limit: Option<u32>,
+) -> Result<CommitGraphData, String> {
     let mut revwalk = repo
         .revwalk()
         .map_err(|e| format!("无法创建 revwalk: {}", e))?;
@@ -224,15 +228,26 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
             .map_err(|e| format!("无法推送 HEAD: {}", e))?;
     }
 
-    let walk_oids: Vec<Oid> = revwalk.filter_map(|r| r.ok()).collect();
+    let all_oids: Vec<Oid> = revwalk.filter_map(|r| r.ok()).collect();
 
     // Limit to max 2000 commits for performance on large repos
     const MAX_GRAPH_COMMITS: usize = 2000;
-    let truncated = walk_oids.len() > MAX_GRAPH_COMMITS;
-    let walk_oids: Vec<Oid> = walk_oids.into_iter().take(MAX_GRAPH_COMMITS).collect();
+    let offset = offset.unwrap_or(0) as usize;
+    let requested_limit = limit.map_or(MAX_GRAPH_COMMITS, |value| value.max(1) as usize);
+    let limit = requested_limit.min(MAX_GRAPH_COMMITS);
+    let truncated = all_oids.len() > offset.saturating_add(limit);
+    let has_more = truncated;
+    let next_offset = has_more.then_some((offset + limit) as u32);
+    let walk_oids: Vec<Oid> = all_oids.into_iter().skip(offset).take(limit).collect();
 
     if walk_oids.is_empty() {
-        return Ok(CommitGraphData { nodes: vec![], edges: vec![], truncated: false });
+        return Ok(CommitGraphData {
+            nodes: vec![],
+            edges: vec![],
+            truncated: false,
+            has_more: false,
+            next_offset: None,
+        });
     }
 
     // Collect branch labels per commit OID (local + remote)
@@ -396,7 +411,13 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         }
     }
 
-    Ok(CommitGraphData { nodes, edges, truncated })
+    Ok(CommitGraphData {
+        nodes,
+        edges,
+        truncated,
+        has_more,
+        next_offset,
+    })
 }
 
 fn commit_to_info(commit: &git2::Commit) -> Result<CommitInfo, String> {
@@ -474,8 +495,8 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
                             .filter_map(|c| c.ok())
                             .filter_map(|c| {
                                 c.ancestor.as_ref()
-                                    .or_else(|| c.our.as_ref())
-                                    .or_else(|| c.their.as_ref())
+                                    .or(c.our.as_ref())
+                                    .or(c.their.as_ref())
                                     .and_then(|e| std::str::from_utf8(&e.path).ok())
                                     .map(|p| p.to_string())
                             })
@@ -969,8 +990,7 @@ pub fn perform_interactive_rebase(
             // For squash: keep the last entry's message
             let last_squash_entry = entries
                 .iter()
-                .filter(|e| e.action == "squash" || e.action == "fixup")
-                .last();
+                .rfind(|e| e.action == "squash" || e.action == "fixup");
 
             let msg = match last_squash_entry {
                 Some(e) if e.action == "fixup" => {

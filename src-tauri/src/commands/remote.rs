@@ -159,7 +159,7 @@ async fn get_remote_url_for_push(path: &str, remote_name: &str) -> Result<String
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))?;
-    r.map_err(|e| e)
+    r
 }
 
 /// Auto-configure a remote based on the logged-in platform (GitHub or Gitee).

@@ -85,17 +85,16 @@ fn normal_merge(repo: &Repository, target_oid: git2::Oid) -> Result<String, Stri
     if index.has_conflicts() {
         let mut conflict_files: Vec<String> = Vec::new();
         if let Ok(conflicts) = index.conflicts() {
-            for conflict_result in conflicts {
-                if let Ok(conflict) = conflict_result {
-                    if let Some(entry) = conflict.ancestor
-                        .as_ref()
-                        .or_else(|| conflict.our.as_ref())
-                        .or_else(|| conflict.their.as_ref())
-                    {
-                        let path = std::str::from_utf8(&entry.path).unwrap_or("");
-                        if !path.is_empty() {
-                            conflict_files.push(path.to_string());
-                        }
+            for conflict in conflicts.flatten() {
+                if let Some(entry) = conflict
+                    .ancestor
+                    .as_ref()
+                    .or(conflict.our.as_ref())
+                    .or(conflict.their.as_ref())
+                {
+                    let path = std::str::from_utf8(&entry.path).unwrap_or("");
+                    if !path.is_empty() {
+                        conflict_files.push(path.to_string());
                     }
                 }
             }

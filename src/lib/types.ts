@@ -106,6 +106,8 @@ export interface CommitGraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
   truncated?: boolean;
+  hasMore?: boolean;
+  nextOffset?: number | null;
 }
 
 export interface GraphNode {
@@ -131,6 +133,41 @@ export interface RemoteInfo {
   name: string;
   url: string;
   pushUrl: string;
+}
+
+export interface TagInfo {
+  name: string;
+  target: string;
+  message?: string | null;
+}
+
+export interface BlameLine {
+  lineNumber: number;
+  commitId: string;
+  shortId: string;
+  author: string;
+  summary: string;
+  content: string;
+}
+
+export interface ReflogEntry {
+  index: number;
+  oldId: string;
+  newId: string;
+  message: string;
+  committer: string;
+  timestamp: number;
+}
+
+export interface LfsOperationResult {
+  success: boolean;
+  output: string;
+}
+
+export interface SshConnectionResult {
+  success: boolean;
+  host: string;
+  output: string;
 }
 
 export interface ConflictEntry {

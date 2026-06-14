@@ -35,6 +35,11 @@ import type {
   GiteePullRequestFile,
   GiteePRComment,
   GiteeMergePullResult,
+  TagInfo,
+  BlameLine,
+  ReflogEntry,
+  LfsOperationResult,
+  SshConnectionResult,
 } from './types';
 
 export async function openRepo(path: string): Promise<RepoInfo> {
@@ -140,8 +145,20 @@ export async function getFileContent(
   });
 }
 
-export async function getCommitGraph(path: string): Promise<CommitGraphData> {
-  return invoke('get_commit_graph', { path });
+export interface CommitGraphOptions {
+  offset?: number;
+  limit?: number;
+}
+
+export async function getCommitGraph(
+  path: string,
+  options: CommitGraphOptions = {},
+): Promise<CommitGraphData> {
+  return invoke('get_commit_graph', {
+    path,
+    offset: options.offset ?? null,
+    limit: options.limit ?? null,
+  });
 }
 
 export async function getBranchList(path: string): Promise<BranchInfo[]> {
@@ -314,6 +331,57 @@ export async function revertCommit(path: string, commitId: string): Promise<stri
 
 export async function createTag(path: string, commitId: string, tagName: string): Promise<string> {
   return invoke('create_tag', { path, commitId, tagName });
+}
+
+export async function listTags(path: string): Promise<TagInfo[]> {
+  return invoke('list_tags', { path });
+}
+
+export async function deleteTag(path: string, tagName: string): Promise<string> {
+  return invoke('delete_tag', { path, tagName });
+}
+
+export async function submoduleAdd(
+  path: string,
+  url: string,
+  submodulePath: string,
+): Promise<string> {
+  return invoke('submodule_add', { path, url, submodulePath });
+}
+
+export async function submoduleInit(path: string): Promise<string> {
+  return invoke('submodule_init', { path });
+}
+
+export async function submoduleUpdate(path: string, recursive = true): Promise<string> {
+  return invoke('submodule_update', { path, recursive });
+}
+
+export async function gitBlame(path: string, filePath: string): Promise<BlameLine[]> {
+  return invoke('git_blame', { path, filePath });
+}
+
+export async function getReflog(path: string, reference?: string): Promise<ReflogEntry[]> {
+  return invoke('get_reflog', { path, reference: reference ?? null });
+}
+
+export async function lfsPull(path: string): Promise<LfsOperationResult> {
+  return invoke('lfs_pull', { path });
+}
+
+export async function lfsTrack(path: string, pattern: string): Promise<LfsOperationResult> {
+  return invoke('lfs_track', { path, pattern });
+}
+
+export async function lfsUntrack(path: string, pattern: string): Promise<LfsOperationResult> {
+  return invoke('lfs_untrack', { path, pattern });
+}
+
+export async function testSshConnection(
+  host: string,
+  keyPath?: string,
+): Promise<SshConnectionResult> {
+  return invoke('test_ssh_connection', { host, keyPath: keyPath ?? null });
 }
 
 export async function undo(path: string): Promise<string> {

@@ -46,10 +46,14 @@ pub async fn get_commit_detail(path: String, commit_id: String) -> Result<Commit
 }
 
 #[tauri::command]
-pub async fn get_commit_graph(path: String) -> Result<CommitGraphData, String> {
+pub async fn get_commit_graph(
+    path: String,
+    offset: Option<u32>,
+    limit: Option<u32>,
+) -> Result<CommitGraphData, String> {
     tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;
-        git::commit::get_commit_graph(&repo)
+        git::commit::get_commit_graph(&repo, offset, limit)
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))?

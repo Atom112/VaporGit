@@ -6,4 +6,4 @@ pre-commit:
     frontend-lint:
       run: npm run lint
     rust-check:
-      run: cd src-tauri && cargo check
+      run: cd src-tauri && PATH="$HOME/.cargo/bin:$PATH" cargo check

@@ -4,6 +4,7 @@ pub mod diff;
 pub mod merge;
 pub mod remote;
 pub mod repo;
+pub mod git_ext;
 pub mod stage;
 pub mod stash;
 pub mod status;

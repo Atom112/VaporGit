@@ -9,7 +9,7 @@ mod terminal;
 
 use commands::branch::{checkout_branch, checkout_remote_branch, compare_branches, create_branch, delete_branch, delete_remote_branch, get_branch_list};
 use commands::commit::{amend_commit, cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, list_rebase_commits, perform_interactive_rebase, rebase, revert_commit, search_commit_history, undo, redo};
-use commands::tag::create_tag;
+use commands::tag::{create_tag, delete_tag, list_tags};
 use commands::terminal::{close_terminal, open_terminal, resize_terminal, write_terminal};
 use commands::diff::{check_lfs, get_file_base64, get_file_content, get_file_diff};
 use commands::remote::{add_remote, delete_remote, fetch, get_remotes, pull, push, push_with_auto_create, set_remote_url};
@@ -19,6 +19,10 @@ use commands::stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_save
 use commands::tutorial::{create_demo_repo, delete_dir};
 use commands::merge::merge_branch;
 use commands::stage::{stage_hunk, stage_line};
+use commands::git_ext::{
+    get_reflog, git_blame, lfs_pull, lfs_track, lfs_untrack, submodule_add, submodule_init,
+    submodule_update, test_ssh_connection,
+};
 use commands::github::{
     check_update, github_check_auth, github_create_pull, github_create_pull_comment,
     github_create_repo, github_get_asset, github_get_pull, github_get_pull_diff,
@@ -71,6 +75,8 @@ pub fn run() {
             revert_commit,
             // tag
             create_tag,
+            list_tags,
+            delete_tag,
             // terminal
             open_terminal,
             write_terminal,
@@ -103,6 +109,16 @@ pub fn run() {
             // stage hunk/line
             stage_hunk,
             stage_line,
+            // extended git operations
+            submodule_add,
+            submodule_init,
+            submodule_update,
+            git_blame,
+            get_reflog,
+            lfs_pull,
+            lfs_track,
+            lfs_untrack,
+            test_ssh_connection,
             // stash
             stash_save,
             stash_list,

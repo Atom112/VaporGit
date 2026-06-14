@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// Returns the path to the created repository.
 #[tauri::command]
 pub async fn create_demo_repo() -> Result<String, String> {
-    tokio::task::spawn_blocking(|| create_demo_repo_sync())
+    tokio::task::spawn_blocking(create_demo_repo_sync)
         .await
         .map_err(|e| format!("内部错误: {}", e))?
 }
@@ -133,7 +133,25 @@ fn create_demo_repo_sync() -> Result<String, String> {
 #[tauri::command]
 pub async fn delete_dir(path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        fs::remove_dir_all(&path).map_err(|e| format!("无法删除目录: {}", e))
+        let target = std::path::PathBuf::from(&path);
+        let canonical_target = target
+            .canonicalize()
+            .map_err(|e| format!("无法规范化待删除目录: {}", e))?;
+        let canonical_temp = std::env::temp_dir()
+            .canonicalize()
+            .map_err(|e| format!("无法规范化临时目录: {}", e))?;
+        let file_name = canonical_target
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+
+        if !canonical_target.starts_with(&canonical_temp)
+            || !file_name.starts_with("VaporGit_Tutorial_")
+        {
+            return Err("只允许删除 VaporGit 创建的教程临时仓库".to_string());
+        }
+
+        fs::remove_dir_all(&canonical_target).map_err(|e| format!("无法删除目录: {}", e))
     })
     .await
     .map_err(|e| format!("内部错误: {}", e))?
