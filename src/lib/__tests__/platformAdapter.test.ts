@@ -33,6 +33,39 @@ vi.mock('@tauri-apps/api/core', () => ({
         private: false,
       }];
     }
+    if (command === 'github_list_pulls') {
+      const repo = {
+        id: 1,
+        name: 'repo',
+        fullName: 'octo/repo',
+        owner: { login: 'octo', id: 1, avatarUrl: 'https://example.com/avatar.png' },
+        htmlUrl: 'https://github.com/octo/repo',
+        cloneUrl: 'https://github.com/octo/repo.git',
+        defaultBranch: 'main',
+      };
+      return [{
+        id: 10,
+        number: 7,
+        title: 'Add platform abstraction',
+        body: null,
+        state: 'open',
+        htmlUrl: 'https://github.com/octo/repo/pull/7',
+        diffUrl: 'https://github.com/octo/repo/pull/7.diff',
+        head: { label: 'octo:feature', ref: 'feature', sha: 'abc123', repo },
+        base: { label: 'octo:main', ref: 'main', sha: 'def456', repo },
+        user: { login: 'octo', id: 1, avatarUrl: 'https://example.com/avatar.png' },
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        closedAt: null,
+        mergedAt: null,
+        merged: false,
+        mergeable: true,
+        draft: false,
+        additions: 12,
+        deletions: 3,
+        changedFiles: 2,
+      }];
+    }
     throw new Error(`unexpected command ${command}`);
   }),
 }));
@@ -61,5 +94,15 @@ describe('platformAdapter', () => {
 
     expect(auth.authenticated).toBe(true);
     expect(repos[0].fullName).toBe('octo/repo');
+  });
+
+  it('validates pull request fields used by platform UI', async () => {
+    const { platformAdapters } = await import('../platformAdapter');
+
+    const prs = await platformAdapters.github.listPRs('octo', 'repo', 'open', 1, 30);
+
+    expect(prs[0].head.ref).toBe('feature');
+    expect(prs[0].base.ref).toBe('main');
+    expect(prs[0].additions).toBe(12);
   });
 });

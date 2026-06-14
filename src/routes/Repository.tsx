@@ -53,8 +53,7 @@ import StashPanel from '../components/git/StashPanel';
 import RemoteManager from '../components/git/RemoteManager';
 import ConflictResolver from '../components/git/ConflictResolver';
 import PushDialog from '../components/git/PushDialog';
-import PRCreateDialog from '../components/github/PRCreateDialog';
-import GiteePRCreateDialog from '../components/gitee/GiteePRCreateDialog';
+import PlatformPRCreateDialog from '../components/platform/PlatformPRCreateDialog';
 import { githubStore } from '../stores/githubStore';
 import { giteeStore } from '../stores/giteeStore';
 import InteractiveRebase from '../components/git/InteractiveRebase';
@@ -64,7 +63,7 @@ import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
 import TerminalPanel from '../components/terminal/TerminalPanel';
 import { tt, ttf } from '../i18n';
 import { describeError } from '../lib/gitErrorDesc';
-import { parsePlatformRemote } from '../lib/platformAdapter';
+import { parsePlatformRemote, PlatformKind } from '../lib/platformAdapter';
 import RepositoryToolbar from './repository/RepositoryToolbar';
 import CommitInput from './repository/CommitInput';
 
@@ -704,7 +703,7 @@ const Repository: Component = () => {
   };
 
   // ── PR creation from commit detail ──
-  const [prCreatePlatform, setPrCreatePlatform] = createSignal<'github' | 'gitee'>('github');
+  const [prCreatePlatform, setPrCreatePlatform] = createSignal<PlatformKind>('github');
   const handleCreatePullRequest = async () => {
     const path = repoPath();
     if (!path) return;
@@ -830,7 +829,9 @@ const Repository: Component = () => {
     setTerminalPhase('exit');
     setTimeout(() => {
       setTerminalPhase(null);
-      closeTerminal().catch(() => {});
+      closeTerminal().catch((e) => {
+        console.warn(`关闭终端失败: ${describeError(e)}`);
+      });
     }, 160);
   };
 
@@ -1277,20 +1278,16 @@ const Repository: Component = () => {
       </Show>
 
       {/* PR Create Dialog */}
-      <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'github' && githubStore.authenticated}>
-        <PRCreateDialog
-          owner={prCreateInfo()!.owner}
-          repo={prCreateInfo()!.repo}
-          defaultBase="main"
-          onClose={() => setShowPRCreate(false)}
-          onCreated={() => {
-            setShowPRCreate(false);
-            addToast(tt('pr.createdGeneric'), 'success');
-          }}
-        />
-      </Show>
-      <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'gitee' && giteeStore.authenticated}>
-        <GiteePRCreateDialog
+      <Show
+        when={
+          showPRCreate() &&
+          prCreateInfo() &&
+          ((prCreatePlatform() === 'github' && githubStore.authenticated) ||
+            (prCreatePlatform() === 'gitee' && giteeStore.authenticated))
+        }
+      >
+        <PlatformPRCreateDialog
+          kind={prCreatePlatform()}
           owner={prCreateInfo()!.owner}
           repo={prCreateInfo()!.repo}
           defaultBase="main"

@@ -150,7 +150,7 @@ const ConflictResolver: Component<Props> = (props) => {
         setCurrentBlockIndex(0);
       }
     } catch (e) {
-      addToast(ttf('repo.conflictResolveFailed', String(e)), 'error');
+      addToast(ttf('repo.conflictResolveFailed', describeError(e)), 'error');
       setError(describeError(e));
     } finally {
       setSaving(false);
@@ -197,7 +197,7 @@ const ConflictResolver: Component<Props> = (props) => {
         setWorktreeContent('');
       }
     } catch (e) {
-      addToast(ttf('repo.conflictResolveFailed', String(e)), 'error');
+      addToast(ttf('repo.conflictResolveFailed', describeError(e)), 'error');
       setError(describeError(e));
     } finally {
       setResolving(null);
@@ -210,7 +210,7 @@ const ConflictResolver: Component<Props> = (props) => {
       try {
         await resolveConflict(props.repoPath, c.filePath, resolution);
       } catch (e) {
-        addToast(ttf('repo.conflictResolveFailed', String(e)), 'error');
+        addToast(ttf('repo.conflictResolveFailed', describeError(e)), 'error');
         setError(describeError(e));
       }
     }

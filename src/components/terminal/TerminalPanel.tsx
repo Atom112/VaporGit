@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import { resizeTerminal, writeTerminal, closeTerminal } from '../../lib/tauriCommands';
 import { listen } from '@tauri-apps/api/event';
 import { tt } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
 
 interface TerminalPanelProps {
   phase: 'enter' | 'exit' | null;
@@ -43,6 +44,19 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       brightWhite: '#a6adc8',
     },
   }));
+
+  const logTerminalError = (context: string, error: unknown) => {
+    console.warn(`${context}: ${describeError(error)}`);
+  };
+
+  const fitSafely = (fit: FitAddon) => {
+    try {
+      fit.fit();
+    } catch (e) {
+      logTerminalError('Terminal fit failed', e);
+    }
+  };
+
   onMount(() => {
     const term = terminal();
     const fit = fitAddon();
@@ -52,7 +66,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
 
     // Fit after open (may report 0 cols/rows if hidden; re-fit after animation)
     requestAnimationFrame(() => {
-      try { fit.fit(); } catch {}
+      fitSafely(fit);
     });
 
     // Listen for terminal data from backend
@@ -68,17 +82,17 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
 
     // Forward user input to backend
     term.onData((data) => {
-      writeTerminal(data).catch(() => {});
+      writeTerminal(data).catch((e) => logTerminalError('Terminal write failed', e));
     });
 
     // Forward resize events to backend
     term.onResize(({ cols, rows }) => {
-      resizeTerminal(cols, rows).catch(() => {});
+      resizeTerminal(cols, rows).catch((e) => logTerminalError('Terminal resize failed', e));
     });
 
     // Resize observer
     const ro = new ResizeObserver(() => {
-      try { fit.fit(); } catch {}
+      fitSafely(fit);
     });
     ro.observe(containerRef);
 
@@ -87,7 +101,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       cleanupFns.forEach((fn) => fn());
       term.dispose();
       // Kill the backend process when component unmounts (e.g. navigating away)
-      closeTerminal().catch(() => {});
+      closeTerminal().catch((e) => logTerminalError('Terminal close failed', e));
     });
   });
 
@@ -95,7 +109,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
   createEffect(() => {
     if (props.phase === 'enter') {
       setTimeout(() => {
-        try { fitAddon().fit(); } catch {}
+        fitSafely(fitAddon());
       }, 250);
     }
   });

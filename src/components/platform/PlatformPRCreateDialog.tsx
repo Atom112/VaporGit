@@ -1,12 +1,13 @@
-import { Component, createSignal, createResource, createMemo, Show } from 'solid-js';
-import { githubCreatePull, githubListBranches } from '../../lib/tauriCommands';
-import CustomSelect from '../ui/CustomSelect';
-import { addToast } from '../../stores/toastStore';
-import { commitStore } from '../../stores/commitStore';
-import { tt, ttf } from '../../i18n';
+import { Component, Show, createMemo, createResource, createSignal } from 'solid-js';
 import { describeError } from '../../lib/gitErrorDesc';
+import { getPlatformAdapter, PlatformKind } from '../../lib/platformAdapter';
+import { commitStore } from '../../stores/commitStore';
+import { addToast } from '../../stores/toastStore';
+import { tt, ttf } from '../../i18n';
+import CustomSelect from '../ui/CustomSelect';
 
-interface Props {
+interface PlatformPRCreateDialogProps {
+  kind: PlatformKind;
   owner: string;
   repo: string;
   defaultBase: string;
@@ -14,7 +15,8 @@ interface Props {
   onCreated: () => void;
 }
 
-const PRCreateDialog: Component<Props> = (props) => {
+const PlatformPRCreateDialog: Component<PlatformPRCreateDialogProps> = (props) => {
+  const adapter = () => getPlatformAdapter(props.kind);
   const [title, setTitle] = createSignal('');
   const [body, setBody] = createSignal('');
   const [base, setBase] = createSignal(props.defaultBase);
@@ -22,36 +24,46 @@ const PRCreateDialog: Component<Props> = (props) => {
   const [submitting, setSubmitting] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
-  // Fetch branches on mount
   const [branches] = createResource(
-    () => [props.owner, props.repo] as const,
-    ([owner, repo]) => githubListBranches(owner, repo)
+    () => [props.kind, props.owner, props.repo] as const,
+    ([, owner, repo]) => adapter().listBranches(owner, repo),
   );
 
-  // Get current branch as head
   const headBranch = () => {
-    const branches = commitStore.branches;
-    const head = branches.find((b) => b.isHead);
+    const head = commitStore.branches.find((branch) => branch.isHead);
     return head?.name ?? '';
   };
 
-  // Get HEAD commit context for display
   const headCommitContext = () => {
     const graph = commitStore.graphData;
     if (!graph) return null;
-    const node = graph.nodes.find((n) => n.isHead);
+    const node = graph.nodes.find((item) => item.isHead);
     if (!node) return null;
     return { shortId: node.shortId, message: node.message };
   };
 
-  const canSubmit = () => title().trim().length > 0 && headBranch().length > 0 && base().length > 0 && !hasOnlyOneBranch();
+  const branchOptions = createMemo(() =>
+    branches()
+      ?.filter((branch) => branch.name !== headBranch())
+      .map((branch) => ({ value: branch.name, label: branch.name })) ?? [],
+  );
+
+  const hasOnlyOneBranch = createMemo(
+    () => !branches.loading && !branches.error && branches()?.length === 1,
+  );
+
+  const canSubmit = () =>
+    title().trim().length > 0 &&
+    headBranch().length > 0 &&
+    base().length > 0 &&
+    !hasOnlyOneBranch();
 
   const handleSubmit = async () => {
     if (!canSubmit()) return;
     setSubmitting(true);
     setError(null);
     try {
-      const pr = await githubCreatePull(props.owner, props.repo, {
+      const pr = await adapter().createPR(props.owner, props.repo, {
         title: title().trim(),
         head: headBranch(),
         base: base(),
@@ -67,16 +79,6 @@ const PRCreateDialog: Component<Props> = (props) => {
     }
   };
 
-  const branchOptions = createMemo(() =>
-    branches()
-      ?.filter((b) => b.name !== headBranch())
-      .map((b) => ({ value: b.name, label: b.name })) ?? []
-  );
-
-  const hasOnlyOneBranch = createMemo(
-    () => !branches.loading && !branches.error && branches()?.length === 1
-  );
-
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div class="w-110 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
@@ -90,7 +92,6 @@ const PRCreateDialog: Component<Props> = (props) => {
           </button>
         </div>
         <div class="p-4 space-y-3">
-          {/* Branch info */}
           <div class="flex items-center gap-2 text-xs text-gray-400">
             <span class="font-mono bg-white/10 px-2 py-1 rounded">{headBranch() || tt('pr.noBranch')}</span>
             <span>&rarr;</span>
@@ -98,11 +99,10 @@ const PRCreateDialog: Component<Props> = (props) => {
             <span class="text-white/70">({props.owner}/{props.repo})</span>
           </div>
 
-          {/* Commit context */}
           <Show when={headCommitContext()}>
             {(ctx) => (
               <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/5 border border-white/5">
-                <svg class="w-3.5 h-3.5 shrink-0 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg class="w-3.5 h-3.5 shrink-0 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
                 <span class="font-mono text-cyan-400 text-xs">{ctx().shortId}</span>
@@ -111,7 +111,6 @@ const PRCreateDialog: Component<Props> = (props) => {
             )}
           </Show>
 
-          {/* Base branch — dropdown from repo */}
           <div>
             <label class="block text-xs font-medium mb-1 opacity-70">{tt('pr.baseBranch')}</label>
             <Show when={!branches.loading && !branches.error} fallback={
@@ -135,14 +134,13 @@ const PRCreateDialog: Component<Props> = (props) => {
               }>
                 <CustomSelect
                   value={base()}
-                  onChange={(v) => setBase(v)}
+                  onChange={(value) => setBase(value)}
                   options={branchOptions()}
                 />
               </Show>
             </Show>
           </div>
 
-          {/* Title */}
           <div>
             <label class="block text-xs font-medium mb-1 opacity-70">{tt('pr.prTitle')}</label>
             <input
@@ -153,7 +151,6 @@ const PRCreateDialog: Component<Props> = (props) => {
             />
           </div>
 
-          {/* Body */}
           <div>
             <label class="block text-xs font-medium mb-1 opacity-70">{tt('pr.body')}</label>
             <textarea
@@ -165,7 +162,6 @@ const PRCreateDialog: Component<Props> = (props) => {
             />
           </div>
 
-          {/* Draft checkbox */}
           <label class="flex items-center gap-2 text-xs text-gray-400">
             <input
               type="checkbox"
@@ -176,14 +172,12 @@ const PRCreateDialog: Component<Props> = (props) => {
             {tt('pr.draft')}
           </label>
 
-          {/* Error */}
           <Show when={error()}>
             <div class="p-2 rounded bg-red-500/20 border border-red-500/30 text-red-200 text-xs">
               {error()}
             </div>
           </Show>
 
-          {/* Submit */}
           <button
             class="w-full py-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-30 text-sm font-medium transition-colors"
             onClick={handleSubmit}
@@ -197,4 +191,4 @@ const PRCreateDialog: Component<Props> = (props) => {
   );
 };
 
-export default PRCreateDialog;
+export default PlatformPRCreateDialog;
