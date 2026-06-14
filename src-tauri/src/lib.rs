@@ -1,8 +1,8 @@
 mod commands;
-mod git;
+pub mod git;
 mod github;
 mod gitee;
-mod models;
+pub mod models;
 mod oauth;
 mod remote_url;
 mod terminal;
