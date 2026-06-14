@@ -669,18 +669,14 @@ pub fn amend_commit(repo: &Repository, message: &str) -> Result<CommitInfo, Stri
         .find_tree(tree_oid)
         .map_err(|e| format!("无法找到树: {}", e))?;
 
-    // Collect parents from HEAD's parents (same parents, replacing HEAD itself)
-    let parent_commits: Vec<git2::Commit> = head_commit.parents().collect();
-    let parents: Vec<&git2::Commit> = parent_commits.iter().collect();
-
-    let new_oid = repo
-        .commit(
+    let new_oid = head_commit
+        .amend(
             Some("HEAD"),
-            &signature,
-            &signature,
-            message,
-            &tree,
-            parents.as_slice(),
+            Some(&signature),
+            Some(&signature),
+            None,
+            Some(message),
+            Some(&tree),
         )
         .map_err(|e| format!("修改提交失败: {}", e))?;
 

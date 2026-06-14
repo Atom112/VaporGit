@@ -3,7 +3,7 @@ pub mod git;
 mod github;
 mod gitee;
 pub mod models;
-mod oauth;
+pub mod oauth;
 mod remote_url;
 mod terminal;
 

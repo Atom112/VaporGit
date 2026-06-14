@@ -161,9 +161,9 @@ const RepositoryToolbar = (props: RepositoryToolbarProps) => (
         <CompareIcon />
         {tt('repo.compareBranches')}
       </ToolbarButton>
-      <ToolbarButton onClick={props.onGitTools} ariaLabel="Git Tools">
+      <ToolbarButton onClick={props.onGitTools} ariaLabel={tt('repo.gitTools')}>
         <ToolIcon />
-        Tools
+        {tt('repo.gitTools')}
       </ToolbarButton>
       {props.githubAuthenticated && <PullRequestLink href="/pulls" />}
       {props.giteeAuthenticated && <PullRequestLink href="/gitee-pulls" />}
