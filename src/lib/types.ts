@@ -106,8 +106,6 @@ export interface CommitGraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
   truncated?: boolean;
-  hasMore?: boolean;
-  nextOffset?: number | null;
 }
 
 export interface GraphNode {

@@ -7,6 +7,7 @@
     "start": "cross-env NODE_OPTIONS=--no-deprecation vite",
     "dev": "cross-env NODE_OPTIONS=--no-deprecation vite",
     "check": "tsc --noEmit",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "check:rust": "cd src-tauri && cargo check",
     "lint": "oxlint src",
     "lint:rust": "cd src-tauri && cargo clippy -- -D warnings",

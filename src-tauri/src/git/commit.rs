@@ -195,11 +195,7 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
     })
 }
 
-pub fn get_commit_graph(
-    repo: &Repository,
-    offset: Option<u32>,
-    limit: Option<u32>,
-) -> Result<CommitGraphData, String> {
+pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
     let mut revwalk = repo
         .revwalk()
         .map_err(|e| format!("无法创建 revwalk: {}", e))?;
@@ -228,25 +224,23 @@ pub fn get_commit_graph(
             .map_err(|e| format!("无法推送 HEAD: {}", e))?;
     }
 
-    let all_oids: Vec<Oid> = revwalk.filter_map(|r| r.ok()).collect();
-
     // Limit to max 2000 commits for performance on large repos
     const MAX_GRAPH_COMMITS: usize = 2000;
-    let offset = offset.unwrap_or(0) as usize;
-    let requested_limit = limit.map_or(MAX_GRAPH_COMMITS, |value| value.max(1) as usize);
-    let limit = requested_limit.min(MAX_GRAPH_COMMITS);
-    let truncated = all_oids.len() > offset.saturating_add(limit);
-    let has_more = truncated;
-    let next_offset = has_more.then_some((offset + limit) as u32);
-    let walk_oids: Vec<Oid> = all_oids.into_iter().skip(offset).take(limit).collect();
+    let mut walk_oids: Vec<Oid> = Vec::new();
+    let mut truncated = false;
+    for oid in revwalk.filter_map(|r| r.ok()) {
+        if walk_oids.len() >= MAX_GRAPH_COMMITS {
+            truncated = true;
+            break;
+        }
+        walk_oids.push(oid);
+    }
 
     if walk_oids.is_empty() {
         return Ok(CommitGraphData {
             nodes: vec![],
             edges: vec![],
             truncated: false,
-            has_more: false,
-            next_offset: None,
         });
     }
 
@@ -415,8 +409,6 @@ pub fn get_commit_graph(
         nodes,
         edges,
         truncated,
-        has_more,
-        next_offset,
     })
 }
 
