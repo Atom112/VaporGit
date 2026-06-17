@@ -1094,7 +1094,7 @@ const Repository: Component = () => {
 
           {/* Detail: Commit Detail */}
           <Show when={leftMode() === 'detail'}>
-            <div class="flex-1 flex flex-col animate-content-enter">
+            <div class="flex-1 flex flex-col min-h-0 overflow-hidden animate-content-enter">
               <Show
                 when={!commitLoading()}
                 fallback={
