@@ -1,5 +1,16 @@
 # Changelog / 已实现功能
 
+## v1.2.7 - 2026-06-17
+
+### Fixed
+- 修复提交详情页文件列表无法滚动的问题（CommitDetail 父容器缺少 `min-h-0 overflow-hidden`）
+
+### Changed
+- 统一前后端错误体系：Rust 后端错误消息改为英文，前端通过 i18n 错误码映射展示对应语言文本
+
+### Docs
+- 添加 CLAUDE.md 项目规则文件，规范 Claude Code 工作流程
+
 ## v1.2.5 - 2026-06-11
 
 ### Added
