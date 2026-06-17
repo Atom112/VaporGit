@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
 use git2::{Repository, StatusOptions, StatusShow};
 use crate::models::status::{FileStatus, StatusKind};
+use crate::git_err;
 use crate::models::conflict::{BlockResolution, ConflictBlockDetail, ConflictEntry};
 
 /// Read working-tree + index status using git2's `Diff` API for rename
@@ -20,7 +20,7 @@ pub fn get_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
 
     let statuses = repo
         .statuses(Some(&mut opts))
-        .map_err(|e| format!("无法获取状态: {}", e))?;
+        .map_err(|e| git_err!("STATUS_READ_FAILED", "Failed to read status: {}", e))?;
 
     let mut result = Vec::new();
 
@@ -127,14 +127,14 @@ fn merge_renames_from_diff(
 }
 
 pub fn stage_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus>, String> {
-    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let mut index = repo.index().map_err(|e| git_err!("STAGE_INDEX_FAILED", "Failed to open index: {}", e))?;
     let workdir = repo
         .workdir()
-        .ok_or_else(|| "无法获取工作目录".to_string())?;
+        .ok_or_else(|| git_err!("STAGE_NO_WORKDIR", "Work directory not available"))?;
 
     // Validate all paths first
     for file in files {
-        validate_path_in_workdir(workdir, file)?;
+        crate::git::validate::validate_relative_path(file)?;
     }
 
     // First pass: remove all files that no longer exist on disk.
@@ -146,7 +146,7 @@ pub fn stage_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus
         if !abs_path.exists() {
             index
                 .remove_path(path)
-                .map_err(|e| format!("取消跟踪 {} 失败: {}", file, e))?;
+                .map_err(|e| git_err!("STAGE_REMOVE_FAILED", "Failed to remove '{}' from tracking: {}", file, e))?;
         }
     }
 
@@ -157,15 +157,15 @@ pub fn stage_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus
         if abs_path.exists() {
             index
                 .add_path(path)
-                .map_err(|e| format!("暂存 {} 失败: {}", file, e))?;
+                .map_err(|e| git_err!("STAGE_ADD_FAILED", "Failed to stage '{}': {}", file, e))?;
         }
     }
 
-    index.write().map_err(|e| format!("写入索引失败: {}", e))?;
+    index.write().map_err(|e| git_err!("STAGE_WRITE_FAILED", "Failed to write index: {}", e))?;
 
     // Re-read the index from disk to ensure any internal libgit2 caches
     // are refreshed before computing status on the same repo.
-    index.read(true).map_err(|e| format!("重读索引失败: {}", e))?;
+    index.read(true).map_err(|e| git_err!("STAGE_RELOAD_FAILED", "Failed to reload index: {}", e))?;
 
     // Return fresh status read from the same repo — this guarantees
     // the status reflects the just-written index without any cross-call
@@ -176,12 +176,12 @@ pub fn stage_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus
 pub fn unstage_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus>, String> {
     let head = repo
         .head()
-        .map_err(|e| format!("无法获取 HEAD: {}", e))?;
+        .map_err(|e| git_err!("UNSTAGE_HEAD_FAILED", "Failed to resolve HEAD: {}", e))?;
     let head_tree = head
         .peel_to_tree()
-        .map_err(|e| format!("无法获取 HEAD 树: {}", e))?;
+        .map_err(|e| git_err!("UNSTAGE_HEAD_TREE_FAILED", "Failed to resolve HEAD tree: {}", e))?;
 
-    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let mut index = repo.index().map_err(|e| git_err!("UNSTAGE_INDEX_FAILED", "Failed to open index: {}", e))?;
 
     for file in files {
         let path = std::path::Path::new(file);
@@ -202,25 +202,25 @@ pub fn unstage_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStat
             };
             index
                 .add(&idx_entry)
-                .map_err(|e| format!("取消暂存失败 {}: {}", file, e))?;
+                .map_err(|e| git_err!("UNSTAGE_ADD_FAILED", "Failed to unstage '{}': {}", file, e))?;
         } else {
             index
                 .remove_path(path)
-                .map_err(|e| format!("取消暂存失败 {}: {}", file, e))?;
+                .map_err(|e| git_err!("UNSTAGE_REMOVE_FAILED", "Failed to unstage '{}': {}", file, e))?;
         }
     }
 
-    index.write().map_err(|e| format!("写入索引失败: {}", e))?;
+    index.write().map_err(|e| git_err!("UNSTAGE_WRITE_FAILED", "Failed to write index: {}", e))?;
 
     // Re-read the index from disk (see stage_files for rationale).
-    index.read(true).map_err(|e| format!("重读索引失败: {}", e))?;
+    index.read(true).map_err(|e| git_err!("UNSTAGE_RELOAD_FAILED", "Failed to reload index: {}", e))?;
 
     // Return fresh status from the same repo.
     get_status(repo)
 }
 
 pub fn get_conflicts(repo: &Repository) -> Result<Vec<ConflictEntry>, String> {
-    let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let index = repo.index().map_err(|e| git_err!("STATUS_INDEX_FAILED", "Failed to open index: {}", e))?;
 
     if !index.has_conflicts() {
         return Ok(Vec::new());
@@ -228,11 +228,11 @@ pub fn get_conflicts(repo: &Repository) -> Result<Vec<ConflictEntry>, String> {
 
     let mut result = Vec::new();
     let conflicts = index.conflicts()
-        .map_err(|e| format!("无法获取冲突迭代器: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_ITERATOR_FAILED", "Failed to get conflict iterator: {}", e))?;
     for conflict_result in conflicts {
         let conflict = match conflict_result {
             Ok(c) => c,
-            Err(e) => return Err(format!("无法读取冲突: {}", e)),
+            Err(e) => return Err(git_err!("CONFLICT_READ_FAILED", "Failed to read conflict: {}", e)),
         };
         let file_path = conflict
             .ancestor
@@ -258,16 +258,16 @@ pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Resul
     if stage == "worktree" {
         let workdir = repo
             .workdir()
-            .ok_or_else(|| "无法获取工作目录".to_string())?;
+            .ok_or_else(|| git_err!("CONFLICT_NO_WORKDIR", "Work directory not available"))?;
         let abs_path = workdir.join(file);
         return std::fs::read_to_string(&abs_path)
-            .map_err(|e| format!("无法读取工作目录文件 '{}': {}", file, e));
+            .map_err(|e| git_err!("CONFLICT_READ_FILE_FAILED", "Failed to read working tree file '{}': {}", file, e));
     }
 
-    let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let index = repo.index().map_err(|e| git_err!("CONFLICT_INDEX_FAILED", "Failed to open index: {}", e))?;
 
     let conflicts = index.conflicts()
-        .map_err(|e| format!("无法获取冲突迭代器: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_ITERATOR_FAILED", "Failed to get conflict iterator: {}", e))?;
 
     for conflict_result in conflicts {
         let conflict = match conflict_result {
@@ -292,16 +292,16 @@ pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Resul
             "ours" => conflict.our,
             "theirs" => conflict.their,
             "ancestor" => conflict.ancestor,
-            _ => return Err("无效的阶段参数，请使用 'ours'、'theirs' 或 'ancestor'".to_string()),
+            _ => return Err(git_err!("CONFLICT_INVALID_STAGE", "Invalid stage value, use 'ours', 'theirs', or 'ancestor'")),
         };
 
         if let Some(e) = entry {
-            let blob = repo.find_blob(e.id).map_err(|_| format!("无法读取文件 '{}' 的内容", file))?;
+            let blob = repo.find_blob(e.id).map_err(|_| git_err!("CONFLICT_READ_BLOB_FAILED", "Failed to read content for file '{}'", file))?;
             if blob.is_binary() {
-                return Ok("[二进制文件]".to_string());
+                return Ok("[Binary file]".to_string());
             }
             let content = std::str::from_utf8(blob.content())
-                .map_err(|_| "文件内容不是有效的 UTF-8 文本".to_string())?;
+                .map_err(|_| git_err!("CONFLICT_UTF8_FAILED", "File content is not valid UTF-8 text"))?;
             return Ok(content.to_string());
         }
     }
@@ -309,29 +309,9 @@ pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Resul
     Ok(String::new())
 }
 
-/// Validate that a path is within the repository workdir.
-/// Returns the canonicalized absolute path if valid, or an error.
-fn validate_path_in_workdir(workdir: &Path, file: &str) -> Result<PathBuf, String> {
-    let path = Path::new(file);
-    if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-        return Err(format!("路径 '{}' 包含 '..'，不允许操作", file));
-    }
-    if path.is_absolute() {
-        return Err(format!("路径 '{}' 是绝对路径，请使用相对路径", file));
-    }
-    let abs_path = workdir.join(path);
-    // Normalize to canonical if it exists, otherwise check prefix
-    let canonical = abs_path.canonicalize().unwrap_or_else(|_| abs_path.clone());
-    let workdir_canonical = workdir.canonicalize().map_err(|e| format!("无法规范化工作目录: {}", e))?;
-    if !canonical.starts_with(&workdir_canonical) {
-        return Err(format!("路径 '{}' 在仓库工作目录之外", file));
-    }
-    Ok(canonical)
-}
-
 pub fn discard_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus>, String> {
-    let workdir = repo.workdir().ok_or_else(|| "无法获取工作目录".to_string())?;
-    let workdir_canonical = workdir.canonicalize().map_err(|e| format!("无法规范化工作目录: {}", e))?;
+    let workdir = repo.workdir().ok_or_else(|| git_err!("DISCARD_NO_WORKDIR", "Work directory not available"))?;
+    let workdir_canonical = workdir.canonicalize().map_err(|e| git_err!("DISCARD_CANONICALIZE_FAILED", "Failed to canonicalize work directory: {}", e))?;
     let head = repo.head().ok();
     let head_tree = head.as_ref().and_then(|h| h.peel_to_tree().ok());
 
@@ -339,15 +319,15 @@ pub fn discard_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStat
     let mut untracked = Vec::new();
 
     for file in files {
-        // Validate path is within workdir
-        let _validated_path = validate_path_in_workdir(workdir, file)?;
+        // Basic safety check: no absolute paths, no parent dir references
+        crate::git::validate::validate_relative_path(file)?;
 
         let path = std::path::Path::new(file);
 
         // Check for directory: refuse recursive deletion — user should discard individual files
         let abs_path = workdir_canonical.join(path);
         if abs_path.is_dir() {
-            return Err(format!("路径 '{}' 是目录，不支持递归丢弃。请单独选择文件操作。", file));
+            return Err(git_err!("DISCARD_IS_DIRECTORY", "Path '{}' is a directory, recursive discard not supported. Select individual files.", file));
         }
 
         if head_tree.as_ref().map_or(false, |tree| tree.get_path(path).is_ok()) {
@@ -365,7 +345,7 @@ pub fn discard_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStat
             checkout.path(std::path::Path::new(f.as_str()));
         }
         repo.checkout_head(Some(&mut checkout))
-            .map_err(|e| format!("无法撤销文件更改: {}", e))?;
+            .map_err(|e| git_err!("DISCARD_CHECKOUT_FAILED", "Failed to discard file changes: {}", e))?;
     }
 
     // Delete untracked/new files from disk and remove from index
@@ -381,25 +361,25 @@ pub fn discard_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStat
                 // Only delete files, not directories (directories were rejected above,
                 // but check again for safety in case a directory was created between validation and now)
                 if abs_path.is_dir() {
-                    return Err(format!("目录 '{}' 不会自动删除，请手动清理", file));
+                    return Err(git_err!("DISCARD_DIRECTORY_NOT_DELETED", "Directory '{}' will not be deleted automatically, clean up manually", file));
                 }
                 std::fs::remove_file(&abs_path)
-                    .map_err(|e| format!("无法删除文件 '{}': {}", file, e))?;
+                    .map_err(|e| git_err!("DISCARD_DELETE_FAILED", "Failed to delete file '{}': {}", file, e))?;
             }
         }
-        let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+        let mut index = repo.index().map_err(|e| git_err!("DISCARD_INDEX_FAILED", "Failed to open index: {}", e))?;
         for file in &untracked {
             index.remove_path(std::path::Path::new(file)).ok();
         }
-        index.write().map_err(|e| format!("写入索引失败: {}", e))?;
-        index.read(true).map_err(|e| format!("重读索引失败: {}", e))?;
+        index.write().map_err(|e| git_err!("DISCARD_WRITE_FAILED", "Failed to write index: {}", e))?;
+        index.read(true).map_err(|e| git_err!("DISCARD_RELOAD_FAILED", "Failed to reload index: {}", e))?;
     }
 
     get_status(repo)
 }
 
 pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Result<(), String> {
-    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let mut index = repo.index().map_err(|e| git_err!("CONFLICT_INDEX_FAILED", "Failed to open index: {}", e))?;
     let path = std::path::Path::new(file);
 
     // Find the conflict entry BEFORE removing it
@@ -407,11 +387,11 @@ pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Resu
         let stage = match resolution {
             "ours" => 2,
             "theirs" => 3,
-            _ => return Err("无效的解决策略，请使用 'ours' 或 'theirs'".to_string()),
+            _ => return Err(git_err!("CONFLICT_INVALID_RESOLUTION", "Invalid resolution strategy, use 'ours' or 'theirs'")),
         };
 
         let conflicts = index.conflicts()
-            .map_err(|e| format!("无法获取冲突迭代器: {}", e))?;
+            .map_err(|e| git_err!("CONFLICT_ITERATOR_FAILED", "Failed to get conflict iterator: {}", e))?;
         let mut found = None;
         for conflict_result in conflicts {
             let conflict = match conflict_result {
@@ -442,13 +422,13 @@ pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Resu
             }
             break;
         }
-        found.ok_or_else(|| format!("无法找到文件 '{}' 的冲突条目", file))?
+        found.ok_or_else(|| git_err!("CONFLICT_ENTRY_NOT_FOUND", "Conflict entry not found for file '{}'", file))?
     };
 
     // Remove the conflicted entry from index
     index
         .remove_path(path)
-        .map_err(|e| format!("无法移除冲突条目: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_REMOVE_FAILED", "Failed to remove conflict entry: {}", e))?;
 
     // Add the resolved entry
     let idx_entry = git2::IndexEntry {
@@ -467,22 +447,22 @@ pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Resu
     };
     index
         .add(&idx_entry)
-        .map_err(|e| format!("无法添加解决后的条目: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_ADD_ENTRY_FAILED", "Failed to add resolved entry: {}", e))?;
 
     // Write the resolved blob content to the working tree file
     let blob = repo
         .find_blob(entry_id)
-        .map_err(|e| format!("无法读取已解决的文件内容: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_READ_RESOLVED_FAILED", "Failed to read resolved file content: {}", e))?;
     let workdir = repo
         .workdir()
-        .ok_or_else(|| "无法获取工作目录".to_string())?;
+        .ok_or_else(|| git_err!("CONFLICT_NO_WORKDIR", "Work directory not available"))?;
     let abs_path = workdir.join(path);
     std::fs::write(&abs_path, blob.content())
-        .map_err(|e| format!("无法写入已解决的文件 '{}': {}", file, e))?;
+        .map_err(|e| git_err!("CONFLICT_WRITE_FAILED", "Failed to write resolved file '{}': {}", file, e))?;
 
     index
         .write()
-        .map_err(|e| format!("写入索引失败: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_WRITE_INDEX_FAILED", "Failed to write index: {}", e))?;
     Ok(())
 }
 
@@ -493,14 +473,14 @@ pub fn get_conflict_blocks(repo: &Repository, file: &str) -> Result<Vec<Conflict
 
     let workdir = repo
         .workdir()
-        .ok_or_else(|| "无法获取工作目录".to_string())?;
+        .ok_or_else(|| git_err!("CONFLICT_NO_WORKDIR", "Work directory not available"))?;
     let abs_path = workdir.join(file);
     let content = std::fs::read_to_string(&abs_path)
-        .map_err(|e| format!("无法读取文件 '{}': {}", file, e))?;
+        .map_err(|e| git_err!("CONFLICT_READ_FILE_FAILED", "Failed to read file '{}': {}", file, e))?;
 
     // Regex to match conflict markers: <<<<<<< ... ======= ... >>>>>>>
     let re = Regex::new(r"(?m)^<<<<<<< .*?\n([\s\S]*?)=======\n([\s\S]*?)>>>>>>> .*?$")
-        .map_err(|e| format!("正则表达式错误: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_REGEX_FAILED", "Regex error: {}", e))?;
 
     // Compute line mapping by finding byte offsets of each line
     let lines: Vec<&str> = content.lines().collect();
@@ -546,14 +526,14 @@ pub fn resolve_conflict_blocks(
 
     let workdir = repo
         .workdir()
-        .ok_or_else(|| "无法获取工作目录".to_string())?;
+        .ok_or_else(|| git_err!("CONFLICT_NO_WORKDIR", "Work directory not available"))?;
     let abs_path = workdir.join(file);
     let content = std::fs::read_to_string(&abs_path)
-        .map_err(|e| format!("无法读取文件 '{}': {}", file, e))?;
+        .map_err(|e| git_err!("CONFLICT_READ_FILE_FAILED", "Failed to read file '{}': {}", file, e))?;
 
     // Regex to match conflict markers
     let re = Regex::new(r"(?m)^<<<<<<< .*?\n([\s\S]*?)=======\n([\s\S]*?)>>>>>>> .*?$")
-        .map_err(|e| format!("正则表达式错误: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_REGEX_FAILED", "Regex error: {}", e))?;
 
     // Build a resolution map keyed by block_index
     use std::collections::HashMap;
@@ -609,25 +589,25 @@ pub fn resolve_conflict_blocks(
 
     // Write the resolved content to the working tree file
     std::fs::write(&abs_path, &result)
-        .map_err(|e| format!("无法写入已解决的文件 '{}': {}", file, e))?;
+        .map_err(|e| git_err!("CONFLICT_WRITE_FAILED", "Failed to write resolved file '{}': {}", file, e))?;
 
     // Update the index: remove conflicted entries and add the resolved file
-    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let mut index = repo.index().map_err(|e| git_err!("CONFLICT_INDEX_FAILED", "Failed to open index: {}", e))?;
     let path = std::path::Path::new(file);
 
     // Remove the existing conflicted entries
     index
         .remove_path(path)
-        .map_err(|e| format!("无法移除冲突条目: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_REMOVE_FAILED", "Failed to remove conflict entry: {}", e))?;
 
     // Add the resolved file content to the index
     index
         .add_path(path)
-        .map_err(|e| format!("无法添加已解决的文件到索引: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_ADD_INDEX_FAILED", "Failed to add resolved file to index: {}", e))?;
 
     index
         .write()
-        .map_err(|e| format!("写入索引失败: {}", e))?;
+        .map_err(|e| git_err!("CONFLICT_WRITE_INDEX_FAILED", "Failed to write index: {}", e))?;
 
     Ok(())
 }

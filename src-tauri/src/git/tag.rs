@@ -1,4 +1,5 @@
 use git2::{Oid, Repository};
+use crate::git_err;
 
 /// Create a lightweight tag pointing to the given commit.
 pub fn create_tag(
@@ -9,14 +10,14 @@ pub fn create_tag(
     // Validate tag name
     crate::git::validate::validate_ref_name(tag_name)?;
 
-    let oid = Oid::from_str(commit_id).map_err(|e| format!("无效的提交 ID: {}", e))?;
+    let oid = Oid::from_str(commit_id).map_err(|e| git_err!("TAG_INVALID_COMMIT_ID", "Invalid commit ID: {}", e))?;
     let commit = repo
         .find_commit(oid)
-        .map_err(|e| format!("无法找到提交: {}", e))?;
+        .map_err(|e| git_err!("TAG_COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
 
     let object = commit.as_object();
     repo.tag_lightweight(tag_name, object, false)
-        .map_err(|e| format!("创建标签失败: {}", e))?;
+        .map_err(|e| git_err!("TAG_CREATE_FAILED", "Failed to create tag: {}", e))?;
 
-    Ok(format!("标签 '{}' 创建成功", tag_name))
+    Ok(format!("Tag '{}' created successfully", tag_name))
 }

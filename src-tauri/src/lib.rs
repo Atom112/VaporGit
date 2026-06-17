@@ -2,13 +2,14 @@ mod commands;
 mod git;
 mod github;
 mod gitee;
+mod macros;
 mod models;
 mod oauth;
 mod remote_url;
 mod terminal;
 
 use commands::branch::{checkout_branch, checkout_remote_branch, compare_branches, create_branch, delete_branch, delete_remote_branch, get_branch_list};
-use commands::commit::{amend_commit, cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, list_rebase_commits, perform_interactive_rebase, rebase, revert_commit, search_commit_history, undo, redo};
+use commands::commit::{amend_commit, cherry_pick, commit, get_commit_detail, get_commit_graph, get_commit_history, list_rebase_commits, perform_interactive_rebase, rebase, reset_to_commit, revert_commit, search_commit_history, undo, redo};
 use commands::tag::create_tag;
 use commands::terminal::{close_terminal, open_terminal, resize_terminal, write_terminal};
 use commands::diff::{check_lfs, get_file_base64, get_file_content, get_file_diff};
@@ -69,6 +70,8 @@ pub fn run() {
             redo,
             // revert
             revert_commit,
+            // reset
+            reset_to_commit,
             // tag
             create_tag,
             // terminal

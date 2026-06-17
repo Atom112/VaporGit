@@ -1,4 +1,5 @@
 use crate::git;
+use crate::git_err;
 use crate::models::diff::DiffResult;
 
 #[tauri::command]
@@ -18,7 +19,7 @@ pub async fn get_file_diff(
         )
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -32,7 +33,7 @@ pub async fn get_file_content(
         git::diff::get_file_content(&repo, &file_path, commit_id.as_deref())
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -46,7 +47,7 @@ pub async fn get_file_base64(
         git::diff::get_file_base64(&repo, &file_path, commit_id.as_deref())
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -56,5 +57,5 @@ pub async fn check_lfs(path: String, file_path: String) -> Result<bool, String> 
         git::diff::check_lfs(&repo, &file_path)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }

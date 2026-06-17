@@ -1,5 +1,6 @@
 use crate::github::{api::GitHubClient, auth, parse_github_response, update};
 use crate::git;
+use crate::git_err;
 use crate::models::github::{
     AuthStatus, CreatePullRequest, GitHubBranch, GitHubPullRequest, GitHubRelease,
     GitHubReleaseAsset, GitHubRepo, GitHubUser, MergePullRequest, MergePullResult, PullRequestFile,
@@ -88,7 +89,7 @@ pub async fn push_to_github(
         git::remote::push_with_github_token(&repo, "origin", &remote_url, &token, &branch)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 /// List pull requests for a repository.

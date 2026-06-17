@@ -1,4 +1,5 @@
 use crate::git;
+use crate::git_err;
 
 #[tauri::command]
 pub async fn create_tag(
@@ -11,5 +12,5 @@ pub async fn create_tag(
         git::tag::create_tag(&repo, &commit_id, &tag_name)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }

@@ -1,19 +1,20 @@
 use git2::{Repository, StashFlags};
+use crate::git_err;
 use crate::models::stash::StashInfo;
 
 pub fn stash_save(repo: &mut Repository, message: Option<&str>) -> Result<(), String> {
     let signature = repo
         .signature()
-        .map_err(|e| format!("无法获取签名: {}", e))?;
+        .map_err(|e| git_err!("STASH_SIGNATURE_FAILED", "Failed to get signature: {}", e))?;
 
     let msg = message.unwrap_or("WIP");
 
     repo.stash_save(&signature, msg, Some(StashFlags::DEFAULT))
         .map_err(|e| {
             if e.code() == git2::ErrorCode::NotFound {
-                "没有变更需要保存".to_string()
+                git_err!("STASH_EMPTY", "No changes to save")
             } else {
-                format!("Stash 保存失败: {}", e)
+                git_err!("STASH_SAVE_FAILED", "Stash save failed: {}", e)
             }
         })?;
 
@@ -32,7 +33,7 @@ pub fn stash_list(repo: &mut Repository) -> Result<Vec<StashInfo>, String> {
         });
         true
     })
-    .map_err(|e| format!("获取 Stash 列表失败: {}", e))?;
+    .map_err(|e| git_err!("STASH_LIST_FAILED", "Failed to list stashes: {}", e))?;
 
     // reverse to show newest first
     stashes.reverse();
@@ -41,18 +42,18 @@ pub fn stash_list(repo: &mut Repository) -> Result<Vec<StashInfo>, String> {
 
 pub fn stash_pop(repo: &mut Repository, index: usize) -> Result<(), String> {
     repo.stash_pop(index, None)
-        .map_err(|e| format!("Stash pop 失败: {}", e))?;
+        .map_err(|e| git_err!("STASH_POP_FAILED", "Stash pop failed: {}", e))?;
     Ok(())
 }
 
 pub fn stash_apply(repo: &mut Repository, index: usize) -> Result<(), String> {
     repo.stash_apply(index, None)
-        .map_err(|e| format!("Stash apply 失败: {}", e))?;
+        .map_err(|e| git_err!("STASH_APPLY_FAILED", "Stash apply failed: {}", e))?;
     Ok(())
 }
 
 pub fn stash_drop(repo: &mut Repository, index: usize) -> Result<(), String> {
     repo.stash_drop(index)
-        .map_err(|e| format!("Stash 删除失败: {}", e))?;
+        .map_err(|e| git_err!("STASH_DROP_FAILED", "Stash drop failed: {}", e))?;
     Ok(())
 }

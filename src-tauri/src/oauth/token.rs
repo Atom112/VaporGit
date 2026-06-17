@@ -1,3 +1,4 @@
+use crate::git_err;
 use keyring::Entry;
 use std::collections::HashMap;
 use std::fs;
@@ -7,7 +8,7 @@ use std::sync::{Mutex, OnceLock};
 /// Write a file with restricted permissions (owner-only on Unix).
 /// Uses 0600 on Unix; standard permissions on Windows (file is in user appdata).
 pub(crate) fn write_secure_file(path: &std::path::Path, content: &str) -> Result<(), String> {
-    fs::write(path, content).map_err(|e| format!("无法写入文件: {}", e))?;
+    fs::write(path, content).map_err(|e| git_err!("TOKEN_WRITE_FAILED", "Failed to write file: {}", e))?;
     #[cfg(not(target_os = "windows"))]
     {
         use std::os::unix::fs::PermissionsExt;

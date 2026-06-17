@@ -1,3 +1,5 @@
+use crate::git_err;
+
 fn snake_to_camel(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut capitalize = false;
@@ -40,16 +42,16 @@ pub(crate) async fn parse_platform_response<T: serde::de::DeserializeOwned>(
     resp: reqwest::Response,
 ) -> Result<T, String> {
     let status = resp.status();
-    let text = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    let text = resp.text().await.map_err(|e| git_err!("OAUTH_READ_RESPONSE_FAILED", "Failed to read response: {}", e))?;
 
     if !status.is_success() {
         return Err(format!("HTTP {}: {}", status, text));
     }
 
     let mut json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("返回数据格式错误: {}", e))?;
+        serde_json::from_str(&text).map_err(|e| git_err!("OAUTH_PARSE_RESPONSE_FAILED", "Failed to parse response: {}", e))?;
 
     keys_snake_to_camel(&mut json);
 
-    serde_json::from_value(json).map_err(|e| format!("解析响应失败: {}", e))
+    serde_json::from_value(json).map_err(|e| git_err!("OAUTH_PARSE_RESPONSE_FAILED", "Failed to parse response: {}", e))
 }

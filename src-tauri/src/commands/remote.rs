@@ -1,4 +1,5 @@
 use crate::git;
+use crate::git_err;
 use crate::models::remote::RemoteInfo;
 use crate::remote_url;
 
@@ -9,7 +10,7 @@ pub async fn get_remotes(path: String) -> Result<Vec<RemoteInfo>, String> {
         git::remote::get_remotes(&repo)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -19,7 +20,7 @@ pub async fn add_remote(path: String, name: String, url: String) -> Result<(), S
         git::remote::add_remote(&repo, &name, &url)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -29,7 +30,7 @@ pub async fn set_remote_url(path: String, name: String, url: String) -> Result<(
         git::remote::set_remote_url(&repo, &name, &url)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -39,7 +40,7 @@ pub async fn delete_remote(path: String, name: String) -> Result<(), String> {
         git::remote::delete_remote(&repo, &name)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -49,7 +50,7 @@ pub async fn fetch(path: String, remote: Option<String>) -> Result<(), String> {
         git::remote::fetch(&repo, remote.as_deref())
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -63,7 +64,7 @@ pub async fn pull(
         git::remote::pull(&repo, remote.as_deref(), branch.as_deref())
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -77,7 +78,7 @@ pub async fn push(
         git::remote::push(&repo, remote.as_deref(), branch.as_deref())
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 /// Push, auto-creating the remote repository if it doesn't exist.
@@ -158,7 +159,7 @@ async fn get_remote_url_for_push(path: &str, remote_name: &str) -> Result<String
         git::remote::get_push_url(&repo, &name)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?;
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?;
     r.map_err(|e| e)
 }
 
@@ -171,16 +172,16 @@ async fn auto_configure_remote(path: &str, remote_name: &str) -> Result<String, 
             let repo = git::repo::open_repo(&path).map_err(|e| e.to_string())?;
             let workdir = repo
                 .workdir()
-                .ok_or_else(|| "无法获取仓库工作目录".to_string())?;
+                .ok_or_else(|| git_err!("REMOTE_NO_WORKDIR", "Failed to get repository working directory"))?;
             let name = workdir
                 .file_name()
                 .and_then(|n| n.to_str())
                 .map(|n| n.to_string())
-                .ok_or_else(|| "无法从路径获取仓库名称".to_string())?;
+                .ok_or_else(|| git_err!("REMOTE_PARSE_NAME", "Failed to get repository name from path"))?;
             Ok(name)
         })
         .await
-        .map_err(|e| format!("内部错误: {}", e))?;
+        .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?;
         r?
     };
 
@@ -202,7 +203,7 @@ async fn auto_configure_remote(path: &str, remote_name: &str) -> Result<String, 
         return Ok(remote_url);
     }
 
-    Err("未登录 GitHub 或 Gitee，无法自动配置远程仓库。请先在设置中登录，或手动添加远程仓库。".to_string())
+    Err(git_err!("REMOTE_NOT_LOGGED_IN", "Not logged in to GitHub or Gitee, cannot auto-configure remote repository. Please login in settings first or add manually."))
 }
 
 async fn add_remote_to_repo(path: &str, remote_name: &str, url: &str) -> Result<(), String> {
@@ -212,11 +213,11 @@ async fn add_remote_to_repo(path: &str, remote_name: &str, url: &str) -> Result<
     let r = tokio::task::spawn_blocking(move || {
         let repo = git::repo::open_repo(&path)?;
         repo.remote(&name, &url)
-            .map_err(|e| format!("无法添加远程 {}: {}", name, e))?;
+            .map_err(|e| git_err!("REMOTE_ADD_FAILED", "Failed to add remote {}: {}", name, e))?;
         Ok(())
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?;
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?;
     r
 }
 
@@ -233,7 +234,7 @@ async fn try_push(
         git::remote::push(&repo, remote.as_deref(), branch.as_deref())
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?;
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?;
     r
 }
 
@@ -241,8 +242,8 @@ async fn create_remote_repo(parsed: &remote_url::ParsedRemoteUrl) -> Result<(), 
     match parsed.platform {
         remote_url::Platform::GitHub => {
             let raw = crate::github::auth::load_token()
-                .map_err(|_| "无法读取 GitHub 认证信息".to_string())?;
-            let token = raw.ok_or_else(|| "未登录 GitHub，请在设置中先登录".to_string())?;
+                .map_err(|_| git_err!("AUTH_GITHUB_READ_FAILED", "Failed to read GitHub authentication"))?;
+            let token = raw.ok_or_else(|| git_err!("AUTH_GITHUB_NOT_LOGGED_IN", "Not logged in to GitHub, please login in settings first"))?;
             let client = crate::github::api::GitHubClient::new(token)?;
             client.create_repo(&parsed.repo_name, None, true).await?;
             Ok(())
@@ -250,8 +251,8 @@ async fn create_remote_repo(parsed: &remote_url::ParsedRemoteUrl) -> Result<(), 
         remote_url::Platform::Gitee => {
             let raw = crate::gitee::auth::token_store()
                 .load()
-                .map_err(|_| "无法读取 Gitee 认证信息".to_string())?;
-            let token = raw.ok_or_else(|| "未登录 Gitee，请在设置中先登录".to_string())?;
+                .map_err(|_| git_err!("AUTH_GITEE_READ_FAILED", "Failed to read Gitee authentication"))?;
+            let token = raw.ok_or_else(|| git_err!("AUTH_GITEE_NOT_LOGGED_IN", "Not logged in to Gitee, please login in settings first"))?;
             let client = crate::gitee::api::GiteeClient::new(token)?;
             client.create_repo(&parsed.repo_name, None, true).await?;
             Ok(())

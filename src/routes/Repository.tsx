@@ -787,6 +787,12 @@ const Repository: Component = () => {
     }
   };
 
+  const handleGraphReset = async (_commitId: string) => {
+    // The actual reset operation is handled in CommitGraph.
+    // Here we just refresh the graph and status since HEAD changed.
+    await refreshAll();
+  };
+
   const stagedFiles = () =>
     diffStore.fileStatuses.filter((f) => f.staged);
   const unstagedFiles = () =>
@@ -1040,6 +1046,7 @@ const Repository: Component = () => {
                           onCreatePullRequest={handleCreatePullRequest}
                           onCheckoutBranch={handleGraphCheckoutBranch}
                           onDeleteBranch={handleGraphDeleteBranch}
+                          onReset={handleGraphReset}
                         />
                         <Show when={commitStore.graphData?.truncated}>
                           <div class="shrink-0 px-3 py-1.5 text-xs text-yellow-400/70 bg-yellow-400/5 border-t border-yellow-400/10 text-center">

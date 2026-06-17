@@ -312,6 +312,10 @@ export async function revertCommit(path: string, commitId: string): Promise<stri
   return invoke('revert_commit', { path, commitId });
 }
 
+export async function resetToCommit(path: string, commitId: string): Promise<string> {
+  return invoke('reset_to_commit', { path, commitId });
+}
+
 export async function createTag(path: string, commitId: string, tagName: string): Promise<string> {
   return invoke('create_tag', { path, commitId, tagName });
 }

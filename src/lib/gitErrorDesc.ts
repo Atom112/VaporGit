@@ -25,16 +25,28 @@ function lookup(key: string): string | null {
 export function describeError(error: unknown): string {
   const errStr = String(error);
 
-  // 1. Extract HTTP status code from error strings (match both English and Chinese patterns)
-  const match = errStr.match(/(?:HTTP[\/\s]*|status\s+code\s+|状态码\s*)(4\d\d|5\d\d)\b/);
-  if (match) {
-    const t = lookup(i18nKey(match[1]));
+  // 1. Try to extract [ERROR_CODE] prefix (new format from Rust git_err! macro)
+  const codeMatch = errStr.match(/^\[([A-Z][A-Z_0-9]+)\]\s*(.*)/s);
+  if (codeMatch) {
+    const code = codeMatch[1];
+    const debugMsg = codeMatch[2];
+    // Look up i18n key like "errorDesc.COMMIT_FAILED"
+    const t = lookup(`errorDesc.${code}`);
+    if (t) return t;
+    // No i18n translation for this code — show the English debug message
+    return debugMsg;
+  }
+
+  // 2. Extract HTTP status code from error strings (match both English and Chinese patterns)
+  const httpMatch = errStr.match(/(?:HTTP[\/\s]*|status\s+code\s+|状态码\s*)(4\d\d|5\d\d)\b/);
+  if (httpMatch) {
+    const t = lookup(i18nKey(httpMatch[1]));
     if (t) {
-      return `HTTP ${match[1]} — ${t}`;
+      return `HTTP ${httpMatch[1]} — ${t}`;
     }
   }
 
-  // 2. Special known patterns — match both English and Chinese error messages
+  // 3. Special known patterns — match both English and Chinese error messages
 
   // Authentication / login errors
   if (

@@ -3,7 +3,7 @@ import { Portal } from 'solid-js/web';
 import { tt } from '../../i18n';
 import { describeError } from '../../lib/gitErrorDesc';
 import type { GraphNode, CommitGraphData } from '../../lib/types';
-import { revertCommit, createTag, deleteRemoteBranch as deleteRemoteBranchCmd, getRemotes } from '../../lib/tauriCommands';
+import { revertCommit, createTag, deleteRemoteBranch as deleteRemoteBranchCmd, getRemotes, resetToCommit } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 
 const COLORS = [
@@ -33,6 +33,7 @@ interface CommitGraphProps {
   onCreatePullRequest?: (commitId: string) => void;
   onCheckoutBranch?: (branchName: string) => void;
   onDeleteBranch?: (branchName: string) => void;
+  onReset?: (commitId: string) => void;
 }
 
 const CommitGraph: Component<CommitGraphProps> = (props) => {
@@ -522,6 +523,49 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
     }
   };
 
+  // ── Reset dialog ──
+  const [showReset, setShowReset] = createSignal<'enter' | 'exit' | null>(null);
+  const [resetLoading, setResetLoading] = createSignal(false);
+  const [resetError, setResetError] = createSignal<string | null>(null);
+  let resetTargetId = '';
+
+  const openResetDialog = () => {
+    const menu = ctxMenu();
+    if (!menu) return;
+    resetTargetId = menu.node.id;
+    closeContextMenu();
+    setResetLoading(false);
+    setResetError(null);
+    setShowReset('enter');
+  };
+
+  const closeResetDialog = () => {
+    const s = showReset();
+    if (!s || s === 'exit') return;
+    setShowReset('exit');
+    setTimeout(() => {
+      setShowReset(null);
+      setResetError(null);
+    }, 120);
+  };
+
+  const handleReset = async () => {
+    if (!props.repoPath) return;
+    setResetLoading(true);
+    setResetError(null);
+    try {
+      const result = await resetToCommit(props.repoPath, resetTargetId);
+      addToast(result, 'success');
+      closeResetDialog();
+      // Notify parent to refresh graph (HEAD has changed)
+      props.onReset?.(resetTargetId);
+    } catch (e) {
+      setResetError(describeError(e));
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   // ── Tag dialog ──
   const [showTag, setShowTag] = createSignal<'enter' | 'exit' | null>(null);
   const [tagName, setTagName] = createSignal('');
@@ -841,6 +885,17 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 </svg>
                 {tt('commit.revert')}
               </button>
+              <Show when={!menu().node.isHead}>
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-amber-500/10 transition-colors flex items-center gap-2 text-amber-400"
+                  onClick={openResetDialog}
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  {tt('commit.resetToThis')}
+                </button>
+              </Show>
             </div>
           </div>
         )}
@@ -880,6 +935,49 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                 disabled={revertLoading()}
               >
                 {revertLoading() ? tt('common.loading') : tt('commit.revert')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Show>
+
+    {/* ── Reset confirmation dialog ── */}
+    <Show when={showReset()}>
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class={`w-96 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
+          showReset() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
+        }`}>
+          <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <h2 class="text-sm font-bold text-amber-400">{tt('commit.resetToThis')}</h2>
+            <button
+              class="text-xs opacity-50 hover:text-red-400 transition-colors"
+              onClick={closeResetDialog}
+            >
+              {tt('common.close')}
+            </button>
+          </div>
+          <div class="p-4 space-y-3">
+            <p class="text-sm opacity-80">{tt('commit.resetConfirm')}</p>
+            <Show when={resetError()}>
+              <div class="p-2 rounded bg-red-500/20 border border-red-500/30 text-red-200 text-xs">
+                {resetError()}
+              </div>
+            </Show>
+            <div class="flex gap-2 justify-end">
+              <button
+                class="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm transition-colors"
+                onClick={closeResetDialog}
+                disabled={resetLoading()}
+              >
+                {tt('common.cancel')}
+              </button>
+              <button
+                class="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-sm font-medium transition-colors"
+                onClick={handleReset}
+                disabled={resetLoading()}
+              >
+                {resetLoading() ? tt('common.loading') : tt('commit.resetToThis')}
               </button>
             </div>
           </div>
