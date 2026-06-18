@@ -6,7 +6,7 @@ import { setRepoStore } from '../../stores/repoStore';
 import { setDiffStore } from '../../stores/diffStore';
 import { addToast } from '../../stores/toastStore';
 import { tt, ttf } from '../../i18n';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeErrorDetail } from '../../lib/gitErrorDesc';
 import type { GitHubRepo } from '../../lib/types';
 
 interface Props {
@@ -82,8 +82,9 @@ const CreateRepoDialog: Component<Props> = (props) => {
       props.onClose();
       props.onNavigate();
     } catch (e) {
-      setError(describeError(e));
-      addToast(`${tt('createRepo.error')}: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      setError(message);
+      addToast(`${tt('createRepo.error')}: ${message}`, detail, 'error');
     } finally {
       setLoading(false);
     }

@@ -7,7 +7,7 @@ import {
 } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt } from '../../i18n';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeErrorDetail } from '../../lib/gitErrorDesc';
 import type { BranchInfo, RebaseEntry } from '../../lib/types';
 
 interface Props {
@@ -45,7 +45,8 @@ const InteractiveRebase: Component<Props> = (props) => {
         if (alt) setTargetBranch(alt.name);
       })
       .catch((e) => {
-        addToast(`加载分支列表失败: ${describeError(e)}`, 'error');
+        const { message, detail } = describeErrorDetail(e);
+        addToast(`加载分支列表失败: ${message}`, 'error', detail);
       })
       .finally(() => setBranchesLoading(false));
   });
@@ -60,7 +61,8 @@ const InteractiveRebase: Component<Props> = (props) => {
       const result = await listRebaseCommits(props.repoPath, branch);
       setEntries(result);
     } catch (e) {
-      addToast(`加载变基提交列表失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`加载变基提交列表失败: ${message}`, 'error', detail);
       setEntries([]);
     } finally {
       setEntriesLoading(false);
@@ -96,9 +98,10 @@ const InteractiveRebase: Component<Props> = (props) => {
       addToast(result, 'success');
       props.onRefresh();
     } catch (e) {
-      const msg = `变基失败: ${describeError(e)}`;
+      const { message, detail } = describeErrorDetail(e);
+      const msg = `变基失败: ${message}`;
       setRebaseResult(msg);
-      addToast(msg, 'error');
+      addToast(msg, 'error', detail);
     } finally {
       setRebaseLoading(false);
     }
@@ -116,7 +119,8 @@ const InteractiveRebase: Component<Props> = (props) => {
       addToast(result, 'success');
       props.onRefresh();
     } catch (e) {
-      addToast(`Cherry-pick 失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`Cherry-pick 失败: ${message}`, 'error', detail);
     } finally {
       setCpLoading(false);
     }

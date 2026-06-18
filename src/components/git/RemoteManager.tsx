@@ -2,7 +2,7 @@ import { Component, createSignal, createEffect, Show, For } from 'solid-js';
 import { getRemotes, addRemote, setRemoteUrl, deleteRemote } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt, ttf } from '../../i18n';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeError, describeErrorDetail } from '../../lib/gitErrorDesc';
 import type { RemoteInfo } from '../../lib/types';
 
 interface Props {
@@ -69,7 +69,8 @@ const RemoteManager: Component<Props> = (props) => {
       await loadRemotes();
       props.onRefresh?.();
     } catch (e) {
-      addToast(ttf('repo.remoteActionFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.remoteActionFailed', message), 'error', detail);
       setError(describeError(e));
     } finally {
       setAddLoading(false);
@@ -78,7 +79,7 @@ const RemoteManager: Component<Props> = (props) => {
 
   const handleStartEdit = (remote: RemoteInfo) => {
     setEditingRemote(remote.name);
-    setEditUrl(remote.push_url || remote.url);
+    setEditUrl(remote.pushUrl || remote.url);
   };
 
   const handleSaveEdit = async () => {
@@ -92,7 +93,8 @@ const RemoteManager: Component<Props> = (props) => {
       setEditingRemote(null);
       await loadRemotes();
     } catch (e) {
-      addToast(ttf('repo.remoteActionFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.remoteActionFailed', message), 'error', detail);
       setError(describeError(e));
     } finally {
       setEditLoading(false);
@@ -109,7 +111,8 @@ const RemoteManager: Component<Props> = (props) => {
       await loadRemotes();
       props.onRefresh?.();
     } catch (e) {
-      addToast(ttf('repo.remoteActionFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.remoteActionFailed', message), 'error', detail);
       setError(describeError(e));
     } finally {
       setDeleteLoading(false);
@@ -203,8 +206,8 @@ const RemoteManager: Component<Props> = (props) => {
                             <div class="flex-1 min-w-0">
                               <div class="text-sm font-medium">{remote.name}</div>
                               <div class="text-xs opacity-40 mt-1 truncate">{remote.url}</div>
-                              {remote.push_url !== remote.url && (
-                                <div class="text-xs opacity-30 mt-0.5 truncate">push: {remote.push_url}</div>
+                              {remote.pushUrl !== remote.url && (
+                                <div class="text-xs opacity-30 mt-0.5 truncate">push: {remote.pushUrl}</div>
                               )}
                             </div>
                             <div class="flex gap-1 shrink-0">

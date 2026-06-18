@@ -14,15 +14,26 @@ function lookup(key: string): string | null {
   return t !== key ? t : null;
 }
 
+export interface ErrorDescription {
+  /** User-facing friendly message in the current UI language. */
+  message: string;
+  /** Raw technical detail from the original error string. */
+  detail: string;
+}
+
 /**
- * Wrap an error string with a human-readable description in the current UI
- * language, using the `errorDesc.*` keys from the i18n system.
+ * Parse an error and return both a user-friendly message and the raw detail.
  *
- * Returns the translated description when available, falling back to the
- * original error string. For HTTP errors, also includes the status code
- * for reference.
+ * For code-matched errors (e.g. `[COMMIT_FAILED] git error: ...`):
+ *   - message = i18n translation (or the debug message if no translation)
+ *   - detail  = the debug message part after `[CODE]`
+ * For pattern-matched errors:
+ *   - message = matched i18n message
+ *   - detail  = the raw error string
+ * For unmatched errors:
+ *   - message = detail = raw error string
  */
-export function describeError(error: unknown): string {
+function parseError(error: unknown): ErrorDescription {
   const errStr = String(error);
 
   // 1. Try to extract [ERROR_CODE] prefix (new format from Rust git_err! macro)
@@ -32,9 +43,9 @@ export function describeError(error: unknown): string {
     const debugMsg = codeMatch[2];
     // Look up i18n key like "errorDesc.COMMIT_FAILED"
     const t = lookup(`errorDesc.${code}`);
-    if (t) return t;
+    if (t) return { message: t, detail: debugMsg || errStr };
     // No i18n translation for this code — show the English debug message
-    return debugMsg;
+    return { message: debugMsg, detail: errStr };
   }
 
   // 2. Extract HTTP status code from error strings (match both English and Chinese patterns)
@@ -42,7 +53,7 @@ export function describeError(error: unknown): string {
   if (httpMatch) {
     const t = lookup(i18nKey(httpMatch[1]));
     if (t) {
-      return `HTTP ${httpMatch[1]} — ${t}`;
+      return { message: `HTTP ${httpMatch[1]} — ${t}`, detail: errStr };
     }
   }
 
@@ -53,11 +64,11 @@ export function describeError(error: unknown): string {
     /not_?authenticated|authenticat(ion|e).*failed|未登录|认证失败|登录已过期/i.test(errStr)
   ) {
     const t = lookup('errorDesc.notAuthenticated');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
   if (/authenticat(ion|e).*failed|认证失败|登录失败/i.test(errStr)) {
     const t = lookup('errorDesc.authFailed');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Network errors
@@ -65,7 +76,7 @@ export function describeError(error: unknown): string {
     /network.*error|网络错误|网络异常|连接失败|connection\s+(refused|reset|failed)/i.test(errStr)
   ) {
     const t = lookup('errorDesc.networkError');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Timeout
@@ -73,7 +84,7 @@ export function describeError(error: unknown): string {
     /timeout|timed out|超时|连接超时|请求超时/i.test(errStr)
   ) {
     const t = lookup('errorDesc.timeout');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Push rejected
@@ -81,7 +92,7 @@ export function describeError(error: unknown): string {
     /non-fast-forward|rejected|推送被拒绝|被拒绝.*推送/i.test(errStr)
   ) {
     const t = lookup('errorDesc.pushRejected');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Not found (resource, branch, file, etc)
@@ -89,7 +100,7 @@ export function describeError(error: unknown): string {
     /not found|未找到|不存.*在|无法找到|找不到/i.test(errStr)
   ) {
     const t = lookup('errorDesc.notFound');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Already exists
@@ -97,7 +108,7 @@ export function describeError(error: unknown): string {
     /already exists|已存在|已经存在/i.test(errStr)
   ) {
     const t = lookup('errorDesc.alreadyExists');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Permission denied
@@ -105,7 +116,7 @@ export function describeError(error: unknown): string {
     /permission denied|权限.*不[足够]|没有.*权限|access denied/i.test(errStr)
   ) {
     const t = lookup('errorDesc.permissionDenied');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Merge conflict
@@ -113,7 +124,7 @@ export function describeError(error: unknown): string {
     /merge conflict|conflict|冲突|合并.*冲突/i.test(errStr)
   ) {
     const t = lookup('errorDesc.mergeConflict');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Branch not found (specific)
@@ -121,7 +132,7 @@ export function describeError(error: unknown): string {
     /branch.*not found|分支.*不存|没有.*分支/i.test(errStr)
   ) {
     const t = lookup('errorDesc.branchNotFound');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
   // Nothing to commit
@@ -129,8 +140,33 @@ export function describeError(error: unknown): string {
     /nothing to commit|nothing.*commit|没有变|无.*变|没有.*提交|干净的/i.test(errStr)
   ) {
     const t = lookup('errorDesc.nothingToCommit');
-    if (t) return t;
+    if (t) return { message: t, detail: errStr };
   }
 
-  return errStr;
+  return { message: errStr, detail: errStr };
+}
+
+/**
+ * Wrap an error string with a human-readable description in the current UI
+ * language, using the `errorDesc.*` keys from the i18n system.
+ *
+ * Returns the translated description when available, falling back to the
+ * original error string. For HTTP errors, also includes the status code
+ * for reference.
+ */
+export function describeError(error: unknown): string {
+  return parseError(error).message;
+}
+
+/**
+ * Like {@link describeError} but returns both the user-facing message and the
+ * raw technical detail. Use this when you need to show the original error
+ * information alongside the friendly message (e.g. in error toasts).
+ *
+ * @example
+ * const { message, detail } = describeErrorDetail(e);
+ * addToast(message, 'error', detail);
+ */
+export function describeErrorDetail(error: unknown): ErrorDescription {
+  return parseError(error);
 }

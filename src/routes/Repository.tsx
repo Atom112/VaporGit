@@ -56,7 +56,7 @@ import BranchCompareDialog from '../components/git/BranchCompareDialog';
 import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
 import TerminalPanel from '../components/terminal/TerminalPanel';
 import { tt, ttf } from '../i18n';
-import { describeError } from '../lib/gitErrorDesc';
+import { describeError, describeErrorDetail } from '../lib/gitErrorDesc';
 
 const Repository: Component = () => {
   // ── State ──
@@ -162,8 +162,9 @@ const Repository: Component = () => {
         setShowConflictResolver(true);
       }
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('刷新状态失败:', e);
-      addToast(ttf('repo.refreshFailed', describeError(e)), 'error');
+      addToast(ttf('repo.refreshFailed', message), detail, 'error');
     }
   };
 
@@ -192,10 +193,11 @@ const Repository: Component = () => {
       const data = await getCommitGraph(path);
       setCommitStore({ graphData: data, graphLoading: false });
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('加载提交图失败:', e);
       setCommitStore({ graphLoading: false });
       if (!silent) {
-        addToast(ttf('repo.graphLoadFailed', describeError(e)), 'error');
+        addToast(ttf('repo.graphLoadFailed', message), detail, 'error');
       }
     }
   };
@@ -208,10 +210,11 @@ const Repository: Component = () => {
       const branches = await getBranchList(path);
       setCommitStore({ branches, branchesLoading: false });
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('加载分支列表失败:', e);
       setCommitStore({ branchesLoading: false });
       if (!silent) {
-        addToast(ttf('repo.branchesLoadFailed', describeError(e)), 'error');
+        addToast(ttf('repo.branchesLoadFailed', message), detail, 'error');
       }
     }
   };
@@ -348,8 +351,9 @@ const Repository: Component = () => {
         setShowConflictResolver(true);
       }
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('暂存/取消暂存失败:', e);
-      addToast(ttf('repo.stageFailed', describeError(e)), 'error');
+      addToast(ttf('repo.stageFailed', message), detail, 'error');
     } finally {
       setStaging(false);
     }
@@ -374,8 +378,9 @@ const Repository: Component = () => {
       }
       addToast(`已暂存 ${unstaged.length} 个文件`, 'success');
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('Stage all failed:', e);
-      addToast(ttf('repo.stageAllFailed', describeError(e)), 'error');
+      addToast(ttf('repo.stageAllFailed', message), detail, 'error');
     } finally {
       setStaging(false);
     }
@@ -396,8 +401,9 @@ const Repository: Component = () => {
         setShowConflictResolver(true);
       }
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('Unstage all failed:', e);
-      addToast(ttf('repo.unstageAllFailed', describeError(e)), 'error');
+      addToast(ttf('repo.unstageAllFailed', message), detail, 'error');
     } finally {
       setStaging(false);
     }
@@ -410,7 +416,8 @@ const Repository: Component = () => {
       const updated = await discardFiles(path, [file.path]);
       setDiffStore({ fileStatuses: updated });
     } catch (e) {
-      addToast(`放弃更改失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`放弃更改失败: ${message}`, detail, 'error');
     }
   };
 
@@ -425,7 +432,8 @@ const Repository: Component = () => {
       setDiffStore({ fileStatuses: updated });
       addToast(`已放弃 ${unstaged.length} 个文件的更改`, 'success');
     } catch (e) {
-      addToast(`放弃更改失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`放弃更改失败: ${message}`, detail, 'error');
     }
   };
 
@@ -464,9 +472,10 @@ const Repository: Component = () => {
       const result = await getFileDiff(path, filePath);
       setDiffStore({ diffResult: result, diffLoading: false });
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('加载文件差异失败:', e);
       setDiffStore({ diffLoading: false });
-      addToast(ttf('repo.diffLoadFailed', describeError(e)), 'error');
+      addToast(ttf('repo.diffLoadFailed', message), detail, 'error');
     }
   };
 
@@ -485,8 +494,9 @@ const Repository: Component = () => {
       const detail = await getCommitDetail(path, c.id);
       setCommitDetail(detail);
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('加载提交详情失败:', e);
-      addToast(ttf('repo.commitDetailLoadFailed', describeError(e)), 'error');
+      addToast(ttf('repo.commitDetailLoadFailed', message), detail, 'error');
     } finally {
       setCommitLoading(false);
     }
@@ -527,8 +537,9 @@ const Repository: Component = () => {
         });
         setCommitDetail(detail);
       } catch (e) {
+        const { message, detail } = describeErrorDetail(e);
         console.error('从图形加载提交详情失败:', e);
-        addToast(ttf('repo.commitDetailLoadFailed', describeError(e)), 'error');
+        addToast(ttf('repo.commitDetailLoadFailed', message), detail, 'error');
       } finally {
         setCommitLoading(false);
       }
@@ -555,9 +566,10 @@ const Repository: Component = () => {
       );
       setDiffStore({ diffResult: result, diffLoading: false });
     } catch (e) {
+      const { message, detail } = describeErrorDetail(e);
       console.error('加载提交文件差异失败:', e);
       setDiffStore({ diffLoading: false });
-      addToast(ttf('repo.diffLoadFailed', describeError(e)), 'error');
+      addToast(ttf('repo.diffLoadFailed', message), detail, 'error');
     }
   };
 
@@ -604,7 +616,8 @@ const Repository: Component = () => {
       addToast(tt('repo.fetchSuccess'), 'success');
       await refreshGraph(true);
     } catch (e) {
-      addToast(ttf('repo.fetchFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.fetchFailed', message), detail, 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -627,7 +640,8 @@ const Repository: Component = () => {
         addToast(result, 'success');
       }
     } catch (e) {
-      addToast(ttf('repo.pullFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.pullFailed', message), detail, 'error');
       // Also check for conflicts on error (e.g. merge conflicts returned as errors)
       await refreshStatus();
       const statuses = diffStore.fileStatuses;
@@ -648,7 +662,8 @@ const Repository: Component = () => {
       addToast(`已撤销提交: ${msg.slice(0, 50)}`, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(ttf('repo.undoFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.undoFailed', message), detail, 'error');
     } finally {
       setUndoLoading(false);
     }
@@ -663,7 +678,8 @@ const Repository: Component = () => {
       addToast(`已重做提交: ${msg.slice(0, 50)}`, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(ttf('repo.redoFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.redoFailed', message), detail, 'error');
     } finally {
       setUndoLoading(false);
     }
@@ -709,7 +725,8 @@ const Repository: Component = () => {
       }
       addToast('远程仓库不是 GitHub 或 Gitee 地址', 'error');
     } catch (e) {
-      addToast(`获取远程仓库信息失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`获取远程仓库信息失败: ${message}`, detail, 'error');
     }
   };
 
@@ -722,7 +739,8 @@ const Repository: Component = () => {
       addToast('已检出到提交 ' + commitId.slice(0, 8), 'success');
       await refreshAll();
     } catch (e) {
-      addToast(ttf('commit.checkoutFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('commit.checkoutFailed', message), detail, 'error');
     }
   };
 
@@ -745,7 +763,8 @@ const Repository: Component = () => {
       setCreateBranchDialog(null);
       await refreshAll();
     } catch (e) {
-      addToast(ttf('commit.createBranchFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('commit.createBranchFailed', message), detail, 'error');
     } finally {
       setCreateBranchLoading(false);
     }
@@ -759,7 +778,8 @@ const Repository: Component = () => {
       addToast(result, 'success');
       await refreshAll();
     } catch (e) {
-      addToast(ttf('commit.cherryPickFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('commit.cherryPickFailed', message), detail, 'error');
     }
   };
 
@@ -771,7 +791,8 @@ const Repository: Component = () => {
       addToast(ttf('repo.switchBranchSuccess', branchName), 'success');
       await refreshAll();
     } catch (e) {
-      addToast(ttf('repo.switchBranchFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.switchBranchFailed', message), detail, 'error');
     }
   };
 
@@ -783,7 +804,8 @@ const Repository: Component = () => {
       addToast(ttf('commit.deleteBranchSuccess', branchName), 'success');
       await refreshAll();
     } catch (e) {
-      addToast(ttf('commit.deleteBranchFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('commit.deleteBranchFailed', message), detail, 'error');
     }
   };
 
@@ -810,7 +832,8 @@ const Repository: Component = () => {
     try {
       await openTerminal(path);
     } catch (e) {
-      addToast(ttf('repo.terminalOpenFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.terminalOpenFailed', message), detail, 'error');
       handleCloseTerminal();
     }
   };

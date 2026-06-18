@@ -11,7 +11,7 @@ import GitHubRepoList from '../components/github/GitHubRepoList';
 import GiteeRepoList from '../components/gitee/GiteeRepoList';
 import CreateRepoDialog from '../components/ui/CreateRepoDialog';
 import { tt } from '../i18n';
-import { describeError } from '../lib/gitErrorDesc';
+import { describeErrorDetail } from '../lib/gitErrorDesc';
 
 const Home: Component = () => {
   const navigate = useNavigate();
@@ -95,8 +95,9 @@ const Home: Component = () => {
       setClonePhase('closed');
       navigate('/repository');
     } catch (e) {
-      addToast(`${tt('home.cloneFailed')}: ${describeError(e)}`, 'error');
-      setCloneError(String(describeError(e)));
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`${tt('home.cloneFailed')}: ${message}`, detail, 'error');
+      setCloneError(String(message));
       setRepoStore({ loading: false });
     } finally {
       setCloneLoading(false);

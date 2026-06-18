@@ -2,7 +2,7 @@ import { Component, createSignal, createEffect, Show, For } from 'solid-js';
 import { getBranchList, compareBranches } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt, ttf } from '../../i18n';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeErrorDetail } from '../../lib/gitErrorDesc';
 import type { BranchInfo, BranchDiffSummary } from '../../lib/types';
 
 interface Props {
@@ -40,7 +40,8 @@ const BranchCompareDialog: Component<Props> = (props) => {
         }
       })
       .catch((e) => {
-        addToast(`加载分支列表失败: ${describeError(e)}`, 'error');
+        const { message, detail } = describeErrorDetail(e);
+        addToast(`加载分支列表失败: ${message}`, detail, 'error');
       })
       .finally(() => setBranchesLoading(false));
   });
@@ -53,7 +54,8 @@ const BranchCompareDialog: Component<Props> = (props) => {
       const summary = await compareBranches(props.repoPath, baseBranch(), targetBranch());
       setResult(summary);
     } catch (e) {
-      addToast(`分支对比失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`分支对比失败: ${message}`, detail, 'error');
     } finally {
       setLoading(false);
     }
