@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to publish, for example v1.2.9'
+        required: false
+        type: string
 
 jobs:
   build:
@@ -53,11 +58,11 @@ jobs:
         run: npm ci
 
       - name: Build and upload
-        uses: tauri-apps/tauri-action@v2
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ inputs.tag_name || github.ref_name }}
           releaseName: 'VaporGit v__VERSION__'
           releaseBody: |
             ## VaporGit v__VERSION__
