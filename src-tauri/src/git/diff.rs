@@ -1,9 +1,12 @@
-use std::path::Path;
+use std::{io::Read, path::Path};
 use git2::{DiffOptions, Repository, Oid};
 use crate::models::diff::{DiffHunk, DiffLine, DiffLineKind, DiffResult};
 use base64::Engine;
 
 const MAX_DIFF_SIZE: usize = 1_000_000;
+const FULL_FILE_LIMIT: usize = 128 * 1024;
+const FULL_FILE_HARD_LIMIT: usize = 256 * 1024;
+const FULL_FILE_TOO_LARGE_MESSAGE: &str = "当前文件体积过大，无法完整读取";
 
 pub fn get_file_diff(
     repo: &Repository,
@@ -125,16 +128,54 @@ pub fn get_file_content(
                 .map_err(|e| format!("无法获取文件对象: {}", e))?
                 .peel_to_blob()
                 .map_err(|e| format!("无法读取文件内容: {}", e))?;
-            Ok(String::from_utf8_lossy(blob.content()).to_string())
+            let content = blob.content();
+            if content.len() > FULL_FILE_HARD_LIMIT {
+                return Ok(FULL_FILE_TOO_LARGE_MESSAGE.to_string());
+            }
+            Ok(format_full_file_content(content, content.len()))
         }
         None => {
             let workdir = repo
                 .workdir()
                 .ok_or_else(|| "无法获取工作目录".to_string())?;
             let full_path = workdir.join(file_path);
-            std::fs::read_to_string(&full_path)
-                .map_err(|e| format!("无法读取文件: {}", e))
+            let metadata = std::fs::metadata(&full_path)
+                .map_err(|e| format!("无法读取文件信息: {}", e))?;
+            let total_len = metadata.len() as usize;
+            if total_len > FULL_FILE_HARD_LIMIT {
+                return Ok(FULL_FILE_TOO_LARGE_MESSAGE.to_string());
+            }
+            let mut file = std::fs::File::open(&full_path)
+                .map_err(|e| format!("无法读取文件: {}", e))?;
+            let mut buf = Vec::new();
+            file.by_ref()
+                .take(FULL_FILE_LIMIT as u64)
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("无法读取文件: {}", e))?;
+            Ok(format_full_file_content(&buf, total_len))
         }
+    }
+}
+
+fn format_full_file_content(content: &[u8], total_len: usize) -> String {
+    let mut text = String::from_utf8_lossy(&content[..content.len().min(FULL_FILE_LIMIT)]).to_string();
+    if total_len > FULL_FILE_LIMIT {
+        text.push_str("\n\n--- 当前文件超过 128KB，仅显示前 128KB 内容 ---");
+    }
+    text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn full_file_content_truncates_after_limit() {
+        let content = vec![b'a'; FULL_FILE_LIMIT + 8];
+        let rendered = format_full_file_content(&content, content.len());
+
+        assert!(rendered.starts_with(&"a".repeat(FULL_FILE_LIMIT)));
+        assert!(rendered.contains("仅显示前 128KB 内容"));
     }
 }
 

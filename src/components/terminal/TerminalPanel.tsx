@@ -2,9 +2,8 @@ import { Component, createEffect, createSignal, onCleanup, onMount } from 'solid
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { resizeTerminal, writeTerminal, closeTerminal } from '../../lib/tauriCommands';
+import { resizeTerminal, writeTerminal } from '../../lib/tauriCommands';
 import { listen } from '@tauri-apps/api/event';
-import { tt } from '../../i18n';
 import { describeError } from '../../lib/gitErrorDesc';
 
 interface TerminalPanelProps {
@@ -100,8 +99,6 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       ro.disconnect();
       cleanupFns.forEach((fn) => fn());
       term.dispose();
-      // Kill the backend process when component unmounts (e.g. navigating away)
-      closeTerminal().catch((e) => logTerminalError('Terminal close failed', e));
     });
   });
 
@@ -140,7 +137,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       />
       {/* Header */}
       <div class="relative flex items-center justify-between px-3 py-1.5 bg-white/[0.04] shrink-0">
-        <span class="text-xs font-medium opacity-60">{tt('repo.terminal')}</span>
+        <span class="text-xs font-medium opacity-60">Terminal</span>
         <button
           class="text-xs opacity-40 hover:text-red-400 hover:opacity-100 transition-colors"
           onClick={props.onClose}

@@ -3,6 +3,7 @@ import { repoStore } from '../stores/repoStore';
 import { getRemotes } from '../lib/tauriCommands';
 import { parsePlatformRemote, PlatformKind, PlatformPullRequest } from '../lib/platformAdapter';
 import { tt } from '../i18n';
+import { describeError } from '../lib/gitErrorDesc';
 import PlatformPRCreateDialog from '../components/platform/PlatformPRCreateDialog';
 import PlatformPRDetail from '../components/platform/PlatformPRDetail';
 import PlatformPRList from '../components/platform/PlatformPRList';
@@ -10,6 +11,17 @@ import PlatformPRList from '../components/platform/PlatformPRList';
 interface PlatformPRsProps {
   kind: PlatformKind;
   authenticated: boolean;
+}
+
+const REMOTE_DETECT_TIMEOUT = 20000;
+
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(tt('pr.fetchTimeout'))), REMOTE_DETECT_TIMEOUT),
+    ),
+  ]);
 }
 
 const PlatformPRs: Component<PlatformPRsProps> = (props) => {
@@ -20,7 +32,7 @@ const PlatformPRs: Component<PlatformPRsProps> = (props) => {
     () => [props.kind, repoStore.repoPath] as const,
     async ([kind, path]) => {
       if (!path) return null;
-      const remotes = await getRemotes(path);
+      const remotes = await withTimeout(getRemotes(path));
       const origin = remotes.find((remote) => remote.name === 'origin');
       const parsed = origin ? parsePlatformRemote(origin.url) : null;
       return parsed?.kind === kind ? { owner: parsed.owner, repo: parsed.repo } : null;
@@ -44,7 +56,13 @@ const PlatformPRs: Component<PlatformPRsProps> = (props) => {
         </div>
       </Show>
 
-      <Show when={props.authenticated && !remoteInfo.loading && !owner()}>
+      <Show when={props.authenticated && remoteInfo.error}>
+        <div class="flex-1 flex items-center justify-center">
+          <div class="text-sm text-red-400">{tt('pr.loadFailed')}: {describeError(remoteInfo.error)}</div>
+        </div>
+      </Show>
+
+      <Show when={props.authenticated && !remoteInfo.loading && !remoteInfo.error && !owner()}>
         <div class="flex-1 flex items-center justify-center">
           <div class="text-center">
             <p class="text-sm text-gray-500">{tt('pr.noRemote')}</p>
@@ -53,7 +71,7 @@ const PlatformPRs: Component<PlatformPRsProps> = (props) => {
         </div>
       </Show>
 
-      <Show when={props.authenticated && owner() && repo()}>
+      <Show when={props.authenticated && !remoteInfo.error && owner() && repo()}>
         <Show when={showCreate()}>
           <PlatformPRCreateDialog
             kind={props.kind}

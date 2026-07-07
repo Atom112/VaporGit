@@ -1,5 +1,4 @@
 import { A } from '@solidjs/router';
-import { tt } from '../../i18n';
 
 interface RepositoryToolbarProps {
   remoteActionLoading: boolean;
@@ -24,12 +23,14 @@ const ToolbarButton = (props: {
   disabled?: boolean;
   onClick?: () => void;
   ariaLabel: string;
+  title: string;
 }) => (
   <button
     class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
     onClick={props.onClick}
     disabled={props.disabled}
     aria-label={props.ariaLabel}
+    title={props.title}
   >
     {props.children}
   </button>
@@ -101,72 +102,73 @@ const ToolIcon = () => (
   </svg>
 );
 
-const PullRequestLink = (props: { href: string }) => (
+const PullRequestLink = (props: { href: string; title: string }) => (
   <A
     class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
     href={props.href}
-    aria-label={tt('repo.prs')}
+    aria-label="PRs"
+    title={props.title}
   >
     <BranchIcon />
-    {tt('repo.prs')}
+    PRs
   </A>
 );
 
 const RepositoryToolbar = (props: RepositoryToolbarProps) => (
   <div id="toolbar" class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
     <div class="flex gap-1.5">
-      <ToolbarButton onClick={props.onFetch} disabled={props.remoteActionLoading} ariaLabel={tt('repo.fetch')}>
+      <ToolbarButton onClick={props.onFetch} disabled={props.remoteActionLoading} ariaLabel="Fetch" title="Fetch：从远程下载最新引用、分支和标签，不改动当前工作区。">
         <SyncDownIcon />
-        {props.remoteActionLoading ? tt('repo.fetching') : tt('repo.fetch')}
+        {props.remoteActionLoading ? 'Fetching...' : 'Fetch'}
       </ToolbarButton>
-      <ToolbarButton onClick={props.onPull} disabled={props.remoteActionLoading} ariaLabel={tt('repo.pull')}>
+      <ToolbarButton onClick={props.onPull} disabled={props.remoteActionLoading} ariaLabel="Pull" title="Pull：拉取远程更新并合并到当前分支，可能会改动工作区。">
         <PullIcon />
-        {props.remoteActionLoading ? tt('repo.pulling') : tt('repo.pull')}
+        {props.remoteActionLoading ? 'Pulling...' : 'Pull'}
       </ToolbarButton>
-      <ToolbarButton onClick={props.onPush} disabled={props.remoteActionLoading} ariaLabel={tt('repo.push')}>
+      <ToolbarButton onClick={props.onPush} disabled={props.remoteActionLoading} ariaLabel="Push" title="Push：将本地提交推送到远程分支。">
         <PushIcon />
-        {props.remoteActionLoading ? tt('repo.pushing') : tt('repo.push')}
+        {props.remoteActionLoading ? 'Pushing...' : 'Push'}
       </ToolbarButton>
-      <ToolbarButton onClick={props.onRemoteManager} ariaLabel={tt('repo.remotes')}>
+      <ToolbarButton onClick={props.onRemoteManager} ariaLabel="Remote Manager" title="Remotes：查看、新增、编辑或删除远程仓库地址。">
         <LinkIcon />
-        {tt('repo.remotes')}
+        Remotes
       </ToolbarButton>
     </div>
 
     <div class="flex gap-1.5">
-      <ToolbarButton onClick={props.onUndo} disabled={props.undoLoading} ariaLabel={tt('repo.undo')}>
+      <ToolbarButton onClick={props.onUndo} disabled={props.undoLoading} ariaLabel="Undo" title="Undo：软撤销最近一次提交，并保留已暂存的变更。">
         <UndoIcon />
-        {props.undoLoading ? '...' : tt('repo.undo')}
+        {props.undoLoading ? '...' : 'Undo'}
       </ToolbarButton>
-      <ToolbarButton onClick={props.onRedo} disabled={props.undoLoading} ariaLabel={tt('repo.redo')}>
+      <ToolbarButton onClick={props.onRedo} disabled={props.undoLoading} ariaLabel="Redo" title="Redo：尝试恢复刚刚被撤销的提交。">
         <RedoIcon />
-        {props.undoLoading ? '...' : tt('repo.redo')}
+        {props.undoLoading ? '...' : 'Redo'}
       </ToolbarButton>
-      <ToolbarButton onClick={props.onStash} ariaLabel={tt('repo.stash')}>
+      <ToolbarButton onClick={props.onStash} ariaLabel="Stash" title="Stash：临时保存、恢复或删除工作区变更。">
         <BoxIcon />
-        {tt('repo.stash')}
+        Stash
       </ToolbarButton>
-      <ToolbarButton onClick={props.onMerge} ariaLabel={tt('repo.merge')}>
+      <ToolbarButton onClick={props.onMerge} ariaLabel="Merge" title="Merge：将其它分支合并到当前分支。">
         <BranchIcon />
-        {tt('repo.merge')}
+        Merge
       </ToolbarButton>
     </div>
 
     <div class="flex gap-1.5">
-      <ToolbarButton onClick={props.onRebase} ariaLabel={tt('repo.rebase')}>
+      <ToolbarButton onClick={props.onRebase} ariaLabel="Rebase" title="Rebase：把当前分支的提交重放到另一个分支或提交之上。">
         <RebaseIcon />
-        {tt('repo.rebase')}
+        Rebase
       </ToolbarButton>
-      <ToolbarButton onClick={props.onBranchCompare} ariaLabel={tt('repo.compareBranches')}>
+      <ToolbarButton onClick={props.onBranchCompare} ariaLabel="Branch Compare" title="Compare：比较两个分支之间的提交和文件变更。">
         <CompareIcon />
-        {tt('repo.compareBranches')}
+        Compare
       </ToolbarButton>
-      <ToolbarButton onClick={props.onGitTools} ariaLabel={tt('repo.gitTools')}>
+      <ToolbarButton onClick={props.onGitTools} ariaLabel="Tools" title="Tools：打开标签、子模块、Blame、Reflog、LFS、SSH 检查等 Git 工具。">
         <ToolIcon />
-        {tt('repo.gitTools')}
+        Tools
       </ToolbarButton>
-      {props.githubAuthenticated && <PullRequestLink href="/pulls" />}
-      {props.giteeAuthenticated && <PullRequestLink href="/gitee-pulls" />}
+      {props.githubAuthenticated && <PullRequestLink href="/pulls" title="PRs：查看、创建和合并当前 GitHub 仓库的 Pull Request。" />}
+      {props.giteeAuthenticated && <PullRequestLink href="/gitee-pulls" title="PRs：查看、创建和合并当前 Gitee 仓库的 Pull Request。" />}
     </div>
   </div>
 );

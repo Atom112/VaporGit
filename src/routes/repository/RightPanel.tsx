@@ -1,6 +1,5 @@
 import FileList from '../../components/git/FileList';
 import type { FileStatus } from '../../lib/types';
-import { tt } from '../../i18n';
 import CommitInput from './CommitInput';
 import RepositoryToolbar from './RepositoryToolbar';
 
@@ -96,10 +95,11 @@ const RightPanel = (props: RightPanelProps) => (
       <button
         class="w-full py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1.5"
         onClick={props.onOpenTerminal}
-        aria-label={tt('repo.terminal')}
+        aria-label="Terminal"
+        title="Terminal: open an integrated shell in the current repository."
       >
         <TerminalIcon />
-        {tt('repo.terminal')}
+        Terminal
       </button>
     </div>
   </div>

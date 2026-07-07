@@ -600,7 +600,17 @@ const Repository: Component = () => {
     }
   };
 
+  const [terminalPhase, setTerminalPhase] = createSignal<'enter' | 'exit' | null>(null);
+  const [terminalStarted, setTerminalStarted] = createSignal(false);
+
   const handleCloseRepository = async () => {
+    if (terminalStarted()) {
+      setTerminalStarted(false);
+      setTerminalPhase(null);
+      closeTerminal().catch((e) => {
+        console.warn(`关闭终端失败: ${describeError(e)}`);
+      });
+    }
     setSelectedCommit(null);
     setSelectedCommitFile(null);
     setCommitDetail(null);
@@ -746,8 +756,6 @@ const Repository: Component = () => {
     diffStore.fileStatuses.filter((f) => !f.staged);
 
   // ── Terminal ──
-  const [terminalPhase, setTerminalPhase] = createSignal<'enter' | 'exit' | null>(null);
-
   const handleOpenTerminal = async () => {
     const path = repoPath();
     if (!path) return;
@@ -755,7 +763,10 @@ const Repository: Component = () => {
     setTerminalPhase('enter');
     await new Promise((r) => setTimeout(r, 50));
     try {
-      await openTerminal(path);
+      if (!terminalStarted()) {
+        await openTerminal(path);
+        setTerminalStarted(true);
+      }
     } catch (e) {
       addToast(ttf('repo.terminalOpenFailed', describeError(e)), 'error');
       handleCloseTerminal();
@@ -768,6 +779,7 @@ const Repository: Component = () => {
     setTerminalPhase('exit');
     setTimeout(() => {
       setTerminalPhase(null);
+      setTerminalStarted(false);
       closeTerminal().catch((e) => {
         console.warn(`关闭终端失败: ${describeError(e)}`);
       });

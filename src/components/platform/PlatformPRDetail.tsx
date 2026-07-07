@@ -12,12 +12,23 @@ import { tt, ttf } from '../../i18n';
 import DiffView from '../git/DiffView';
 import CustomSelect from '../ui/CustomSelect';
 
+const PR_DETAIL_TIMEOUT = 20000;
+
 interface PlatformPRDetailProps {
   kind: PlatformKind;
   owner: string;
   repo: string;
   pr: PlatformPullRequest;
   onBack: () => void;
+}
+
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(tt('pr.fetchTimeout'))), PR_DETAIL_TIMEOUT),
+    ),
+  ]);
 }
 
 const PlatformPRDetail: Component<PlatformPRDetailProps> = (props) => {
@@ -58,12 +69,12 @@ const PlatformPRDetail: Component<PlatformPRDetailProps> = (props) => {
 
   const [files] = createResource(
     () => [props.kind, props.owner, props.repo, pr().number] as const,
-    ([, owner, repo, number]) => adapter().getPRFiles(owner, repo, number),
+    ([, owner, repo, number]) => withTimeout(adapter().getPRFiles(owner, repo, number)),
   );
 
   const [comments] = createResource(
     () => [props.kind, props.owner, props.repo, pr().number] as const,
-    ([, owner, repo, number]) => adapter().listPRComments(owner, repo, number),
+    ([, owner, repo, number]) => withTimeout(adapter().listPRComments(owner, repo, number)),
   );
 
   const handleMerge = async () => {

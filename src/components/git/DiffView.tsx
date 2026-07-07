@@ -7,7 +7,9 @@ import { describeError } from '../../lib/gitErrorDesc';
 import 'highlight.js/styles/github-dark.css';
 import { detectLanguage, highlightLine, highlightLines, highlightFull } from '../../lib/syntax';
 import { settingsStore } from '../../stores/settingsStore';
-import { createVirtualizer } from '@tanstack/solid-virtual';
+
+const FULL_FILE_LOADING_THRESHOLD = 32 * 1024;
+const FULL_FILE_LOADING_MIN_MS = 180;
 
 interface DiffViewProps {
   diffResult?: DiffResult;
@@ -24,7 +26,7 @@ interface LineNumPair {
   newLine: number | null;
 }
 
-const DIFF_ROW_ESTIMATE = 22;
+const wrapStyle = { 'overflow-wrap': 'anywhere' } as const;
 
 function computeLineNums(hunk: DiffHunk): LineNumPair[] {
   let oldLine = hunk.oldStart;
@@ -135,9 +137,16 @@ const DiffView: Component<DiffViewProps> = (props) => {
         : null,
     async ({ filePath, commitId, repoPath }) => {
       if (!repoPath) return null;
+      const started = performance.now();
       try {
-        return await getFileContent(repoPath, filePath, commitId);
-      } catch {
+        const content = await getFileContent(repoPath, filePath, commitId);
+        if (content.length > FULL_FILE_LOADING_THRESHOLD) {
+          const remaining = FULL_FILE_LOADING_MIN_MS - (performance.now() - started);
+          if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+        }
+        return content;
+      } catch (e) {
+        console.warn(`读取完整文件失败: ${describeError(e)}`);
         return null;
       }
     },
@@ -269,7 +278,10 @@ const DiffView: Component<DiffViewProps> = (props) => {
                   />
                 ) : (
                   <Show when={fullContent() !== undefined} fallback={
-                    <div class="flex items-center justify-center h-full opacity-40">加载完整文件...</div>
+                    <div class="flex items-center justify-center h-full gap-2 opacity-40">
+                      <span class="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                      <span>加载完整文件...</span>
+                    </div>
                   }>
                     <Show when={fullContent() !== null} fallback={
                       <div class="flex items-center justify-center h-full opacity-40">无法读取文件内容</div>
@@ -302,7 +314,6 @@ interface StageableViewProps {
 }
 
 const UnifiedView: Component<StageableViewProps> = (props) => {
-  let parentRef: HTMLDivElement | undefined;
   const [stagingHunk, setStagingHunk] = createSignal<number | null>(null);
   const [stagingLine, setStagingLine] = createSignal<{ hunk: number; line: number } | null>(null);
 
@@ -365,33 +376,11 @@ const UnifiedView: Component<StageableViewProps> = (props) => {
     return result;
   });
 
-  const rowVirtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
-    get count() {
-      return rows().length;
-    },
-    getScrollElement: () => parentRef ?? null,
-    estimateSize: () => DIFF_ROW_ESTIMATE,
-    overscan: 16,
-  });
-
   return (
-    <div ref={(el) => { parentRef = el; }} class="h-full overflow-auto">
-      <div
-        class="relative"
-        style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-      >
-        <For each={rowVirtualizer.getVirtualItems()}>
-          {(virtualRow) => {
-            const row = rows()[virtualRow.index];
-            if (!row) return null;
-
-            return (
-              <div
-                ref={(el) => rowVirtualizer.measureElement(el)}
-                data-index={virtualRow.index}
-                class="absolute left-0 right-0"
-                style={{ transform: `translateY(${virtualRow.start}px)` }}
-              >
+    <div class="h-full overflow-auto">
+      <div class="min-w-[640px]">
+        <For each={rows()}>
+          {(row) => (
                 <Show
                   when={row.type === 'line'}
                   fallback={
@@ -431,9 +420,9 @@ const UnifiedView: Component<StageableViewProps> = (props) => {
                     const isStagingLine = showStageButtons() && (line.kind === 'addition' || line.kind === 'deletion');
 
                     return (
-                      <div class={`flex items-stretch ${bgClass} group/line border-b border-white/[0.02]`}>
+                      <div class={`flex items-start ${bgClass} group/line border-b border-white/[0.02]`}>
                         <Show when={isStagingLine}>
-                          <div class="w-4 shrink-0 flex items-center justify-center opacity-0 group-hover/line:opacity-100 transition-opacity">
+                          <div class="w-4 shrink-0 flex items-start justify-center opacity-0 group-hover/line:opacity-100 transition-opacity pt-0.5">
                             <button
                               class="text-[10px] leading-none text-green-400 hover:text-green-300"
                               onClick={() => handleStageLine(lineRow.hunkIndex, lineRow.lineIndex)}
@@ -445,25 +434,23 @@ const UnifiedView: Component<StageableViewProps> = (props) => {
                             </button>
                           </div>
                         </Show>
-                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
+                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0.5 tabular-nums leading-5">
                           {nums.oldLine ?? ''}
                         </div>
-                        <span class="opacity-25 select-none leading-normal">│</span>
-                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
+                        <span class="opacity-25 select-none leading-5 py-0.5">│</span>
+                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0.5 tabular-nums leading-5">
                           {nums.newLine ?? ''}
                         </div>
-                        <span class="opacity-25 select-none leading-normal mx-1">│</span>
-                        <span class={`w-5 shrink-0 text-right select-none leading-normal ${prefixColor}`}>
+                        <span class="opacity-25 select-none leading-5 py-0.5 mx-1">│</span>
+                        <span class={`w-5 shrink-0 text-right select-none leading-5 py-0.5 ${prefixColor}`}>
                           {prefix}
                         </span>
-                        <span class="whitespace-pre-wrap break-all leading-normal" innerHTML={html} />
+                        <span class="block min-w-0 flex-1 whitespace-pre-wrap break-words leading-5 py-0.5" style={wrapStyle} innerHTML={html} />
                       </div>
                     );
                   })()}
                 </Show>
-              </div>
-            );
-          }}
+          )}
         </For>
       </div>
     </div>
@@ -472,7 +459,6 @@ const UnifiedView: Component<StageableViewProps> = (props) => {
 
 /* ── Full File view: show complete file with change annotations ── */
 const FullFileView: Component<{ diffResult: DiffResult; fullContent: string; lang: string | null }> = (props) => {
-  let parentRef: HTMLDivElement | undefined;
   const normalized = () => {
     const c = props.fullContent;
     const s = c.endsWith('\n') ? c.slice(0, -1) : c;
@@ -483,26 +469,12 @@ const FullFileView: Component<{ diffResult: DiffResult; fullContent: string; lan
 
   const highlightedLines = () => highlightFull(props.fullContent, props.lang);
 
-  const rowVirtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
-    get count() {
-      return annotatedLines().length;
-    },
-    getScrollElement: () => parentRef ?? null,
-    estimateSize: () => DIFF_ROW_ESTIMATE,
-    overscan: 16,
-  });
-
   return (
-    <div ref={(el) => { parentRef = el; }} class="h-full overflow-auto">
-      <div
-        class="relative"
-        style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-      >
-        <For each={rowVirtualizer.getVirtualItems()}>
-          {(virtualRow) => {
-            const annot = annotatedLines()[virtualRow.index];
-            if (!annot) return null;
-            const lineHtml = highlightedLines()[virtualRow.index] ?? '';
+    <div class="h-full overflow-auto">
+      <div class="min-w-[640px]">
+        <For each={annotatedLines()}>
+          {(annot, index) => {
+            const lineHtml = highlightedLines()[index()] ?? '';
             let bgClass = '';
             let gutterColor = 'bg-transparent';
             if (annot.kind === 'addition') {
@@ -513,22 +485,16 @@ const FullFileView: Component<{ diffResult: DiffResult; fullContent: string; lan
               gutterColor = 'bg-red-400';
             }
             return (
-              <div
-                ref={(el) => rowVirtualizer.measureElement(el)}
-                data-index={virtualRow.index}
-                class="absolute left-0 right-0"
-                style={{ transform: `translateY(${virtualRow.start}px)` }}
-              >
                 <div class={`flex items-stretch ${bgClass}`}>
                   <div class={`w-0.75 shrink-0 ${gutterColor}`} />
                   <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
                     {annot.newLine ?? ''}
                   </div>
                   <span class="opacity-25 select-none leading-normal">│</span>
-                  <span class={`whitespace-pre-wrap break-all leading-normal ${annot.kind === 'deletion' ? 'opacity-60' : ''}`}
+                  <span class={`block min-w-0 flex-1 whitespace-pre-wrap break-words leading-normal ${annot.kind === 'deletion' ? 'opacity-60' : ''}`}
+                    style={wrapStyle}
                     innerHTML={lineHtml} />
                 </div>
-              </div>
             );
           }}
         </For>
@@ -549,8 +515,6 @@ type SplitVirtualRow =
   | (SplitRow & { hunkIndex: number });
 
 const SplitView: Component<StageableViewProps> = (props) => {
-  let parentRef: HTMLDivElement | undefined;
-
   const [stagingHunk, setStagingHunk] = createSignal<number | null>(null);
 
   const handleStageHunk = async (hunkIndex: number) => {
@@ -607,15 +571,6 @@ const SplitView: Component<StageableViewProps> = (props) => {
     return result;
   });
 
-  const rowVirtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
-    get count() {
-      return rows().length;
-    },
-    getScrollElement: () => parentRef ?? null,
-    estimateSize: () => DIFF_ROW_ESTIMATE,
-    overscan: 16,
-  });
-
   const renderSplitCell = (segment: SplitRow['left'], side: 'left' | 'right') => {
     if (!segment) {
       return (
@@ -641,7 +596,7 @@ const SplitView: Component<StageableViewProps> = (props) => {
           {segment.lineNum ?? ''}
         </div>
         <span class="opacity-25 select-none leading-normal">│</span>
-        <span class={`whitespace-pre-wrap break-all leading-normal ${textClass}`} innerHTML={highlightLine(segment.content, props.lang)} />
+        <span class={`block min-w-0 flex-1 whitespace-pre-wrap break-words leading-normal ${textClass}`} style={wrapStyle} innerHTML={highlightLine(segment.content, props.lang)} />
       </div>
     );
   };
@@ -652,22 +607,10 @@ const SplitView: Component<StageableViewProps> = (props) => {
         <div class="px-3 py-1 text-red-400 border-r border-white/10">旧版本</div>
         <div class="px-3 py-1 text-green-400">新版本</div>
       </div>
-      <div ref={(el) => { parentRef = el; }} class="flex-1 overflow-auto">
-        <div
-          class="relative"
-          style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-        >
-          <For each={rowVirtualizer.getVirtualItems()}>
-            {(virtualRow) => {
-              const row = rows()[virtualRow.index];
-              if (!row) return null;
-              return (
-                <div
-                  ref={(el) => rowVirtualizer.measureElement(el)}
-                  data-index={virtualRow.index}
-                  class="absolute left-0 right-0"
-                  style={{ transform: `translateY(${virtualRow.start}px)` }}
-                >
+      <div class="flex-1 overflow-auto">
+        <div class="min-w-[900px]">
+          <For each={rows()}>
+            {(row) => (
                   <Show
                     when={row.type === 'line'}
                     fallback={
@@ -699,9 +642,7 @@ const SplitView: Component<StageableViewProps> = (props) => {
                       );
                     })()}
                   </Show>
-                </div>
-              );
-            }}
+            )}
           </For>
         </div>
       </div>
