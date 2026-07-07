@@ -43,11 +43,14 @@
     "tailwindcss": "^4.3.0",
     "terser": "^5.48.0",
     "typescript": "~5.6.2",
-    "vite": "^8.0.14",
+    "vite": "^8.1.0",
     "vite-plugin-solid": "^2.11.12",
     "vitest": "^4.1.8"
   },
   "allowScripts": {
     "lefthook@2.1.9": true
+  },
+  "overrides": {
+    "rolldown": "1.0.2"
   }
 }
