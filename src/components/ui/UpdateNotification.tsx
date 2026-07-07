@@ -36,8 +36,9 @@ export default function UpdateNotification() {
   onMount(() => {
     const unlisten = listen<DownloadProgress>('download-progress', (event) => {
       updateProgress(event.payload.bytesDownloaded, event.payload.totalBytes);
-    });
-    onCleanup(() => unlisten.then((fn) => fn()));
+    })
+      .catch(() => undefined);
+    onCleanup(() => unlisten.then((fn) => fn?.()));
   });
 
   const handleDownload = async () => {

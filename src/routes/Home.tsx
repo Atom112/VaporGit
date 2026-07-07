@@ -3,15 +3,15 @@ import { useNavigate } from '@solidjs/router';
 import { open } from '@tauri-apps/plugin-dialog';
 import { openRepo, getStatus, cloneRepo } from '../lib/tauriCommands';
 import { repoStore, setRepoStore } from '../stores/repoStore';
-import { githubStore } from '../stores/githubStore';
-import { giteeStore } from '../stores/giteeStore';
+import { cacheRepos, githubStore } from '../stores/githubStore';
+import { cacheGiteeRepos, giteeStore } from '../stores/giteeStore';
 import { setDiffStore } from '../stores/diffStore';
 import { addToast } from '../stores/toastStore';
-import GitHubRepoList from '../components/github/GitHubRepoList';
-import GiteeRepoList from '../components/gitee/GiteeRepoList';
+import PlatformRepoList from '../components/platform/PlatformRepoList';
 import CreateRepoDialog from '../components/ui/CreateRepoDialog';
 import { tt } from '../i18n';
 import { describeError } from '../lib/gitErrorDesc';
+import type { GiteeRepo, GitHubRepo } from '../lib/types';
 
 const Home: Component = () => {
   const navigate = useNavigate();
@@ -49,7 +49,7 @@ const Home: Component = () => {
       navigate('/repository');
     } catch (e) {
       setRepoStore({ loading: false });
-      setError(String(e));
+      setError(describeError(e));
     }
   };
 
@@ -182,7 +182,12 @@ const Home: Component = () => {
                 {tt('github.repos')}
               </h2>
               <div class="flex-1 min-h-0 flex flex-col">
-                <GitHubRepoList onClone={handleCloneFromRepo} />
+                <PlatformRepoList
+                  kind="github"
+                  initialRepos={githubStore.reposCache}
+                  onCache={(repos) => cacheRepos(repos as GitHubRepo[])}
+                  onClone={handleCloneFromRepo}
+                />
               </div>
             </div>
           </Show>
@@ -195,7 +200,12 @@ const Home: Component = () => {
                 {tt('gitee.repos')}
               </h2>
               <div class="flex-1 min-h-0 flex flex-col">
-                <GiteeRepoList onClone={handleCloneFromRepo} />
+                <PlatformRepoList
+                  kind="gitee"
+                  initialRepos={giteeStore.reposCache}
+                  onCache={(repos) => cacheGiteeRepos(repos as GiteeRepo[])}
+                  onClone={handleCloneFromRepo}
+                />
               </div>
             </div>
           </Show>

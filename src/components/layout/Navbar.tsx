@@ -1,10 +1,9 @@
 import { Component, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
-import { githubStore, setGithubStore, setAuthenticated } from '../../stores/githubStore';
-import { giteeStore, setGiteeStore, setGiteeAuthenticated } from '../../stores/giteeStore';
+import { clearAuth, githubStore, setGithubStore, setAuthenticated } from '../../stores/githubStore';
+import { clearGiteeAuth, giteeStore, setGiteeStore, setGiteeAuthenticated } from '../../stores/giteeStore';
 import { githubCheckAuth, giteeCheckAuth } from '../../lib/tauriCommands';
-import GitHubUserMenu from '../github/GitHubUserMenu';
-import GiteeUserMenu from '../gitee/GiteeUserMenu';
+import PlatformUserMenu from '../platform/PlatformUserMenu';
 import { repoStore } from '../../stores/repoStore';
 
 const Navbar: Component = () => {
@@ -114,10 +113,10 @@ const Navbar: Component = () => {
       {/* Right side: Platform user menus */}
       <div class="flex items-center gap-1 absolute right-4" data-tauri-no-drag>
         {giteeStore.authenticated && giteeStore.user && (
-          <GiteeUserMenu />
+          <PlatformUserMenu kind="gitee" user={giteeStore.user} onClearAuth={clearGiteeAuth} />
         )}
         {githubStore.authenticated && githubStore.user && (
-          <GitHubUserMenu />
+          <PlatformUserMenu kind="github" user={githubStore.user} onClearAuth={clearAuth} />
         )}
       </div>
     </nav>

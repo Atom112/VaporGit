@@ -1,6 +1,6 @@
 [package]
 name = "VaporGit"
-version = "1.2.5"
+version = "1.2.9"
 description = "A lite Git client built with Tauri and Rust"
 authors = ["you"]
 edition = "2021"
@@ -35,4 +35,13 @@ regex = "1"
 getrandom = "0.3"
 portable-pty = "0.9"
 # download chunk streaming is provided by reqwest's "stream" feature
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
 

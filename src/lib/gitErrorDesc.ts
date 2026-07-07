@@ -26,7 +26,7 @@ export function describeError(error: unknown): string {
   const errStr = String(error);
 
   // 1. Extract HTTP status code from error strings (match both English and Chinese patterns)
-  const match = errStr.match(/(?:HTTP[\/\s]*|status\s+code\s+|状态码\s*)(4\d\d|5\d\d)\b/);
+  const match = errStr.match(/(?:HTTP[/\s]*|status\s+code\s+|状态码\s*)(4\d\d|5\d\d)\b/);
   if (match) {
     const t = lookup(i18nKey(match[1]));
     if (t) {

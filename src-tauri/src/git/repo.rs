@@ -50,7 +50,7 @@ fn extract_repo_name(url: &str) -> Option<String> {
     url.trim_end_matches(".git")
         .trim_end_matches('/')
         .split('/')
-        .last()
+        .next_back()
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
 }

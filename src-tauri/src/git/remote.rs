@@ -93,7 +93,7 @@ pub fn fetch(repo: &Repository, remote_name: Option<&str>) -> Result<(), String>
     let remote_url = remote.url().map(|u| u.to_string());
 
     let remote_host = remote_url.as_ref().and_then(|u| extract_host(u));
-    let is_https = remote_url.as_ref().map_or(false, |u| u.starts_with("https://"));
+    let is_https = remote_url.as_ref().is_some_and(|u| u.starts_with("https://"));
 
     let mut cb = RemoteCallbacks::new();
     cb.credentials(move |_url, username_from_url, allowed| {
@@ -259,7 +259,7 @@ pub fn push(repo: &Repository, remote_name: Option<&str>, branch: Option<&str>) 
     let gitee_token = crate::gitee::auth::token_store().load().ok().flatten();
     let remote_url = remote.pushurl().map(|u| u.to_string()).or_else(|| remote.url().map(|u| u.to_string()));
     let remote_host = remote_url.as_ref().and_then(|u| extract_host(u));
-    let is_https = remote_url.as_ref().map_or(false, |u| u.starts_with("https://"));
+    let is_https = remote_url.as_ref().is_some_and(|u| u.starts_with("https://"));
 
     let mut cb = RemoteCallbacks::new();
     cb.credentials(move |_url, username_from_url, allowed| {
