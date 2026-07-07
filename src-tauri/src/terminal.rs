@@ -15,9 +15,7 @@ impl TerminalProcess {
     }
 
     pub fn spawn(&self, path: &str, app: tauri::AppHandle) -> Result<(), String> {
-        // Kill old session without holding the lock during blocking join
         let old_session = self.inner.lock().unwrap().take();
-        // Lock is released — safe to do blocking cleanup now
         drop(old_session);
 
         let session = create_session(path, app)?;
@@ -119,9 +117,27 @@ fn create_session(path: &str, app: tauri::AppHandle) -> Result<TerminalSession, 
     #[cfg(windows)]
     let child = {
         let shells = [
-            ("powershell.exe", &["-NoLogo", "-NoExit"] as &[&str]),
-            ("pwsh.exe", &["-NoLogo", "-NoExit"] as &[&str]),
-            ("cmd.exe", &[] as &[&str]),
+            (
+                "powershell.exe",
+                &[
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NoExit",
+                    "-Command",
+                    "chcp.com 65001 > $null; [Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); $OutputEncoding = [Console]::OutputEncoding",
+                ] as &[&str],
+            ),
+            (
+                "pwsh.exe",
+                &[
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NoExit",
+                    "-Command",
+                    "chcp.com 65001 > $null; [Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); $OutputEncoding = [Console]::OutputEncoding",
+                ] as &[&str],
+            ),
+            ("cmd.exe", &["/K", "chcp 65001 >NUL"] as &[&str]),
         ];
         let mut last_err = "没有可用的命令行终端".to_string();
         let mut result = None;
@@ -186,15 +202,10 @@ fn create_session(path: &str, app: tauri::AppHandle) -> Result<TerminalSession, 
     // when child goes out of scope
     let _child = child;
 
-    let mut session = TerminalSession {
+    Ok(TerminalSession {
         master: Some(pair.master),
         writer,
         killer,
         reader_thread: Some(reader_thread),
-    };
-
-    // Send initial newline to trigger the shell prompt
-    let _ = session.writer.write_all(b"\r\n");
-
-    Ok(session)
+    })
 }

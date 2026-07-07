@@ -6,5 +6,6 @@ pub mod gitee;
 pub mod remote;
 pub mod repo;
 pub mod github;
+pub mod git_ext;
 pub mod stash;
 pub mod status;

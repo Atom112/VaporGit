@@ -224,15 +224,24 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
             .map_err(|e| format!("无法推送 HEAD: {}", e))?;
     }
 
-    let walk_oids: Vec<Oid> = revwalk.filter_map(|r| r.ok()).collect();
-
     // Limit to max 2000 commits for performance on large repos
     const MAX_GRAPH_COMMITS: usize = 2000;
-    let truncated = walk_oids.len() > MAX_GRAPH_COMMITS;
-    let walk_oids: Vec<Oid> = walk_oids.into_iter().take(MAX_GRAPH_COMMITS).collect();
+    let mut walk_oids: Vec<Oid> = Vec::new();
+    let mut truncated = false;
+    for oid in revwalk.filter_map(|r| r.ok()) {
+        if walk_oids.len() >= MAX_GRAPH_COMMITS {
+            truncated = true;
+            break;
+        }
+        walk_oids.push(oid);
+    }
 
     if walk_oids.is_empty() {
-        return Ok(CommitGraphData { nodes: vec![], edges: vec![], truncated: false });
+        return Ok(CommitGraphData {
+            nodes: vec![],
+            edges: vec![],
+            truncated: false,
+        });
     }
 
     // Collect branch labels per commit OID (local + remote)
@@ -396,7 +405,11 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         }
     }
 
-    Ok(CommitGraphData { nodes, edges, truncated })
+    Ok(CommitGraphData {
+        nodes,
+        edges,
+        truncated,
+    })
 }
 
 fn commit_to_info(commit: &git2::Commit) -> Result<CommitInfo, String> {
@@ -474,8 +487,8 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
                             .filter_map(|c| c.ok())
                             .filter_map(|c| {
                                 c.ancestor.as_ref()
-                                    .or_else(|| c.our.as_ref())
-                                    .or_else(|| c.their.as_ref())
+                                    .or(c.our.as_ref())
+                                    .or(c.their.as_ref())
                                     .and_then(|e| std::str::from_utf8(&e.path).ok())
                                     .map(|p| p.to_string())
                             })
@@ -656,18 +669,14 @@ pub fn amend_commit(repo: &Repository, message: &str) -> Result<CommitInfo, Stri
         .find_tree(tree_oid)
         .map_err(|e| format!("无法找到树: {}", e))?;
 
-    // Collect parents from HEAD's parents (same parents, replacing HEAD itself)
-    let parent_commits: Vec<git2::Commit> = head_commit.parents().collect();
-    let parents: Vec<&git2::Commit> = parent_commits.iter().collect();
-
-    let new_oid = repo
-        .commit(
+    let new_oid = head_commit
+        .amend(
             Some("HEAD"),
-            &signature,
-            &signature,
-            message,
-            &tree,
-            parents.as_slice(),
+            Some(&signature),
+            Some(&signature),
+            None,
+            Some(message),
+            Some(&tree),
         )
         .map_err(|e| format!("修改提交失败: {}", e))?;
 
@@ -969,8 +978,7 @@ pub fn perform_interactive_rebase(
             // For squash: keep the last entry's message
             let last_squash_entry = entries
                 .iter()
-                .filter(|e| e.action == "squash" || e.action == "fixup")
-                .last();
+                .rfind(|e| e.action == "squash" || e.action == "fixup");
 
             let msg = match last_squash_entry {
                 Some(e) if e.action == "fixup" => {

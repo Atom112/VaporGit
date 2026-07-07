@@ -36,8 +36,7 @@ interface CommitGraphProps {
 }
 
 const CommitGraph: Component<CommitGraphProps> = (props) => {
-  let canvasRef!: HTMLCanvasElement;
-  let containerRef!: HTMLDivElement;
+  let canvasRef: HTMLCanvasElement | undefined;
 
   const [hoveredNodeId, setHoveredNodeId] = createSignal<string | null>(null);
   const [hoverProgress, setHoverProgress] = createSignal(0);
@@ -119,6 +118,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
   }
 
   function hitTestNode(mx: number, my: number): GraphNode | null {
+    if (!canvasRef) return null;
     const rect = canvasRef.getBoundingClientRect();
     const px = mx - rect.left;
     const py = my - rect.top;
@@ -267,6 +267,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
 
   function draw() {
     const canvas = canvasRef;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -306,14 +307,13 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
   }
 
   createEffect(() => {
-    props.graphData;
-    props.selectedNodeId;
     hoveredNodeId();
     hoverProgress();
     draw();
   });
 
   const handleMouseMove = (e: MouseEvent) => {
+    if (!canvasRef) return;
     const node = hitTestNode(e.clientX, e.clientY);
     if (node) {
       canvasRef.style.cursor = 'pointer';
@@ -579,10 +579,10 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
 
   return (
     <>
-    <div ref={containerRef} class="relative h-full overflow-auto">
+    <div class="relative h-full overflow-auto">
       <div class="flex items-start" style="min-width: 100%;">
         <canvas
-          ref={canvasRef}
+          ref={(el) => { canvasRef = el; }}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onClick={handleCanvasClick}

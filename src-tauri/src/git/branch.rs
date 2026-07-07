@@ -215,7 +215,7 @@ pub fn delete_remote_branch(repo: &Repository, remote_name: &str, branch_name: &
     let gitee_token = crate::gitee::auth::token_store().load().ok().flatten();
     let remote_url = remote.url().map(|u| u.to_string());
     let remote_host = remote_url.as_ref().and_then(|u| crate::git::remote::extract_host(u));
-    let is_https = remote_url.as_ref().map_or(false, |u| u.starts_with("https://"));
+    let is_https = remote_url.as_ref().is_some_and(|u| u.starts_with("https://"));
 
     let mut cb = git2::RemoteCallbacks::new();
     cb.credentials(move |_url, username_from_url, allowed| {
@@ -336,8 +336,8 @@ pub fn compare_branches(
     .map_err(|e| format!("遍历 diff 失败: {}", e))?;
 
     Ok(BranchDiffSummary {
-        ahead: ahead as usize,
-        behind: behind as usize,
+        ahead,
+        behind,
         files: files.into_inner(),
         base_branch: base_branch.to_string(),
         target_branch: target_branch.to_string(),

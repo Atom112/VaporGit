@@ -24,7 +24,7 @@ pub struct ProviderConfig {
 fn generate_code_verifier() -> String {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).expect("failed to generate random bytes");
-    Base64Url.encode(&bytes)
+    Base64Url.encode(bytes)
 }
 
 fn code_challenge(verifier: &str) -> String {

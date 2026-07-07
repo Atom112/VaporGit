@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "VaporGit"
-version = "1.2.4"
+version = "1.2.5"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -21,6 +21,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
+ "tempfile",
  "tokio",
  "url",
 ]
