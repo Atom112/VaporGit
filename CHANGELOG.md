@@ -1,5 +1,20 @@
 # Changelog / 已实现功能
 
+## v1.2.9 - 2026-07-15
+
+### Fixed
+- 修复 Windows DOS 保留设备名（NUL、CON、PRN、AUX、COM1-COM9、LPT1-LPT9）导致仓库操作失败的问题
+  - 新增 `validate.rs` DOS 设备名检测函数（`is_dos_device_name` / `path_has_dos_device_name`）
+  - `get_status` 自动过滤 DOS 设备名文件，阻止其进入 UI 流程
+  - `discard_files` 的 `canonicalize()` 调用改为非致命，失败时回退使用原始路径
+  - `validate_relative_path` 集成 DOS 设备名检查，直接拒绝操作
+  - 新增 `VALIDATE_DOS_DEVICE_NAME` i18n 错误提示（12 种语言）
+
+## v1.2.8 - 2026-06-18
+
+### Added
+- 错误 toast 中点击可查看原始错误详情（`describeErrorDetail` 返回 message + detail）
+
 ## v1.2.7 - 2026-06-17
 
 ### Fixed
