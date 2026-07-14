@@ -397,6 +397,7 @@ const de = {
     VALIDATE_ABSOLUTE_PATH: 'Pfad ist absolut. Bitte verwenden Sie einen relativen Pfad.',
     VALIDATE_PARENT_DIR: 'Pfad enthält "..", was nicht erlaubt ist.',
     VALIDATE_NULL_BYTE: 'Pfad enthält ungültige Zeichen.',
+    VALIDATE_DOS_DEVICE_NAME: 'Der Dateiname ist ein reservierter Windows-Gerätename (NUL, CON, usw.) und kann nicht direkt bearbeitet werden. Verwenden Sie das Terminal.',
     // ── Repository ──
     REPO_OPEN_FAILED: 'Fehler beim Öffnen des Repositories. Es existiert möglicherweise nicht oder ist beschädigt.',
     REPO_CLONE_FAILED: 'Fehler beim Klonen des Repositories. Bitte überprüfen Sie die URL und Netzwerkverbindung.',

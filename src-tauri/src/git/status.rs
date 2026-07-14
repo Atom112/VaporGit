@@ -46,7 +46,11 @@ pub fn get_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
             continue;
         };
 
-        result.push(FileStatus { path, status: kind, staged, old_path: None });
+        // Skip files with Windows DOS device names — they break file operations
+        if crate::git::validate::path_has_dos_device_name(&path) {
+            continue;
+        }
+        result.push(FileStatus { path: path.clone(), status: kind, staged, old_path: None });
     }
 
     // ── Staged renames: Diff HEAD tree → Index ──
@@ -311,7 +315,12 @@ pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Resul
 
 pub fn discard_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStatus>, String> {
     let workdir = repo.workdir().ok_or_else(|| git_err!("DISCARD_NO_WORKDIR", "Work directory not available"))?;
-    let workdir_canonical = workdir.canonicalize().map_err(|e| git_err!("DISCARD_CANONICALIZE_FAILED", "Failed to canonicalize work directory: {}", e))?;
+    // Canonicalize ensures clean path comparison, but on Windows this can fail
+    // for repos containing DOS device names (NUL, CON, etc.). Fall back to the
+    // raw workdir path when canonicalize errors out.
+    let workdir_canonical = workdir
+        .canonicalize()
+        .unwrap_or_else(|_| workdir.to_path_buf());
     let head = repo.head().ok();
     let head_tree = head.as_ref().and_then(|h| h.peel_to_tree().ok());
 

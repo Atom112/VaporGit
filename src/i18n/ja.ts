@@ -397,6 +397,7 @@ const ja = {
     VALIDATE_ABSOLUTE_PATH: 'パスが絶対パスです。相対パスを使用してください。',
     VALIDATE_PARENT_DIR: 'パスに".."が含まれています。これは許可されていません。',
     VALIDATE_NULL_BYTE: 'パスに無効な文字が含まれています。',
+    VALIDATE_DOS_DEVICE_NAME: 'ファイル名がWindowsの予約デバイス名（NUL、CONなど）です。直接操作できません。ターミナルを使用してください。',
     REPO_OPEN_FAILED: 'リポジトリを開けませんでした。存在しないか破損している可能性があります。',
     REPO_CLONE_FAILED: 'リポジトリのクローンに失敗しました。URLとネットワークを確認してください。',
     REPO_CLONE_PARSE_NAME: 'URLからリポジトリ名を取得できませんでした。',
@@ -649,7 +650,8 @@ const ja = {
     AUTH_GITHUB_READ_FAILED: 'GitHub認証情報の読み取りに失敗しました。',
     AUTH_GITHUB_NOT_LOGGED_IN: 'GitHubにログインしていません。設定からログインしてください。',
     AUTH_GITEE_READ_FAILED: 'Gitee認証情報の読み取りに失敗しました。',
-    AUTH_GITEE_NOT_LOGGED_IN: 'Giteeにログインしていません。設定からログインしてください。',  },
+    AUTH_GITEE_NOT_LOGGED_IN: 'Giteeにログインしていません。設定からログインしてください。',
+  },
 };
 
 export default ja;

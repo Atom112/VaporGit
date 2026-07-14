@@ -519,6 +519,7 @@ const en = {
     VALIDATE_ABSOLUTE_PATH: 'Path is absolute. Please use a relative path.',
     VALIDATE_PARENT_DIR: 'Path contains "..", which is not allowed.',
     VALIDATE_NULL_BYTE: 'Path contains invalid characters.',
+    VALIDATE_DOS_DEVICE_NAME: 'File name is a Windows reserved device name (NUL, CON, etc.) and cannot be operated on directly. Use the terminal to handle this file.',
     // ── Repository ──
     REPO_OPEN_FAILED: 'Failed to open repository. It may not exist or is corrupted.',
     REPO_CLONE_FAILED: 'Failed to clone repository. Please check the URL and network.',

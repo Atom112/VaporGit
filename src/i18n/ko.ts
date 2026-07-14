@@ -397,6 +397,7 @@ const ko = {
     VALIDATE_ABSOLUTE_PATH: '경로가 절대 경로입니다. 상대 경로를 사용해 주세요.',
     VALIDATE_PARENT_DIR: '경로에 허용되지 않는 ".."이 포함되어 있습니다.',
     VALIDATE_NULL_BYTE: '경로에 유효하지 않은 문자가 포함되어 있습니다.',
+    VALIDATE_DOS_DEVICE_NAME: '파일 이름이 Windows 예약 장치 이름(NUL, CON 등)입니다. 직접 조작할 수 없습니다. 터미널을 사용하세요.',
     REPO_OPEN_FAILED: '리포지토리를 열지 못했습니다. 존재하지 않거나 손상되었을 수 있습니다.',
     REPO_CLONE_FAILED: '리포지토리 클론에 실패했습니다. URL과 네트워크를 확인하세요.',
     REPO_CLONE_PARSE_NAME: 'URL에서 리포지토리 이름을 확인할 수 없습니다.',
@@ -649,7 +650,8 @@ const ko = {
     AUTH_GITHUB_READ_FAILED: 'GitHub 인증 정보를 읽지 못했습니다.',
     AUTH_GITHUB_NOT_LOGGED_IN: 'GitHub에 로그인되지 않았습니다. 설정에서 로그인하세요.',
     AUTH_GITEE_READ_FAILED: 'Gitee 인증 정보를 읽지 못했습니다.',
-    AUTH_GITEE_NOT_LOGGED_IN: 'Gitee에 로그인되지 않았습니다. 설정에서 로그인하세요.',  },
+    AUTH_GITEE_NOT_LOGGED_IN: 'Gitee에 로그인되지 않았습니다. 설정에서 로그인하세요.',
+  },
 };
 
 export default ko;

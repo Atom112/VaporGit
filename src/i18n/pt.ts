@@ -397,6 +397,7 @@ const pt = {
     VALIDATE_ABSOLUTE_PATH: 'O caminho é absoluto. Por favor, use um caminho relativo.',
     VALIDATE_PARENT_DIR: 'O caminho contém "..", o que não é permitido.',
     VALIDATE_NULL_BYTE: 'O caminho contém caracteres inválidos.',
+    VALIDATE_DOS_DEVICE_NAME: 'O nome do arquivo é um nome de dispositivo reservado do Windows (NUL, CON, etc.) e não pode ser manipulado diretamente. Use o terminal.',
     // ── Repository ──
     REPO_OPEN_FAILED: 'Falha ao abrir o repositório. Pode não existir ou estar corrompido.',
     REPO_CLONE_FAILED: 'Falha ao clonar o repositório. Verifique a URL e a rede.',

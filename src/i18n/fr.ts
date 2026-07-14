@@ -395,6 +395,7 @@ const fr = {
     VALIDATE_ABSOLUTE_PATH: 'Le chemin est absolu. Utilisez un chemin relatif.',
     VALIDATE_PARENT_DIR: 'Le chemin contient \'..\', opération non autorisée.',
     VALIDATE_NULL_BYTE: 'Le chemin contient des caractères non valides.',
+    VALIDATE_DOS_DEVICE_NAME: 'Le nom du fichier est un nom de périphérique réservé Windows (NUL, CON, etc.) et ne peut pas être manipulé directement. Utilisez le terminal.',
     REPO_OPEN_FAILED: 'Impossible d\'ouvrir le dépôt. Il n\'existe peut-être pas ou est corrompu.',
     REPO_CLONE_FAILED: 'Échec du clonage du dépôt. Vérifiez l\'URL et le réseau.',
     REPO_CLONE_PARSE_NAME: 'Impossible de déterminer le nom du dépôt depuis l\'URL.',

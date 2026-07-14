@@ -397,6 +397,7 @@ const zhTW = {
     VALIDATE_ABSOLUTE_PATH: '路徑是絕對路徑，請使用相對路徑。',
     VALIDATE_PARENT_DIR: '路徑包含 ".."，不允許操作。',
     VALIDATE_NULL_BYTE: '路徑包含無效字元。',
+    VALIDATE_DOS_DEVICE_NAME: '檔案名稱是 Windows 保留裝置名稱（如 NUL、CON 等），無法直接操作。請使用終端機處理此檔案。',
     // ── Repository ──
     REPO_OPEN_FAILED: '無法開啟倉庫，倉庫可能不存在或已損壞。',
     REPO_CLONE_FAILED: '複製倉庫失敗，請檢查 URL 和網路連線。',

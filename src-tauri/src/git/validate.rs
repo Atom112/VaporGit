@@ -71,7 +71,53 @@ pub fn validate_relative_path(path: &str) -> Result<(), String> {
     if path.contains('\0') {
         return Err(git_err!("VALIDATE_NULL_BYTE", "Path contains null byte, operation not allowed"));
     }
+    // Windows DOS reserved device names break filesystem operations
+    if path_has_dos_device_name(path) {
+        return Err(git_err!("VALIDATE_DOS_DEVICE_NAME", "Path '{}' is a Windows reserved device name, operation not supported", path));
+    }
     Ok(())
+}
+
+/// Windows DOS reserved device names (case-insensitive).
+/// Files named like these cause Windows APIs to redirect to device drivers,
+/// breaking normal file operations (canonicalize, exists, metadata, stat).
+/// These are: CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9.
+/// See https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+#[cfg(target_os = "windows")]
+const DOS_DEVICE_NAMES: &[&str] = &[
+    "CON", "PRN", "AUX", "NUL",
+    "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+    "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
+/// Check if a single path component (no directory separators) is a Windows
+/// DOS reserved device name. The check is case-insensitive and matches both
+/// bare names and names with any extension (e.g. "NUL", "nul.txt", "CON").
+#[cfg(target_os = "windows")]
+pub fn is_dos_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name);
+    let upper = stem.to_uppercase();
+    DOS_DEVICE_NAMES.contains(&upper.as_str())
+}
+
+/// Check if a path contains any component that is a Windows DOS reserved
+/// device name. On non-Windows, always returns false.
+#[cfg(not(target_os = "windows"))]
+pub fn is_dos_device_name(_name: &str) -> bool {
+    false
+}
+
+/// Check if any component of a path is a DOS reserved device name.
+pub fn path_has_dos_device_name(path: &str) -> bool {
+    std::path::Path::new(path)
+        .components()
+        .any(|c| {
+            if let std::path::Component::Normal(os_str) = c {
+                os_str.to_str().map_or(false, |s| is_dos_device_name(s))
+            } else {
+                false
+            }
+        })
 }
 
 #[cfg(test)]
@@ -105,6 +151,44 @@ mod tests {
         assert!(validate_relative_path("a/../../b").is_err());
     }
 
+
+    #[test]
+    fn test_dos_device_name_detection() {
+        assert!(is_dos_device_name("NUL"));
+        assert!(is_dos_device_name("nul"));
+        assert!(is_dos_device_name("NuL"));
+        assert!(is_dos_device_name("CON"));
+        assert!(is_dos_device_name("PRN"));
+        assert!(is_dos_device_name("AUX"));
+        assert!(is_dos_device_name("COM1"));
+        assert!(is_dos_device_name("LPT9"));
+        assert!(!is_dos_device_name("README.md"));
+        assert!(!is_dos_device_name("null"));
+    }
+
+    #[test]
+    fn test_dos_device_name_with_extension() {
+        assert!(is_dos_device_name("nul.txt"));
+        assert!(is_dos_device_name("NUL.cs"));
+        assert!(is_dos_device_name("CON.py"));
+    }
+
+    #[test]
+    fn test_path_has_dos_device_name() {
+        assert!(path_has_dos_device_name("nul"));
+        assert!(path_has_dos_device_name("subdir/nul"));
+        assert!(path_has_dos_device_name("a/b/CON"));
+        assert!(!path_has_dos_device_name("a/b/normal.txt"));
+        assert!(!path_has_dos_device_name("README.md"));
+    }
+
+    #[test]
+    fn test_validate_relative_path_rejects_dos_names() {
+        assert!(validate_relative_path("nul").is_err());
+        assert!(validate_relative_path("subdir/NUL").is_err());
+        assert!(validate_relative_path("a/CON.txt").is_err());
+        assert!(validate_relative_path("normal_file.rs").is_ok());
+    }
     #[test]
     fn test_relative_path_null_byte() {
         assert!(validate_relative_path("bad\0file").is_err());

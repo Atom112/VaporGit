@@ -397,6 +397,7 @@ const es = {
     VALIDATE_ABSOLUTE_PATH: 'La ruta es absoluta. Por favor, use una ruta relativa.',
     VALIDATE_PARENT_DIR: 'La ruta contiene "..", lo cual no está permitido.',
     VALIDATE_NULL_BYTE: 'La ruta contiene caracteres no válidos.',
+    VALIDATE_DOS_DEVICE_NAME: 'El nombre del archivo es un nombre de dispositivo reservado de Windows (NUL, CON, etc.) y no se puede operar directamente. Use la terminal.',
     // ── Repository ──
     REPO_OPEN_FAILED: 'Error al abrir el repositorio. Puede que no exista o esté dañado.',
     REPO_CLONE_FAILED: 'Error al clonar el repositorio. Verifique la URL y la red.',

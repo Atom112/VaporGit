@@ -519,6 +519,7 @@ const zh = {
     VALIDATE_ABSOLUTE_PATH: '路径是绝对路径，请使用相对路径。',
     VALIDATE_PARENT_DIR: '路径包含 ".."，不允许操作。',
     VALIDATE_NULL_BYTE: '路径包含无效字符。',
+    VALIDATE_DOS_DEVICE_NAME: '文件名是 Windows 保留设备名（如 NUL、CON 等），无法直接操作。请使用终端处理此文件。',
     // ── Repository ──
     REPO_OPEN_FAILED: '无法打开仓库，仓库可能不存在或已损坏。',
     REPO_CLONE_FAILED: '克隆仓库失败，请检查 URL 和网络连接。',
