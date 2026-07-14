@@ -1,6 +1,6 @@
 # Changelog / 已实现功能
 
-## v1.2.9 - 2026-07-15
+## v1.2.10 - 2026-07-15
 
 ### Fixed
 - 修复 Windows DOS 保留设备名（NUL、CON、PRN、AUX、COM1-COM9、LPT1-LPT9）导致仓库操作失败的问题
