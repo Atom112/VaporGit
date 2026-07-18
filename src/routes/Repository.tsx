@@ -768,11 +768,6 @@ const Repository: Component = () => {
     }
   };
 
-  const handleGraphReset = async (_commitId: string) => {
-    // The actual reset operation is handled in CommitGraph.
-    // Here we just refresh the graph and status since HEAD changed.
-    await refreshAll();
-  };
 
   const stagedFiles = () =>
     diffStore.fileStatuses.filter((f) => f.staged);
