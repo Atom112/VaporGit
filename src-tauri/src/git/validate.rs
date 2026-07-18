@@ -137,6 +137,7 @@ mod tests {
         assert!(validate_relative_path("").is_err());
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_relative_path_absolute() {
         // Windows absolute path (also a valid path pattern on Unix, but unlikely to collide)
