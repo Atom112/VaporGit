@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to publish, for example v1.2.9'
+        required: false
+        type: string
 
 jobs:
   build:
@@ -21,10 +26,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 26
           cache: 'npm'
@@ -50,14 +55,14 @@ jobs:
             patchelf
 
       - name: Install npm dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build and upload
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ inputs.tag_name || github.ref_name }}
           releaseName: 'VaporGit v__VERSION__'
           releaseBody: |
             ## VaporGit v__VERSION__

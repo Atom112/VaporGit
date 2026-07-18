@@ -1,366 +1,479 @@
-# VaporGit 详细开发计划
+# VaporGit 全面优化方案
 
-## 项目现状
+> 当前版本：v1.2.5 | 制定日期：2026-06-14
 
-VaporGit 当前处于 **v1.0.2 阶段**，已完成 M1~M3：
+## 当前状态评估
 
-- M1：本地 Git 基础操作（打开仓库、暂存/提交、Diff 查看、提交历史）
-- M2：DAG 提交树可视化、分支管理（创建/切换/删除）
-- M3：远程同步（Fetch/Pull/Push）、冲突处理、Stash、Rebase、Cherry-pick
+| 维度 | 状态 | 评级 |
+|------|------|------|
+| 功能完整度 | 核心 Git 工作流 + GitHub/Gitee PR + 终端 + 冲突解决 | ⭐⭐⭐⭐ |
+| 代码架构 | 三层清晰（commands→git→models），存在重复和单体组件 | ⭐⭐⭐ |
+| 测试覆盖 | 前端/后端均无自动化测试 | ⭐ |
+| 安全 | CSP + 路径验证 + Token 存储已达标 | ⭐⭐⭐⭐ |
+| 性能 | 提交图 2000 节点限制，文件列表无虚拟化 | ⭐⭐⭐ |
+| 开发体验 | 无 CI 类型检查、无 lint rule、旧版 CI action | ⭐⭐ |
 
 ---
 
-## 技术架构
+## 一、架构优化（高优先级）
+
+### 1.1 Repository.tsx 拆分（1498 行单体 → 模块化）
+
+当前 `Repository.tsx` 承载了布局、所有模态框、所有 Git 操作、键盘快捷键、状态管理，是项目中最复杂的文件。建议拆分为：
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  前端 (SolidJS)                   │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
-│  │  路由层    │ │  状态管理  │ │   组件层          │ │
-│  │ @solidjs  │ │ createStore │ │ 仓库栏/提交树/Diff│ │
-│  │ /router   │ │ 按域拆分    │ │   设置面板/弹窗    │ │
-│  └──────────┘ └──────────┘ └──────────────────┘ │
-├──────────────────────┬──────────────────────────┤
-│    Tauri Commands     │     Tauri Events         │
-│    (invoke 调用)       │     (事件推送)            │
-├──────────────────────┴──────────────────────────┤
-│                  后端 (Rust)                      │
-│  ┌──────────────────────────────────────────────┐│
-│  │              Git 服务层 (git2)                 ││
-│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────────────┐ ││
-│  │  │ 仓库  │ │ 提交  │ │ 分支  │ │ Diff/文件状态 │ ││
-│  │  │ 管理  │ │ 历史  │ │ 管理  │ │              │ ││
-│  │  └──────┘ └──────┘ └──────┘ └──────────────┘ ││
-│  └──────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────┘
+src/routes/repository/
+  index.tsx               (~100 行)  编排层，组合子组件
+  RepositoryToolbar.tsx   (~120 行)  3 行操作按钮（Fetch/Pull/Push, Undo/Redo/Stash, Rebase/Merge/PR）
+  CommitInput.tsx         (~80 行)   commit message + amend checkbox + 提交按钮
+  LeftPanel.tsx           (~150 行)  左侧面板模式切换（graph/branches ↔ detail ↔ diff）
+  RightPanel.tsx          (~80 行)   右侧面板容器（toolbar + file list + commit area）
+  ModalsContainer.tsx     (~100 行)  管理所有模态框的显示/隐藏与事件传递
+  useRepositoryActions.ts (~200 行)  所有 Git 操作逻辑 hook（提交、暂存、fetch 等）
+  useRepositoryModals.ts  (~80 行)   模态框状态管理 hook
 ```
 
-### 技术选型决策
+**目标：** Repository/index.tsx ≤ 150 行，子组件 ≤ 200 行。
 
-| 决策点 | 选择 | 理由 |
-|--------|------|------|
-| Git 后端库 | `git2` (libgit2 绑定) | 原生性能，无 CLI 解析开销，跨平台一致 |
-| 提交树渲染 | Canvas | 大仓库（万级提交）性能优于 DOM/SVG |
-| 前端状态管理 | SolidJS `createStore` + Context | 轻量，无额外依赖，与框架深度集成 |
-| Diff 视图 | 自研组件 | 可控性高，支持 side-by-side 和 unified 双模式 |
-| 大文件处理 | 流式读取 + 虚拟滚动 | 避免内存暴涨 |
-| GitHub OAuth | Device Authorization Flow | 桌面端最佳实践，无需本地服务器 |
-| 令牌存储 | OS 密钥链 (keyring crate) | 安全持久化，跨平台 |
-| GitHub API | REST (优先) + GraphQL (按需) | REST 简单直接，GraphQL 用于复杂 PR 查询 |
+### 1.2 统一 GitHub/Gitee 平台抽象
 
-### 目录结构规划
+前后端均存在代码重复：
 
-```
-src/
-├── components/
-│   ├── Navbar.tsx              # [已有] 导航栏
-│   ├── Titlebar.tsx            # [已有] 自定义标题栏
-│   ├── RepoSelector.tsx        # [已有] 仓库选择器/最近列表
-│   ├── StatusBar.tsx           # [已有] 底部状态栏
-│   ├── CommitGraph.tsx         # [已有] DAG 提交树 (Canvas)
-│   ├── DiffView.tsx            # [已有] 文件差异视图
-│   ├── FileList.tsx            # [已有] 工作区文件列表
-│   ├── BranchList.tsx          # [已有] 分支列表
-│   ├── CommitDetail.tsx        # [已有] 提交详情面板
-│   ├── StashPanel.tsx          # [已有] Stash 管理
-│   ├── ConflictResolver.tsx    # [已有] 冲突解决
-│   ├── InteractiveRebase.tsx   # [已有] Rebase/Cherry-pick
-│   ├── GitHubLogin.tsx         # [新建] GitHub SSO 登录
-│   ├── GitHubUserMenu.tsx      # [新建] 用户头像菜单
-│   ├── GitHubRepoList.tsx      # [新建] 仓库列表
-│   ├── PRList.tsx              # [新建] PR 列表
-│   ├── PRDetail.tsx            # [新建] PR 详情
-│   └── PRCreateDialog.tsx      # [新建] 创建 PR 弹窗
-├── routes/
-│   ├── Home.tsx                # [已有] 主页/仓库打开
-│   ├── Repository.tsx          # [已有] 仓库主工作区
-│   ├── Settings.tsx            # [已有] 设置页
-│   └── GitHubPRs.tsx           # [新建] PR 路由页
-├── stores/
-│   ├── repoStore.ts            # [已有] 仓库状态
-│   ├── commitStore.ts          # [已有] 提交历史/图数据
-│   ├── diffStore.ts            # [已有] Diff 数据
-│   ├── settingsStore.ts        # [已有] 用户设置
-│   ├── toastStore.ts           # [已有] Toast 通知
-│   └── githubStore.ts          # [新建] GitHub 认证/仓库/PR 状态
-├── lib/
-│   ├── tauriCommands.ts        # [已有] Tauri invoke 封装
-│   ├── types.ts                # [已有] 共享类型定义
-│   ├── syntax.ts               # [已有] 语法高亮
-│   └── diffParser.ts           # [新建] GitHub patch -> DiffResult 转换
-├── App.tsx                     # [已有] 根布局
-├── App.css                     # [已有] 全局样式
-└── index.tsx                   # [已有] 入口
+**前端（6 对镜像组件）：**
 
-src-tauri/src/
-├── main.rs                     # [已有] 入口
-├── lib.rs                      # [已有] Tauri Builder + 命令注册
-├── commands/
-│   ├── mod.rs
-│   ├── repo.rs                 # [已有] 仓库管理命令
-│   ├── commit.rs               # [已有] 提交/历史命令
-│   ├── branch.rs               # [已有] 分支操作命令
-│   ├── diff.rs                 # [已有] Diff 文件命令
-│   ├── remote.rs               # [已有] 远程操作命令
-│   ├── stash.rs                # [已有] Stash 命令
-│   └── github.rs               # [新建] GitHub 相关命令
-├── git/
-│   ├── mod.rs
-│   ├── repo.rs                 # [已有] git2::Repository 封装
-│   ├── commit.rs               # [已有] 提交查询与操作
-│   ├── branch.rs               # [已有] 分支管理
-│   ├── diff.rs                 # [已有] Diff 生成
-│   ├── status.rs               # [已有] 工作区状态
-│   ├── remote.rs               # [已有] Fetch/Pull/Push
-│   └── stash.rs                # [已有] Stash 操作
-├── github/
-│   ├── mod.rs                  # [新建] 模块导出
-│   ├── auth.rs                 # [新建] OAuth Device Flow 认证
-│   ├── api.rs                  # [新建] GitHub REST API 客户端
-│   ├── repos.rs                # [新建] 仓库列表/搜索
-│   └── pulls.rs                # [新建] PR 操作
-└── models/
-    ├── mod.rs
-    ├── commit.rs               # [已有] 提交元数据模型
-    ├── branch.rs               # [已有] 分支模型
-    ├── diff.rs                 # [已有] Diff 模型
-    ├── status.rs               # [已有] 文件状态模型
-    ├── conflict.rs             # [已有] 冲突模型
-    ├── remote.rs               # [已有] 远程模型
-    ├── stash.rs                # [已有] Stash 模型
-    └── github.rs               # [新建] GitHub 用户/仓库/PR 模型
-```
+| GitHub | Gitee | 行数（近似） |
+|--------|-------|------------|
+| `GitHubLogin.tsx` | `GiteeLogin.tsx` | ~80 |
+| `PRList.tsx` | `GiteePRList.tsx` | ~120 |
+| `PRDetail.tsx` | `GiteePRDetail.tsx` | ~180 |
+| `PRCreateDialog.tsx` | `GiteePRCreateDialog.tsx` | ~100 |
+| `GitHubRepoList.tsx` | `GiteeRepoList.tsx` | ~100 |
+| `GitHubUserMenu.tsx` | `GiteeUserMenu.tsx` | ~50 |
 
----
-
-## 里程碑与迭代计划
-
-### M1：可用的基础版（已完成）
-
-- 打开本地 Git 仓库并显示文件状态
-- 暂存/取消暂存文件
-- 创建提交
-- 查看文件 Diff（Unified 模式）
-- 浏览提交历史列表
-
----
-
-### M2：图形增强版（已完成）
-
-- DAG 提交树正确渲染，颜色区分分支
-- 节点悬停显示提交信息
-- 点击节点联动右侧 Diff
-- 分支创建/切换/删除功能正常
-- Side-by-side 与 Unified 模式可切换
-
----
-
-### M3：进阶协作版（已完成）
-
-- Fetch/Pull/Push 操作正常
-- 冲突可检测并逐步解决
-- Stash 保存/应用/弹出/列表功能正常
-- Cherry-pick 和 Rebase 有可视化引导
-
----
-
-### M4：GitHub 集成（当前阶段）
-
-接入 GitHub SSO 认证，允许用户操作其 GitHub 账号下的所有仓库，完善 Pull Request 工作流。
-
-因范围较大，拆分为三个子阶段：
-
----
-
-#### M4-A：GitHub SSO 认证
-
-**目标**：用户可通过 GitHub 登录，令牌跨重启持久化，应用内显示用户信息。
-
-**新增 Rust 依赖**：`reqwest`、`keyring`、`url`
-
-**后端任务**：
-
-| # | 任务 | 涉及文件 | 说明 |
-|---|------|---------|------|
-| A.1 | 添加 Rust 依赖 | `Cargo.toml` | reqwest (json+rustls-tls), keyring, url |
-| A.2 | 定义 GitHub 数据模型 | `models/github.rs` | GitHubUser, DeviceFlowResponse, AuthStatus 等 |
-| A.3 | 实现 OAuth Device Flow | `github/auth.rs` | start_device_flow / poll_for_token / save_token / load_token / clear_token |
-| A.4 | 实现 GitHub API 客户端 | `github/api.rs` | GitHubClient struct，封装 GET/POST，处理认证头和限流 |
-| A.5 | 实现认证相关 Tauri 命令 | `commands/github.rs` | github_start_login, github_poll_login, github_check_auth, github_logout, github_get_user |
-| A.6 | 注册新模块和命令 | `lib.rs`, `models/mod.rs`, `commands/mod.rs` | 注册 github 模块和所有新命令 |
-
-**前端任务**：
-
-| # | 任务 | 涉及文件 | 说明 |
-|---|------|---------|------|
-| A.7 | 定义 TS 类型 | `lib/types.ts` | GitHubUser, DeviceFlowResponse, AuthStatus |
-| A.8 | 封装 invoke 调用 | `lib/tauriCommands.ts` | 所有 github_* 命令的 TS 封装 |
-| A.9 | 实现 githubStore | `stores/githubStore.ts` | 认证状态、用户信息、loading/error 状态 |
-| A.10 | 实现 GitHubLogin 组件 | `components/GitHubLogin.tsx` | 设备码展示 + "打开浏览器" + 轮询等待 |
-| A.11 | 实现 GitHubUserMenu 组件 | `components/GitHubUserMenu.tsx` | 头像 + 下拉菜单（登录名/退出） |
-| A.12 | 修改 Navbar | `components/Navbar.tsx` | 右侧显示 GitHub 状态（头像/登录按钮） |
-| A.13 | 修改 Settings 页 | `routes/Settings.tsx` | 添加"GitHub 账户"区块 |
-
-**M4-A 验收标准**：
-
-- 首次使用点击"Login with GitHub"，显示设备码和验证 URL
-- 点击"Open Browser"打开 GitHub 授权页
-- 用户在 GitHub 授权后，应用自动检测并显示用户信息
-- 关闭重开应用后认证状态保持（令牌持久化在密钥链）
-- 退出登录清除令牌，回到未认证状态
-
----
-
-#### M4-B：GitHub 仓库管理
-
-**目标**：列出用户所有仓库，支持搜索/筛选，一键克隆并自动配置远程。
-
-**后端任务**：
-
-| # | 任务 | 涉及文件 | 说明 |
-|---|------|---------|------|
-| B.1 | 实现仓库列表 API | `github/repos.rs` | list_user_repos (分页), get_repo, URL 格式检测 |
-| B.2 | 添加仓库相关命令 | `commands/github.rs` | github_list_repos, github_get_repo |
-
-**前端任务**：
-
-| # | 任务 | 涉及文件 | 说明 |
-|---|------|---------|------|
-| B.3 | 添加 TS 类型 | `lib/types.ts` | GitHubRepo 接口 |
-| B.4 | 添加命令封装 | `lib/tauriCommands.ts` | githubListRepos, githubGetRepo |
-| B.5 | 实现 GitHubRepoList 组件 | `components/GitHubRepoList.tsx` | 搜索/筛选/分页的仓库列表 |
-| B.6 | 改造 Home 页 | `routes/Home.tsx` | 认证后显示"GitHub Repos"区块 |
-| B.7 | 一键克隆集成 | `routes/Home.tsx` | 点击仓库 -> 预填充克隆 URL -> 触发克隆流程 |
-
-**M4-B 验收标准**：
-
-- 认证用户可在主页看到自己的仓库列表
-- 支持搜索/筛选仓库
-- 仓库卡片显示名称、描述、语言（带颜色标记）、Star 数
-- 点击"Clone"预填充克隆 URL 并触发克隆
-- 克隆后远程仓库自动配置正确
-- 支持分页加载（100+ 仓库用户）
-
----
-
-#### M4-C：Pull Request 功能
-
-**目标**：完整的 PR 生命周期管理——列表、查看、创建、合并、评论。
-
-**后端任务**：
-
-| # | 任务 | 涉及文件 | 说明 |
-|---|------|---------|------|
-| C.1 | 实现 PR 相关 API | `github/pulls.rs` | list_pulls, get_pull, create_pull, merge_pull, get_pull_files, get_pull_diff, list/create_comments |
-| C.2 | 添加 PR 相关命令 | `commands/github.rs` | 所有 PR 操作命令 |
-| C.3 | 注册新命令 | `lib.rs` | 注册 PR 命令 |
-
-**前端任务**：
-
-| # | 任务 | 涉及文件 | 说明 |
-|---|------|---------|------|
-| C.4 | 添加 PR 类型定义 | `lib/types.ts` | GitHubPullRequest, PRBranchRef, CreatePullRequest, PullRequestFile 等 |
-| C.5 | 添加 PR 命令封装 | `lib/tauriCommands.ts` | 所有 PR 命令的 TS 封装 |
-| C.6 | 实现 PRList 组件 | `components/PRList.tsx` | Open/Closed 标签页，PR 卡片展示 |
-| C.7 | 实现 PRDetail 组件 | `components/PRDetail.tsx` | PR 详情 + Changes/Comments 标签页 |
-| C.8 | 实现 PRCreateDialog 组件 | `components/PRCreateDialog.tsx` | 创建 PR 弹窗（base/head 分支选择） |
-| C.9 | 实现 patch 解析工具 | `lib/diffParser.ts` | GitHub unified diff -> DiffResult 转换 |
-| C.10 | 创建 PR 路由页 | `routes/GitHubPRs.tsx` | PR 列表+详情布局 |
-| C.11 | 添加 PR 路由 | `index.tsx` | `/pulls` 路由 |
-| C.12 | 修改 Navbar | `components/Navbar.tsx` | 认证+打开仓库后显示"PRs"导航项 |
-| C.13 | 修改 Repository 页 | `routes/Repository.tsx` | 工具栏添加 PR 按钮 |
-
-**M4-C 验收标准**：
-
-- 可查看当前仓库的 PR 列表（Open/Closed 筛选）
-- 点击 PR 查看详情（标题、描述、分支信息、状态、mergeable）
-- "Changes" 标签页展示变更文件列表，点击后在 DiffView 中查看差异
-- "Comments" 标签页展示评论
-- 可从当前分支创建 PR（自动检测 base/head 分支）
-- 可合并 PR（选择 merge/squash/rebase 方式）
-- 仅认证且打开 GitHub 远程仓库时可访问 PR 功能
-
----
-
-### M5：体验打磨
-
-| # | 任务 | 说明 |
-|---|------|------|
-| 5.1 | 大仓库性能优化 | 虚拟滚动提交列表、增量加载图数据 |
-| 5.2 | 提交图动画与过渡效果 | 流畅的节点动画和分支高亮 |
-| 5.3 | 二进制文件降级策略 | 图片预览、二进制提示、LFS 标记 |
-| 5.4 | 子模块检测与提示 | 检测 `.gitmodules`，提示用户 |
-| 5.5 | 键盘快捷键 | 常用操作快捷键绑定 |
-| 5.6 | 国际化 (i18n) | 中/英文支持 |
-| 5.7 | CI/CD 流水线 | GitHub Actions：lint + test + build |
-
----
-
-## 前后端接口定义
-
-### 核心 Tauri Commands
+**建议方案：**
 
 ```
-// === 仓库管理（已有）===
-open_repo / get_recent_repos / save_repo_path / remove_recent_repo / clone_repo
+src/components/platform/
+  PlatformLogin.tsx          ← 统一 GitHubLogin + GiteeLogin
+  PlatformPRList.tsx         ← 统一 PRList + GiteePRList
+  PlatformPRDetail.tsx       ← 统一 PRDetail + GiteePRDetail
+  PlatformPRCreateDialog.tsx ← 统一 PRCreateDialog + GiteePRCreateDialog
+  PlatformRepoList.tsx       ← 统一 GitHubRepoList + GiteeRepoList
+  PlatformUserMenu.tsx       ← 统一 GitHubUserMenu + GiteeUserMenu
 
-// === 工作区状态（已有）===
-get_status / stage_files / unstage_files / get_conflicts / resolve_conflict
+src/lib/platformAdapter.ts  ← 平台适配器接口定义 + GitHub/Gitee 实现
+```
 
-// === 提交（已有）===
-commit / get_commit_history / get_commit_graph / get_commit_detail / rebase / cherry_pick
+- `PlatformAdapter` 接口定义统一的 API 调用签名（login, listRepos, listPRs, getPR, createPR, mergePR, getUser 等）
+- 组件通过 `props.platform: 'github' | 'gitee'` 选择适配器
+- 消除 ~630 行重复代码
 
-// === 分支（已有）===
-get_branch_list / create_branch / checkout_branch / delete_branch
+**后端：** `github/auth.rs` 改用 `oauth::flow::start_auth_code_flow()`，删除重复 PKCE 实现（~120 行）。
 
-// === Diff（已有）===
-get_file_diff / get_file_content
+### 1.3 状态管理集中化
 
-// === 远程（已有）===
-get_remotes / fetch / pull / push
+当前 `Repository.tsx` 中有 20+ 个局部 `createSignal`（stashModal、remoteModal、conflictModal 等），散落在组件中难以追踪。
 
-// === Stash（已有）===
-stash_save / stash_list / stash_pop / stash_apply / stash_drop
+**建议：** 新增或扩展现有 store：
 
-// === GitHub 认证（M4-A 新增）===
-github_start_login     -> DeviceFlowResponse    // 启动设备流认证
-github_poll_login      -> GitHubUser            // 轮询令牌并获取用户信息
-github_check_auth      -> AuthStatus            // 检查当前认证状态
-github_logout          -> ()                    // 退出登录，清除令牌
-github_get_user        -> GitHubUser            // 获取当前用户信息
+```
+stores/
+  repositoryStore.ts   ← 新增：modal 状态、action loading 状态、repository 级 UI 状态
+```
 
-// === GitHub 仓库（M4-B 新增）===
-github_list_repos      -> Vec<GitHubRepo>       // 列出用户仓库（分页）
-github_get_repo        -> GitHubRepo            // 获取单个仓库信息
+将以下信号集中管理：
+- 模态框开关：`stashOpen`、`remoteOpen`、`conflictOpen`、`mergeOpen`、`rebaseOpen`、`branchCompareOpen`、`pushDialogOpen`、`prCreateOpen`、`branchCreateOpen`
+- 加载状态：`stagingLoading`、`committingLoading`、`undoLoading`、`redoLoading`、`fetchLoading`、`pullLoading`、`pushLoading`
+- 面板模式：`leftPanelMode`、`selectedFile`、`selectedCommit`
 
-// === GitHub PR（M4-C 新增）===
-github_list_pulls      -> Vec<GitHubPullRequest>
-github_get_pull        -> GitHubPullRequest
-github_create_pull     -> GitHubPullRequest
-github_merge_pull      -> MergePullResult
-github_get_pull_files  -> Vec<PullRequestFile>
-github_get_pull_diff   -> String                // 原始 unified diff
-github_list_pull_comments   -> Vec<PRComment>
-github_create_pull_comment  -> PRComment
+---
+
+## 二、性能优化（高优先级）
+
+### 2.1 文件列表虚拟化
+
+`FileList.tsx` 当前渲染全部 `FileStatus[]` 条目。大型仓库（数千文件变更）时 DOM 节点过多导致卡顿。
+
+- 引入 `@tanstack/solid-virtual` 进行虚拟滚动
+- 为 `For`/`Index` 循环添加窗口化渲染（仅渲染可视区域内的文件行）
+- 固定行高可以减少计算（约 36px 每行）
+
+### 2.2 提交图增量加载
+
+- 当前硬限制 2000 节点，建议添加分页加载（滚动到底部自动加载更多）
+- Canvas 渲染部分可考虑将 lane 分配计算移到 Web Worker
+
+### 2.3 Diff 视图大文件优化
+
+- 大文件 Diff（>1000 行）渲染时可能卡顿
+- 对 Unified/Split 模式添加行级虚拟化，仅渲染可视区域
+- Split view 左右同步滚动可开启 `requestAnimationFrame` 节流
+
+### 2.4 构建产物体积
+
+- 检查 Tauri bundle 资源是否包含不必要的文件
+- Vite 构建可启用 `build.minify: 'terser'`（替代默认 esbuild）进一步压缩
+
+---
+
+## 三、测试与质量保障（高优先级）
+
+### 3.1 Rust 后端测试
+
+当前覆盖率为零。优先为核心模块添加集成测试：
+
+```
+src-tauri/tests/
+  repo_test.rs        ← open_repo、init_repo（使用 tempdir 创建测试仓库）
+  status_test.rs      ← get_status、stage_files、unstage_files、discard_files
+  commit_test.rs      ← commit、amend_commit、undo、redo
+  branch_test.rs      ← create_branch、checkout_branch、delete_branch、compare_branches
+  merge_test.rs       ← merge_branch（三种策略）
+  remote_test.rs      ← fetch、pull、push（使用本地 bare repo 模拟远程）
+  stash_test.rs       ← stash_save、stash_list、stash_pop
+  validate_test.rs    ← validate_ref_name、validate_path_in_workdir
+  oauth_token_test.rs ← TokenStore save/load/clear
+```
+
+依赖 crate（dev-dependencies）：`tempfile`
+
+### 3.2 TypeScript 前端测试
+
+引入 `vitest` + 配套工具：
+
+```
+src/lib/
+  __tests__/
+    tauriCommands.test.ts   ← mock invoke()，验证参数传递与返回值类型
+    gitErrorDesc.test.ts    ← describeError() 各种错误模式匹配
+    diffParser.test.ts      ← GitHub diff patch 解析
+    platformAdapter.test.ts ← 平台适配器接口一致性验证
+
+src/stores/
+  __tests__/
+    repoStore.test.ts
+    diffStore.test.ts
+    commitStore.test.ts
+    settingsStore.test.ts
+```
+
+devDependencies 新增：`vitest`、`@solidjs/testing-library`（组件测试用）、`@testing-library/user-event`
+
+### 3.3 CI 流水线增强
+
+新增 `.github/workflows/ci.yml`（不同于 release.yml，在 push/PR 时触发）：
+
+```yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 26 }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
+      - run: cargo check
+        working-directory: src-tauri
+      - run: cargo test
+        working-directory: src-tauri
+      - run: cargo clippy -- -D warnings
+        working-directory: src-tauri
 ```
 
 ---
 
-## 开发规范
+## 四、代码质量与安全性（中优先级）
 
-- **Git 分支策略**：`main`（稳定）← `dev`（开发）← `feature/*`（功能分支）
-- **提交规范**：中文提交信息，格式 `类型: 描述`
-- **代码检查**：`npx tsc --noEmit`（前端）+ `cargo fmt` + `cargo clippy`（后端）
-- **接口优先**：新功能先定好 Tauri Command 的输入输出结构，再分头实现前后端
-- **令牌安全**：OAuth 令牌仅在后端处理，前端永不到达令牌原文
+### 4.1 Rust Lint 强化
+
+在 `src-tauri/Cargo.toml` 添加：
+
+```toml
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+cargo = "warn"
+```
+
+随后逐步修复 clippy warnings。
+
+### 4.2 TypeScript 运行时类型校验
+
+当前 `tauriCommands.ts` 的 `invoke<T>()` 泛型仅在编译时生效，后端返回数据未在运行时校验。
+
+- 引入 `valibot`（体积小，tree-shakable）为核心 API 返回值添加 schema 校验
+- 优先覆盖：`openRepo` → `RepoInfo`、`getStatus` → `FileStatus[]`、`getCommitHistory` → `CommitInfo[]`、`getCommitGraph` → `CommitGraphData`
+
+### 4.3 错误处理全面审查
+
+- 扫描所有 `tauriCommands.ts` 调用点，确认每个 `catch` 块都有 `addToast()` 或 `console.error()`
+- 扫描所有 `String(e)` 用法，确认已替换为 `describeError(e)`
+- `describeError()` 正则覆盖是否完整（新增场景：submodule、worktree）
+
+### 4.4 安全加固
+
+| 项目 | 当前状态 | 建议 |
+|------|---------|------|
+| CSP | `default-src 'self'` + 少量例外 | 考虑使用 nonce 替代 `'unsafe-inline'`（style） |
+| `deleteDir` 命令 | 无路径验证 | 添加 `validate_path_in_workdir()` 或操作前二次确认 |
+| `discard_files` | 已有路径验证 | 审计 `stage_files`/`unstage_files` 也使用了路径验证 |
+| `initRepo` 命令 | 接收任意路径 | 确认不会覆盖非空目录 |
+| OAuth client_id | 支持 env var 覆盖 | 保持现状即可 |
 
 ---
 
-## 风险与缓解
+## 五、功能完善（中优先级）
 
-| 风险 | 影响 | 缓解措施 |
-|------|------|---------|
-| `keyring` Linux 兼容性 | 令牌无法持久化 | 回退到应用数据目录加密文件 |
-| GitHub API 限流 | 操作随机失败 | 处理 403/429 响应，展示限流信息 |
-| 大 PR Diff 性能 | 加载缓慢 | 按需逐文件加载 Diff |
-| 设备流 UX 困惑 | 用户不知如何操作 | 清晰 UI 指引 + 自动打开浏览器 + 轮询反馈 |
+### 5.1 Git 功能补全
+
+| 功能 | 当前状态 | 建议 |
+|------|---------|------|
+| `git tag` | 只支持创建 | 增加 `list_tags`、`delete_tag` 命令 + 前端 Tag 列表 UI |
+| `git submodule` | 只有 `check_submodules` 检测 | 增加 `submodule_add`、`submodule_update`、`submodule_init` |
+| `git blame` | 无 | 后端 `git_blame` 命令 + 文件逐行 blame 视窗 |
+| `git reflog` | redo 内部使用 | 暴露 `get_reflog` 命令 + 前端 Reflog 查看 UI |
+| `git worktree` | 无 | 低优先级，后期考虑 |
+| `git bisect` | 无 | 低优先级，后期考虑 |
+
+### 5.2 行级暂存 UI 集成
+
+- 后端已有 `stage_hunk`、`stage_line` 命令
+- 确认 `DiffView.tsx` 中差异行可逐行/逐块点击暂存（类似 GitKraken）
+- 如未集成，在 DiffView 行号左侧添加 "+" 按钮
+
+### 5.3 LFS 完整支持
+
+- 当前只有 `check_lfs` 检测文件是否为 LFS 指针
+- 增加 `lfs_pull`、`lfs_track`、`lfs_untrack` 命令
+- 前端文件列表中对 LFS 文件标注图标
+
+### 5.4 SSH 密钥管理
+
+- 当前 SSH 依赖 `ssh_key_from_agent`（自动使用 ssh-agent）
+- 可增加 Settings 中手动指定 SSH 密钥路径
+- 增加"测试 SSH 连接"按钮（`ssh -T git@github.com` 类似功能）
+
+---
+
+## 六、开发体验优化（中优先级）
+
+### 6.1 统一开发命令
+
+在 `package.json` 中新增：
+
+```json
+{
+  "scripts": {
+    "check": "npx tsc --noEmit",
+    "check:rust": "cd src-tauri && cargo check",
+    "lint": "npx oxlint",
+    "lint:rust": "cd src-tauri && cargo clippy",
+    "test": "npx vitest run",
+    "test:rust": "cd src-tauri && cargo test",
+    "precommit": "npx tsc --noEmit && cd src-tauri && cargo check"
+  }
+}
+```
+
+### 6.2 Pre-commit Hook
+
+- 使用 `lefthook`（Rust 原生，跨平台，比 husky 更适合 Tauri 项目）
+- 提交前自动运行：类型检查 + cargo check（非测试，避免耗时过长）
+
+### 6.3 CI/CD 组件升级
+
+- `tauri-apps/tauri-action@v0` → `@v2`
+- `swatinem/rust-cache@v2` → `@v3`（如有）
+- 增加 `actions/cache` 缓存 npm 和 cargo 依赖
+
+---
+
+## 七、UI/UX 优化（低优先级）
+
+### 7.1 无障碍（Accessibility）
+
+- 为工具栏按钮添加 `aria-label`
+- 文件列表支持键盘导航（↑↓ 选择文件，Space 暂存/取消暂存）
+- 提交图支持键盘左右导航
+
+### 7.2 国际化完整性检查
+
+新增 `scripts/check-i18n.mjs`：
+
+```js
+// 以 en.ts 为基准，扫描所有语言文件
+// 报告缺失的 key 和多余 key
+// 输出对比报告
+```
+
+### 7.3 操作确认对话框
+
+- `discard_files` 增加确认弹窗（"确定放弃对 N 个文件的更改吗？此操作不可撤销。"）
+- `delete_branch` 未合并警告（目前可能直接删除）
+
+---
+
+## 八、实施计划
+
+### 阶段一：基础质量保障（立即执行，预计 2-3 天）
+
+| 序号 | 任务 | 优先级 |
+|------|------|--------|
+| 1.1 | 创建 `.github/workflows/ci.yml`（类型检查 + 构建验证） | P0 |
+| 1.2 | Rust 核心模块测试：`repo_test.rs`、`status_test.rs`、`commit_test.rs`、`validate_test.rs` | P0 |
+| 1.3 | Rust 添加 `clippy` lint rules + 修复现有 warnings | P0 |
+| 1.4 | `package.json` 添加 `check`/`lint`/`test` 命令 | P0 |
+| 1.5 | 后端 `github/auth.rs` 改用 `oauth::flow` 消除重复代码 | P1 |
+
+### 阶段二：架构重构（短期，预计 3-5 天）
+
+| 序号 | 任务 | 优先级 |
+|------|------|--------|
+| 2.1 | Repository.tsx 拆分为 `src/routes/repository/` 子模块 | P0 |
+| 2.2 | 新增 `repositoryStore.ts` 集中管理 modal 和 loading 状态 | P1 |
+| 2.3 | 安全审计：`deleteDir` 路径验证、`discard_files` 确认弹窗 | P1 |
+| 2.4 | `scripts/check-i18n.mjs` 国际化完整性检查脚本 | P2 |
+
+### 阶段三：性能优化（短期，预计 2-3 天）
+
+| 序号 | 任务 | 优先级 |
+|------|------|--------|
+| 3.1 | 文件列表虚拟化（`@tanstack/solid-virtual`） | P1 |
+| 3.2 | 提交图增量加载（超出 500 节点时分页） | P2 |
+| 3.3 | Diff 视图大文件行级虚拟化 | P2 |
+
+### 阶段四：平台抽象统一（中期，预计 3-4 天）
+
+| 序号 | 任务 | 优先级 |
+|------|------|--------|
+| 4.1 | 创建 `src/lib/platformAdapter.ts` 接口定义 | P1 |
+| 4.2 | 创建 `src/components/platform/` 统一组件（6 个） | P1 |
+| 4.3 | 删除旧 GitHub/Gitee 独立组件（12 个） | P1 |
+| 4.4 | 更新相关路由和 store 引用 | P1 |
+
+### 阶段五：测试完善（中期，预计 2-3 天）
+
+| 序号 | 任务 | 优先级 |
+|------|------|--------|
+| 5.1 | TypeScript 前端测试：`describeError`、`diffParser`、stores | P1 |
+| 5.2 | Rust 后端补充：`branch_test.rs`、`merge_test.rs`、`remote_test.rs`、`stash_test.rs` | P2 |
+| 5.3 | CI 中添加 `cargo test` 和 `vitest run` 步骤 | P1 |
+
+### 阶段六：功能补全（长期，持续进行）
+
+| 序号 | 任务 | 优先级 |
+|------|------|--------|
+| 6.1 | Tag 列表/删除 UI | P2 |
+| 6.2 | Submodule 操作（add/update/init） | P2 |
+| 6.3 | Blame 视图 | P3 |
+| 6.4 | LFS 完整支持 | P3 |
+| 6.5 | 行级暂存 UI 集成（DiffView 中添加按钮） | P2 |
+| 6.6 | SSH 密钥手动配置 | P3 |
+| 6.7 | Reflog 查看 UI | P3 |
+
+### 阶段七：CI/CD 与 DX（中期，预计 1-2 天）
+
+| 序号 | 任务 | 优先级 |
+|------|------|--------|
+| 7.1 | `tauri-action@v0` → `@v2` | P2 |
+| 7.2 | Pre-commit hook（lefthook） | P2 |
+| 7.3 | Accessibility 基础支持（aria-label + 键盘导航） | P3 |
+
+---
+
+## 九、技术依赖及选型
+
+| 目的 | 选型 | 理由 |
+|------|------|------|
+| 文件列表虚拟化 | `@tanstack/solid-virtual` | SolidJS 原生支持，轻量 |
+| 前端测试 | `vitest` | 与 Vite 生态一致，快速 |
+| 组件测试 | `@solidjs/testing-library` | SolidJS 官方推荐 |
+| 运行时校验 | `valibot` | Tree-shakable，体积 <1KB |
+| Pre-commit | `lefthook` | Rust 原生，跨平台无 Node 依赖 |
+| Lint（前端） | `oxlint` | Rust 原生，极快，无需配置 |
+| Rust 测试仓库 | `tempfile` crate | 标准方案 |
+
+---
+
+*本方案由 Agent 制定，随项目演进而更新。各阶段完成后需验证并通过 CI。*
+
+---
+
+## 进度更新（统一记录）
+
+### 执行进度（2026-06-14）
+
+| 阶段 | 状态 | 说明 |
+|------|------|------|
+| 阶段一：基础质量保障 | 已完成 | CI、前端测试/lint/check 脚本、Rust baseline 测试、clippy 配置已落地；CI 报错和 warning 已修复并验证通过。 |
+| 阶段二：架构重构 | 已完成主体 | `Repository.tsx` 已拆出 `LeftPanel`、`RightPanel`、`ModalsContainer`、`RepositoryToolbar`、`CommitInput`、`useRepositoryActions`、`useRepositoryModals` 与 `repositoryStore`；平台 PR 路由和 GitHub/Gitee PR/仓库/用户菜单统一抽象已完成。 |
+| 阶段三：性能优化 | 已完成主体 | 文件列表扁平模式已接入 `@tanstack/solid-virtual`；按用户要求取消提交图增量加载，保持原视图；Diff 行级虚拟化已完成。 |
+| 阶段四：平台抽象统一 | 已完成主体 | `PlatformAdapter` 已覆盖登录、鉴权、仓库、分支、PR 列表/详情/创建/合并、PR 文件/评论；通用平台组件已替代旧 GitHub/Gitee 镜像组件。 |
+| 阶段五：测试完善 | 已完成主体 | 已覆盖 `describeError`、`diffParser`、stores、`tauriCommands`、`platformAdapter`；Rust 已补充 branch/merge/remote/stash/repo/status/commit/oauth token 集成测试。 |
+| 阶段六：功能补全 | 已完成主体 | Tag/Submodule/Blame/Reflog/LFS/SSH Tauri wrapper、后端命令与仓库级 UI 入口已完成。 |
+| 阶段七：CI/CD 与 DX | 已完成主体 | CI/release action 已升级到可解析版本，lefthook、oxlint、i18n 检查脚本已接入；`swatinem/rust-cache@v3` 当前不存在，release/CI 保持最新可用 `v2.9.1` 所在的 `@v2`。 |
+
+### 平台抽象轮次
+
+- [x] 扩展 `PlatformAdapter` 合约与 valibot 边界校验，补齐 PR head/base、统计字段、分支、PR 文件和评论。
+- [x] 新增 `PlatformPRList`、`PlatformPRDetail`、`PlatformPRCreateDialog`，替代 GitHub/Gitee 两套 PR 组件。
+- [x] 新增 `PlatformRepoList`、`PlatformUserMenu`，替代 GitHub/Gitee 两套仓库列表和用户菜单。
+- [x] 将 `GitHubPRs`、`GiteePRs` 收敛为 `PlatformPRs` 的薄 wrapper。
+- [x] 删除旧 GitHub/Gitee 镜像 PR、RepoList、UserMenu 组件。
+- [x] 增加 platformAdapter PR 字段测试。
+
+### 性能与功能补全轮次
+
+- [x] 完成 Diff 视图大文件行级虚拟化：Unified、Split、Full File 三种视图均改用 `@tanstack/solid-virtual`，并保留 hunk/line staged 操作。
+- [x] 按用户要求保留提交图原本视图：未实现“超过 500 节点分页/增量加载”，仍沿用现有 2000 节点截断提示。
+- [x] 新增仓库级 `GitToolsPanel`，从工具栏入口覆盖 Tag 列表/删除、Submodule add/init/update、Blame、Reflog、LFS pull/track/untrack、SSH 连接测试。
+- [x] 扩展 `repositoryStore` modal 状态，统一管理 Git Tools 面板开关。
+- [x] 本轮验证已通过：`npm run check`、`npm run lint`、`npm run test`、`npm run build`、`cargo check`、`cargo test`、`cargo clippy -- -D warnings`、`npm audit`。
+
+### 测试补强轮次
+
+- [x] 将 `git` 与 `models` 模块暴露给 Rust integration tests，便于测试真实后端实现而不是复刻 `git2` 行为。
+- [x] 新增 `src-tauri/tests/common/` 测试仓库辅助工具，统一临时仓库初始化、用户配置、写文件和提交逻辑。
+- [x] 新增 `branch_test.rs`，覆盖分支创建、切换、对比、删除以及禁止删除当前分支。
+- [x] 新增 `merge_test.rs`，覆盖 fast-forward merge 和 squash merge 的工作区/索引结果。
+- [x] 新增 `remote_test.rs`，覆盖 remote add/set/delete 以及本地 bare repo push/fetch 往返。
+- [x] 新增 `stash_test.rs`，覆盖 stash save/list/pop/apply/drop。
+- [x] 本轮 Rust 验证已通过：`cargo check`、`cargo test --target-dir target/codex-test -j 1`、`cargo clippy -- -D warnings`。
+
+### 全面收口轮次
+
+- [x] 完成 Repository 主页面剩余拆分：新增 `LeftPanel`、`RightPanel`、`ModalsContainer`、`useRepositoryActions`、`useRepositoryModals`，主页面保留数据加载、状态编排和 handler 接线。
+- [x] 修复 `amend_commit` 使用普通 commit 替代 amend 导致的 libgit2 `current tip is not the first parent` 错误，改用 `Commit::amend()`。
+- [x] 新增 `repo_test.rs`，覆盖 repo 初始化、非空目录拒绝、仓库信息、`.gitmodules` fallback 解析。
+- [x] 新增 `status_test.rs`，覆盖未跟踪文件暂存/取消暂存、丢弃 tracked/untracked 更改、拒绝 `..` 路径。
+- [x] 新增 `commit_test.rs`，覆盖 commit history/detail、amend、undo/redo。
+- [x] 新增 `oauth_token_test.rs`，覆盖 TokenStore save/load/clear。
+- [x] 将本轮新增的 `repo.gitTools`、`repo.undoCommitSuccess`、`repo.redoCommitSuccess` 同步到所有语言包，避免扩大现有 i18n drift。
+- [x] 本轮验证已通过：`npm run check`、`npm run lint`、`npm run test`、`npm run build`、`npm audit`、`npm run check:i18n`（退出码 0；仍报告历史语言包 drift）、`cargo check --target-dir target/codex-check`、`cargo test --target-dir target/codex-test -j 1`、`cargo clippy --target-dir target/codex-clippy -- -D warnings`。
+
+### i18n drift 彻底收口轮次
+
+- [x] 以 `en.ts` 为基准，补齐 `ar/de/es/fr/ja/ko/pt/ru/zh-TW/zh` 全部历史缺失 key，并按基准 key 顺序归一化语言包结构。
+- [x] 将 PR 合并冲突相关文案统一到通用 `pr.mergeConflict` / `pr.checkingMerge`，从旧的 `github.mergeConflict` / `github.checkingMerge` 命名迁出，匹配 `PlatformPRDetail` 的实际调用。
+- [x] 移除历史 extra key：`settings.github` 与旧位置的 `github.mergeConflict` / `github.checkingMerge`。
+- [x] 本轮验证已通过：`node scripts/check-i18n.mjs --strict`（11 个 locale 全部通过）、`npm run check`、`npm run lint`、`npm run test`、`npm run build`。
+
+### 下一步建议
+
+- [ ] 合并前可按发布流程决定是否整理 CHANGELOG 与版本号；当前优化分支不自动发布。

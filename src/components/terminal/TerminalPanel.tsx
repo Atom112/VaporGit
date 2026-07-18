@@ -2,9 +2,9 @@ import { Component, createEffect, createSignal, onCleanup, onMount } from 'solid
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { resizeTerminal, writeTerminal, closeTerminal } from '../../lib/tauriCommands';
+import { resizeTerminal, writeTerminal } from '../../lib/tauriCommands';
 import { listen } from '@tauri-apps/api/event';
-import { tt } from '../../i18n';
+import { describeError } from '../../lib/gitErrorDesc';
 
 interface TerminalPanelProps {
   phase: 'enter' | 'exit' | null;
@@ -12,7 +12,7 @@ interface TerminalPanelProps {
 }
 
 const TerminalPanel: Component<TerminalPanelProps> = (props) => {
-  let containerRef!: HTMLDivElement;
+  let containerRef: HTMLDivElement | undefined;
   const [fitAddon] = createSignal<FitAddon>(new FitAddon());
   const [terminal] = createSignal<Terminal>(new Terminal({
     cursorBlink: true,
@@ -43,15 +43,29 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       brightWhite: '#a6adc8',
     },
   }));
+
+  const logTerminalError = (context: string, error: unknown) => {
+    console.warn(`${context}: ${describeError(error)}`);
+  };
+
+  const fitSafely = (fit: FitAddon) => {
+    try {
+      fit.fit();
+    } catch (e) {
+      logTerminalError('Terminal fit failed', e);
+    }
+  };
+
   onMount(() => {
     const term = terminal();
     const fit = fitAddon();
     term.loadAddon(fit);
+    if (!containerRef) return;
     term.open(containerRef);
 
     // Fit after open (may report 0 cols/rows if hidden; re-fit after animation)
     requestAnimationFrame(() => {
-      try { fit.fit(); } catch {}
+      fitSafely(fit);
     });
 
     // Listen for terminal data from backend
@@ -67,17 +81,17 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
 
     // Forward user input to backend
     term.onData((data) => {
-      writeTerminal(data).catch(() => {});
+      writeTerminal(data).catch((e) => logTerminalError('Terminal write failed', e));
     });
 
     // Forward resize events to backend
     term.onResize(({ cols, rows }) => {
-      resizeTerminal(cols, rows).catch(() => {});
+      resizeTerminal(cols, rows).catch((e) => logTerminalError('Terminal resize failed', e));
     });
 
     // Resize observer
     const ro = new ResizeObserver(() => {
-      try { fit.fit(); } catch {}
+      fitSafely(fit);
     });
     ro.observe(containerRef);
 
@@ -85,8 +99,6 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       ro.disconnect();
       cleanupFns.forEach((fn) => fn());
       term.dispose();
-      // Kill the backend process when component unmounts (e.g. navigating away)
-      closeTerminal().catch(() => {});
     });
   });
 
@@ -94,7 +106,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
   createEffect(() => {
     if (props.phase === 'enter') {
       setTimeout(() => {
-        try { fitAddon().fit(); } catch {}
+        fitSafely(fitAddon());
       }, 250);
     }
   });
@@ -112,8 +124,8 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
           transform: 'translateY(100%)',
         } : {}),
         background: 'rgba(30, 30, 46, 0.18)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
+        'backdrop-filter': 'blur(24px)',
+        '-webkit-backdrop-filter': 'blur(24px)',
       }}
     >
       {/* Subtle gradient overlay for acrylic depth */}
@@ -125,7 +137,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       />
       {/* Header */}
       <div class="relative flex items-center justify-between px-3 py-1.5 bg-white/[0.04] shrink-0">
-        <span class="text-xs font-medium opacity-60">{tt('repo.terminal')}</span>
+        <span class="text-xs font-medium opacity-60">Terminal</span>
         <button
           class="text-xs opacity-40 hover:text-red-400 hover:opacity-100 transition-colors"
           onClick={props.onClose}
@@ -136,7 +148,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
         </button>
       </div>
       {/* Terminal container */}
-      <div ref={containerRef} class="relative flex-1 min-h-0" />
+      <div ref={(el) => { containerRef = el; }} class="relative flex-1 min-h-0" />
       <style>{`
         .xterm {
           height: 100%;

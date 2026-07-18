@@ -2,11 +2,17 @@ import { Component, createSignal, onMount, onCleanup } from 'solid-js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const Titlebar: Component = () => {
-  const appWindow = getCurrentWindow();
+  let appWindow: ReturnType<typeof getCurrentWindow> | null = null;
+  try {
+    appWindow = getCurrentWindow();
+  } catch {
+    appWindow = null;
+  }
   const [isMaximized, setIsMaximized] = createSignal(false);
   const windowControlClass = 'h-full px-4 bg-transparent text-gray-100 transition-colors flex items-center justify-center cursor-default border-0 rounded-lg shadow-none';
 
   onMount(() => {
+    if (!appWindow) return;
     appWindow.isMaximized().then(setIsMaximized);
 
     const unlistenPromise = appWindow.onResized(() => {
@@ -18,14 +24,15 @@ const Titlebar: Component = () => {
     });
   });
 
-  const handleMinimize = async () => await appWindow.minimize(); // 最小化窗口
+  const handleMinimize = async () => await appWindow?.minimize(); // 最小化窗口
   
   const handleToggleMaximize = async () => { // 切换最大化/还原窗口
+    if (!appWindow) return;
     await appWindow.toggleMaximize();
     setIsMaximized(await appWindow.isMaximized());
   };
   
-  const handleClose = async () => await appWindow.close(); // 关闭窗口
+  const handleClose = async () => await appWindow?.close(); // 关闭窗口
 
   return (
     <div 
@@ -35,7 +42,7 @@ const Titlebar: Component = () => {
         <img src="/logo/VaporGit.svg" alt="VaporGit Logo" class="w-5 h-5 pointer-events-none" />
         VaporGit
       </div>
-      <div class="flex h-full" data-tauri-no-drag>
+      {appWindow && <div class="flex h-full" data-tauri-no-drag>
         <button
           class={`${windowControlClass} hover:bg-white/10`}
           onClick={handleMinimize}
@@ -64,7 +71,7 @@ const Titlebar: Component = () => {
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
-      </div>
+      </div>}
     </div>
   );
 };

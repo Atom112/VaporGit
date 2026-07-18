@@ -1,4 +1,5 @@
-import { Component, createSignal, For, Show } from 'solid-js';
+import { Component, createSignal, For, JSX, Show } from 'solid-js';
+import { createVirtualizer } from '@tanstack/solid-virtual';
 import type { FileStatus } from '../../lib/types';
 import { tt, ttf } from '../../i18n';
 
@@ -21,6 +22,52 @@ interface FileNode {
   children: FileNode[];
   file?: FileStatus;
 }
+
+interface VirtualFileListProps {
+  files: FileStatus[];
+  renderFileRow: (file: FileStatus, indent: number) => JSX.Element;
+}
+
+const VirtualFileList: Component<VirtualFileListProps> = (props) => {
+  let parentRef: HTMLDivElement | undefined;
+  const rowVirtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
+    get count() {
+      return props.files.length;
+    },
+    getScrollElement: () => parentRef ?? null,
+    estimateSize: () => 36,
+    overscan: 8,
+  });
+
+  return (
+    <div ref={(el) => { parentRef = el; }} class="max-h-[42vh] overflow-auto">
+      <div
+        class="relative"
+        style={{
+          height: `${rowVirtualizer.getTotalSize()}px`,
+        }}
+      >
+        <For each={rowVirtualizer.getVirtualItems()}>
+          {(virtualRow) => {
+            const file = props.files[virtualRow.index];
+            return (
+              <div
+                ref={(el) => rowVirtualizer.measureElement(el)}
+                data-index={virtualRow.index}
+                class="absolute left-0 right-0"
+                style={{
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                {file ? props.renderFileRow(file, 0) : null}
+              </div>
+            );
+          }}
+        </For>
+      </div>
+    </div>
+  );
+};
 
 const statusLabel = (status: FileStatus['status']): string => {
   switch (status) {
@@ -148,11 +195,20 @@ const FileList: Component<FileListProps> = (props) => {
 
   const renderFileRow = (file: FileStatus, indent: number) => (
     <div
+      role="button"
+      tabIndex={0}
       class={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/10 transition-colors text-sm ${
         props.selectedFile === file.path ? 'bg-white/10' : ''
       }`}
       style={{ 'padding-left': `${8 + indent * 16}px` }}
       onClick={() => props.onSelectFile(file.path)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          props.onSelectFile(file.path);
+        }
+      }}
+      aria-label={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
     >
       <span
         class={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold bg-white/10 ${statusColor(
@@ -172,6 +228,7 @@ const FileList: Component<FileListProps> = (props) => {
         <Show when={props.onDiscard && !file.staged}>
           <button
             class="text-[11px] px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 transition-colors"
+            aria-label={ttf('repo.discardConfirm', file.path)}
             onClick={(e) => {
               e.stopPropagation();
               openDiscardConfirm({ type: 'file', file });
@@ -186,6 +243,7 @@ const FileList: Component<FileListProps> = (props) => {
               ? 'bg-white/10 hover:bg-white/20 text-white/70'
               : 'bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300'
           }`}
+          aria-label={`${file.staged ? tt('repo.unstage') : tt('repo.stage')}: ${file.path}`}
           onClick={(e) => {
             e.stopPropagation();
             props.onToggleStage(file);
@@ -206,9 +264,19 @@ const FileList: Component<FileListProps> = (props) => {
     return (
       <>
         <div
+          role="button"
+          tabIndex={0}
           class="flex items-center gap-1 px-3 py-1 cursor-pointer hover:bg-white/10 transition-colors text-sm text-white/60"
           style={{ 'padding-left': `${8 + indent * 16}px` }}
           onClick={() => toggleDir(node.path)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleDir(node.path);
+            }
+          }}
+          aria-expanded={expanded}
+          aria-label={node.path}
         >
           <svg
             class={`w-3 h-3 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -230,11 +298,7 @@ const FileList: Component<FileListProps> = (props) => {
 
   const renderFileList = (files: FileStatus[]) => {
     if (!treeMode()) {
-      return (
-        <For each={files}>
-          {(file) => renderFileRow(file, 0)}
-        </For>
-      );
+      return <VirtualFileList files={files} renderFileRow={renderFileRow} />;
     }
     const tree = buildFileTree(files);
     return <For each={tree}>{(node) => renderTreeNode(node, 0)}</For>;
@@ -254,6 +318,7 @@ const FileList: Component<FileListProps> = (props) => {
                 <button
                   class="text-xs text-red-400 hover:text-red-300 transition-colors"
                   onClick={() => openDiscardConfirm({ type: 'all' })}
+                  aria-label={ttf('repo.discardAllConfirm', props.unstagedFiles.length)}
                 >
                   {tt('repo.discardAll')}
                 </button>
@@ -261,6 +326,7 @@ const FileList: Component<FileListProps> = (props) => {
               <button
                 class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
                 onClick={props.onStageAll}
+                aria-label={tt('repo.stageAll')}
               >
                 {tt('repo.stageAll')}
               </button>
@@ -270,6 +336,7 @@ const FileList: Component<FileListProps> = (props) => {
                 }`}
                 onClick={() => setTreeMode(!treeMode())}
                 title={treeMode() ? 'Flat view' : 'Tree view'}
+                aria-label={treeMode() ? 'Flat view' : 'Tree view'}
               >
                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />
@@ -292,6 +359,7 @@ const FileList: Component<FileListProps> = (props) => {
               <button
                 class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
                 onClick={props.onUnstageAll}
+                aria-label={tt('repo.unstageAll')}
               >
                 {tt('repo.unstageAll')}
               </button>
@@ -301,6 +369,7 @@ const FileList: Component<FileListProps> = (props) => {
                 }`}
                 onClick={() => setTreeMode(!treeMode())}
                 title={treeMode() ? 'Flat view' : 'Tree view'}
+                aria-label={treeMode() ? 'Flat view' : 'Tree view'}
               >
                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />

@@ -241,8 +241,8 @@ pub fn get_conflicts(repo: &Repository) -> Result<Vec<ConflictEntry>, String> {
         let file_path = conflict
             .ancestor
             .as_ref()
-            .or_else(|| conflict.our.as_ref())
-            .or_else(|| conflict.their.as_ref())
+            .or(conflict.our.as_ref())
+            .or(conflict.their.as_ref())
             .map(|e| std::str::from_utf8(&e.path).unwrap_or("").to_string())
             .unwrap_or_default();
 
@@ -282,8 +282,8 @@ pub fn get_conflict_content(repo: &Repository, file: &str, stage: &str) -> Resul
         let conflict_path = conflict
             .ancestor
             .as_ref()
-            .or_else(|| conflict.our.as_ref())
-            .or_else(|| conflict.their.as_ref())
+            .or(conflict.our.as_ref())
+            .or(conflict.their.as_ref())
             .map(|e| std::str::from_utf8(&e.path).unwrap_or(""))
             .unwrap_or("")
             .to_string();
@@ -339,7 +339,7 @@ pub fn discard_files(repo: &Repository, files: &[String]) -> Result<Vec<FileStat
             return Err(git_err!("DISCARD_IS_DIRECTORY", "Path '{}' is a directory, recursive discard not supported. Select individual files.", file));
         }
 
-        if head_tree.as_ref().map_or(false, |tree| tree.get_path(path).is_ok()) {
+        if head_tree.as_ref().is_some_and(|tree| tree.get_path(path).is_ok()) {
             tracked.push(file.clone());
         } else {
             untracked.push(file.clone());
@@ -410,8 +410,8 @@ pub fn resolve_conflict(repo: &Repository, file: &str, resolution: &str) -> Resu
             let conflict_path = conflict
                 .ancestor
                 .as_ref()
-                .or_else(|| conflict.our.as_ref())
-                .or_else(|| conflict.their.as_ref())
+                .or(conflict.our.as_ref())
+                .or(conflict.their.as_ref())
                 .map(|e| std::str::from_utf8(&e.path).unwrap_or(""))
                 .unwrap_or("")
                 .to_string();
@@ -555,9 +555,7 @@ pub fn resolve_conflict_blocks(
     // We build the result by assembling parts of the original content
     let mut result = String::new();
     let mut last_end = 0;
-    let mut block_idx = 0;
-
-    for cap in re.captures_iter(&content) {
+    for (block_idx, cap) in re.captures_iter(&content).enumerate() {
         let m = cap.get(0).unwrap();
         let match_start = m.start();
         let match_end = m.end();
@@ -574,11 +572,9 @@ pub fn resolve_conflict_blocks(
                 "theirs" => theirs_text.to_string(),
                 "manual" => {
                     // Strip any conflict markers the user might have typed in their manual content
-                    let clean = r.custom_content
+                    r.custom_content
                         .replace("<<<<<<<", "««««««<")
-                        .replace("=======", "=======")
-                        .replace(">>>>>>>", "»»»»»»>");
-                    clean
+                        .replace(">>>>>>>", "»»»»»»>")
                 }
                 _ => ours_text.to_string(),
             },
@@ -590,7 +586,6 @@ pub fn resolve_conflict_blocks(
 
         result.push_str(&replacement);
         last_end = match_end;
-        block_idx += 1;
     }
 
     // Append remaining content after the last block

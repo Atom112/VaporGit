@@ -3,10 +3,13 @@ import type { DiffHunk, DiffResult } from '../../lib/types';
 import { getFileContent, getFileBase64, checkLfs, stageHunk, stageLine } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt } from '../../i18n';
-import { describeErrorDetail } from '../../lib/gitErrorDesc';
+import { describeError, describeErrorDetail } from '../../lib/gitErrorDesc';
 import 'highlight.js/styles/github-dark.css';
 import { detectLanguage, highlightLine, highlightLines, highlightFull } from '../../lib/syntax';
 import { settingsStore } from '../../stores/settingsStore';
+
+const FULL_FILE_LOADING_THRESHOLD = 32 * 1024;
+const FULL_FILE_LOADING_MIN_MS = 180;
 
 interface DiffViewProps {
   diffResult?: DiffResult;
@@ -22,6 +25,8 @@ interface LineNumPair {
   oldLine: number | null;
   newLine: number | null;
 }
+
+const wrapStyle = { 'overflow-wrap': 'anywhere' } as const;
 
 function computeLineNums(hunk: DiffHunk): LineNumPair[] {
   let oldLine = hunk.oldStart;
@@ -49,7 +54,7 @@ function buildFullFileLines(
   hunks: DiffHunk[],
   contentLines: string[],
 ): { oldLine: number | null; newLine: number | null; kind: 'context' | 'addition' | 'deletion' }[] {
-  const annotations: ('context' | 'addition')[] = new Array(contentLines.length).fill('context');
+  const annotations: ('context' | 'addition')[] = Array.from({ length: contentLines.length }, () => 'context');
   const deletions: { beforeNewLine: number }[] = [];
 
   for (const hunk of hunks) {
@@ -132,9 +137,16 @@ const DiffView: Component<DiffViewProps> = (props) => {
         : null,
     async ({ filePath, commitId, repoPath }) => {
       if (!repoPath) return null;
+      const started = performance.now();
       try {
-        return await getFileContent(repoPath, filePath, commitId);
-      } catch {
+        const content = await getFileContent(repoPath, filePath, commitId);
+        if (content.length > FULL_FILE_LOADING_THRESHOLD) {
+          const remaining = FULL_FILE_LOADING_MIN_MS - (performance.now() - started);
+          if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+        }
+        return content;
+      } catch (e) {
+        console.warn(`读取完整文件失败: ${describeError(e)}`);
         return null;
       }
     },
@@ -196,7 +208,7 @@ const DiffView: Component<DiffViewProps> = (props) => {
       {/* Content */}
       <For each={[props.filePath]}>
         {() => (
-          <div class="flex-1 overflow-auto font-mono text-sm animate-content-enter">
+          <div class="flex-1 overflow-hidden font-mono text-sm animate-content-enter">
             <Show when={!props.loading} fallback={
               <div class="flex items-center justify-center h-full opacity-40">加载中...</div>
             }>
@@ -266,7 +278,10 @@ const DiffView: Component<DiffViewProps> = (props) => {
                   />
                 ) : (
                   <Show when={fullContent() !== undefined} fallback={
-                    <div class="flex items-center justify-center h-full opacity-40">加载完整文件...</div>
+                    <div class="flex items-center justify-center h-full gap-2 opacity-40">
+                      <span class="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                      <span>加载完整文件...</span>
+                    </div>
                   }>
                     <Show when={fullContent() !== null} fallback={
                       <div class="flex items-center justify-center h-full opacity-40">无法读取文件内容</div>
@@ -348,76 +363,99 @@ const UnifiedView: Component<StageableViewProps> = (props) => {
     return props.diffResult.hunks.map((hunk) => computeLineNums(hunk));
   });
 
+  type UnifiedRow =
+    | { type: 'hunk'; hunkIndex: number; header: string }
+    | { type: 'line'; hunkIndex: number; lineIndex: number };
+
+  const rows = createMemo<UnifiedRow[]>(() => {
+    const result: UnifiedRow[] = [];
+    props.diffResult.hunks.forEach((hunk, hunkIndex) => {
+      result.push({ type: 'hunk', hunkIndex, header: hunk.header });
+      hunk.lines.forEach((_, lineIndex) => {
+        result.push({ type: 'line', hunkIndex, lineIndex });
+      });
+    });
+    return result;
+  });
+
   return (
-    <For each={props.diffResult.hunks}>
-      {(hunk, hunkIdx) => {
-        const lineNums = hunkLineNums()[hunkIdx()];
-        const highlights = hunkHighlights()[hunkIdx()];
-        return (
-          <div class="border-b border-white/5">
-            <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400 font-semibold sticky top-0 flex items-center gap-2 group">
-              <span class="flex-1">{hunk.header}</span>
-              <Show when={showStageButtons()}>
-                <button
-                  class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                  onClick={() => handleStageHunk(hunkIdx())}
-                  disabled={stagingHunk() === hunkIdx()}
-                >
-                  {stagingHunk() === hunkIdx() ? '...' : `+ ${tt('repo.stageHunk')}`}
-                </button>
-              </Show>
-            </div>
-            <For each={hunk.lines}>
-              {(line, idx) => {
-                const nums = lineNums[idx()];
-                const html = highlights[idx()];
-                let bgClass = '';
-                let prefix = ' ';
-                let prefixColor = 'opacity-30';
-                if (line.kind === 'addition') {
-                  bgClass = 'bg-green-500/10';
-                  prefix = '+';
-                  prefixColor = 'text-green-400';
-                } else if (line.kind === 'deletion') {
-                  bgClass = 'bg-red-500/10';
-                  prefix = '-';
-                  prefixColor = 'text-red-400';
-                }
-                const isStagingLine = showStageButtons() && (line.kind === 'addition' || line.kind === 'deletion');
-                return (
-                  <div class={`flex items-stretch ${bgClass} group/line`}>
-                    <Show when={isStagingLine}>
-                      <div class="w-4 shrink-0 flex items-center justify-center opacity-0 group-hover/line:opacity-100 transition-opacity">
+    <div class="h-full overflow-auto">
+      <div class="min-w-[640px]">
+        <For each={rows()}>
+          {(row) => (
+                <Show
+                  when={row.type === 'line'}
+                  fallback={
+                    <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400 font-semibold flex items-center gap-2 group border-b border-white/5">
+                      <span class="flex-1">{(row as Extract<UnifiedRow, { type: 'hunk' }>).header}</span>
+                      <Show when={showStageButtons()}>
                         <button
-                          class="text-[10px] leading-none text-green-400 hover:text-green-300"
-                          onClick={() => handleStageLine(hunkIdx(), idx())}
-                          disabled={stagingLine()?.hunk === hunkIdx() && stagingLine()?.line === idx()}
-                          title={tt('repo.stageLine')}
+                          class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          onClick={() => handleStageHunk(row.hunkIndex)}
+                          disabled={stagingHunk() === row.hunkIndex}
                         >
-                          +
+                          {stagingHunk() === row.hunkIndex ? '...' : `+ ${tt('repo.stageHunk')}`}
                         </button>
+                      </Show>
+                    </div>
+                  }
+                >
+                  {(() => {
+                    const lineRow = row as Extract<UnifiedRow, { type: 'line' }>;
+                    const line = props.diffResult.hunks[lineRow.hunkIndex]?.lines[lineRow.lineIndex];
+                    const nums = hunkLineNums()[lineRow.hunkIndex]?.[lineRow.lineIndex];
+                    const html = hunkHighlights()[lineRow.hunkIndex]?.[lineRow.lineIndex] ?? '';
+                    if (!line || !nums) return null;
+
+                    let bgClass = '';
+                    let prefix = ' ';
+                    let prefixColor = 'opacity-30';
+                    if (line.kind === 'addition') {
+                      bgClass = 'bg-green-500/10';
+                      prefix = '+';
+                      prefixColor = 'text-green-400';
+                    } else if (line.kind === 'deletion') {
+                      bgClass = 'bg-red-500/10';
+                      prefix = '-';
+                      prefixColor = 'text-red-400';
+                    }
+                    const isStagingLine = showStageButtons() && (line.kind === 'addition' || line.kind === 'deletion');
+
+                    return (
+                      <div class={`flex items-start ${bgClass} group/line border-b border-white/[0.02]`}>
+                        <Show when={isStagingLine}>
+                          <div class="w-4 shrink-0 flex items-start justify-center opacity-0 group-hover/line:opacity-100 transition-opacity pt-0.5">
+                            <button
+                              class="text-[10px] leading-none text-green-400 hover:text-green-300"
+                              onClick={() => handleStageLine(lineRow.hunkIndex, lineRow.lineIndex)}
+                              disabled={stagingLine()?.hunk === lineRow.hunkIndex && stagingLine()?.line === lineRow.lineIndex}
+                              title={tt('repo.stageLine')}
+                              aria-label={tt('repo.stageLine')}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </Show>
+                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0.5 tabular-nums leading-5">
+                          {nums.oldLine ?? ''}
+                        </div>
+                        <span class="opacity-25 select-none leading-5 py-0.5">│</span>
+                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0.5 tabular-nums leading-5">
+                          {nums.newLine ?? ''}
+                        </div>
+                        <span class="opacity-25 select-none leading-5 py-0.5 mx-1">│</span>
+                        <span class={`w-5 shrink-0 text-right select-none leading-5 py-0.5 ${prefixColor}`}>
+                          {prefix}
+                        </span>
+                        <span class="block min-w-0 flex-1 whitespace-pre-wrap break-words leading-5 py-0.5" style={wrapStyle} innerHTML={html} />
                       </div>
-                    </Show>
-                    <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
-                      {nums.oldLine ?? ''}
-                    </div>
-                    <span class="opacity-25 select-none leading-normal">│</span>
-                    <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
-                      {nums.newLine ?? ''}
-                    </div>
-                    <span class="opacity-25 select-none leading-normal mx-1">│</span>
-                    <span class={`w-5 shrink-0 text-right select-none leading-normal ${prefixColor}`}>
-                      {prefix}
-                    </span>
-                    <span class="whitespace-pre-wrap break-all leading-normal" innerHTML={html} />
-                  </div>
-                );
-              }}
-            </For>
-          </div>
-        );
-      }}
-    </For>
+                    );
+                  })()}
+                </Show>
+          )}
+        </For>
+      </div>
+    </div>
   );
 };
 
@@ -434,46 +472,51 @@ const FullFileView: Component<{ diffResult: DiffResult; fullContent: string; lan
   const highlightedLines = () => highlightFull(props.fullContent, props.lang);
 
   return (
-    <div>
-      <For each={annotatedLines()}>
-        {(annot, idx) => {
-          const lineHtml = highlightedLines()[idx()] ?? '';
-          let bgClass = '';
-          let gutterColor = 'bg-transparent';
-          if (annot.kind === 'addition') {
-            bgClass = 'bg-green-500/10';
-            gutterColor = 'bg-green-400';
-          } else if (annot.kind === 'deletion') {
-            bgClass = 'bg-red-500/10';
-            gutterColor = 'bg-red-400';
-          }
-          return (
-            <div class={`flex items-stretch ${bgClass}`}>
-              <div class={`w-0.75 shrink-0 ${gutterColor}`} />
-              <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
-                {annot.newLine ?? ''}
-              </div>
-              <span class="opacity-25 select-none leading-normal">│</span>
-              <span class={`whitespace-pre-wrap break-all leading-normal ${annot.kind === 'deletion' ? 'opacity-60' : ''}`}
-                innerHTML={lineHtml} />
-            </div>
-          );
-        }}
-      </For>
+    <div class="h-full overflow-auto">
+      <div class="min-w-[640px]">
+        <For each={annotatedLines()}>
+          {(annot, index) => {
+            const lineHtml = highlightedLines()[index()] ?? '';
+            let bgClass = '';
+            let gutterColor = 'bg-transparent';
+            if (annot.kind === 'addition') {
+              bgClass = 'bg-green-500/10';
+              gutterColor = 'bg-green-400';
+            } else if (annot.kind === 'deletion') {
+              bgClass = 'bg-red-500/10';
+              gutterColor = 'bg-red-400';
+            }
+            return (
+                <div class={`flex items-stretch ${bgClass}`}>
+                  <div class={`w-0.75 shrink-0 ${gutterColor}`} />
+                  <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
+                    {annot.newLine ?? ''}
+                  </div>
+                  <span class="opacity-25 select-none leading-normal">│</span>
+                  <span class={`block min-w-0 flex-1 whitespace-pre-wrap break-words leading-normal ${annot.kind === 'deletion' ? 'opacity-60' : ''}`}
+                    style={wrapStyle}
+                    innerHTML={lineHtml} />
+                </div>
+            );
+          }}
+        </For>
+      </div>
     </div>
   );
 };
 
 /* ── Side-by-side Split view with hunk/line staging ── */
 interface SplitRow {
+  type: 'line';
   left: { content: string; kind: string; lineNum: number | null } | null;
   right: { content: string; kind: string; lineNum: number | null } | null;
 }
 
-const SplitView: Component<StageableViewProps> = (props) => {
-  let leftRef!: HTMLDivElement;
-  let rightRef!: HTMLDivElement;
+type SplitVirtualRow =
+  | { type: 'hunk'; hunkIndex: number; header: string }
+  | (SplitRow & { hunkIndex: number });
 
+const SplitView: Component<StageableViewProps> = (props) => {
   const [stagingHunk, setStagingHunk] = createSignal<number | null>(null);
 
   const handleStageHunk = async (hunkIndex: number) => {
@@ -493,15 +536,17 @@ const SplitView: Component<StageableViewProps> = (props) => {
 
   const showStageButtons = () => !props.commitId && props.repoPath;
 
-  // Memoize split rows — only recomputes when diffResult changes
-  const rows = createMemo((): SplitRow[] => {
-    const result: SplitRow[] = [];
-    for (const hunk of props.diffResult.hunks) {
+  const rows = createMemo((): SplitVirtualRow[] => {
+    const result: SplitVirtualRow[] = [];
+    props.diffResult.hunks.forEach((hunk, hunkIndex) => {
+      result.push({ type: 'hunk', hunkIndex, header: hunk.header });
       let oldLine = hunk.oldStart;
       let newLine = hunk.newStart;
       for (const line of hunk.lines) {
         if (line.kind === 'context') {
           result.push({
+            type: 'line',
+            hunkIndex,
             left: { content: line.content, kind: 'context', lineNum: oldLine },
             right: { content: line.content, kind: 'context', lineNum: newLine },
           });
@@ -509,105 +554,100 @@ const SplitView: Component<StageableViewProps> = (props) => {
           newLine++;
         } else if (line.kind === 'deletion') {
           result.push({
+            type: 'line',
+            hunkIndex,
             left: { content: line.content, kind: 'deletion', lineNum: oldLine },
             right: null,
           });
           oldLine++;
         } else if (line.kind === 'addition') {
           result.push({
+            type: 'line',
+            hunkIndex,
             left: null,
             right: { content: line.content, kind: 'addition', lineNum: newLine },
           });
           newLine++;
         }
       }
-    }
+    });
     return result;
   });
 
-const handleScroll = (source: 'left' | 'right') => {
-    if (source === 'left' && rightRef) rightRef.scrollTop = leftRef.scrollTop;
-    if (source === 'right' && leftRef) leftRef.scrollTop = rightRef.scrollTop;
+  const renderSplitCell = (segment: SplitRow['left'], side: 'left' | 'right') => {
+    if (!segment) {
+      return (
+        <div class="flex h-full min-h-5 bg-black/20">
+          <div class="w-12 shrink-0" />
+          <span class="opacity-25">│</span>
+        </div>
+      );
+    }
+    const bgClass = segment.kind === 'deletion'
+      ? 'bg-red-500/10'
+      : segment.kind === 'addition'
+        ? 'bg-green-500/10'
+        : '';
+    const textClass = side === 'left' && segment.kind === 'deletion'
+      ? 'text-red-100'
+      : side === 'right' && segment.kind === 'addition'
+        ? 'text-green-100'
+        : '';
+    return (
+      <div class={`flex items-stretch min-h-5 ${bgClass}`}>
+        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
+          {segment.lineNum ?? ''}
+        </div>
+        <span class="opacity-25 select-none leading-normal">│</span>
+        <span class={`block min-w-0 flex-1 whitespace-pre-wrap break-words leading-normal ${textClass}`} style={wrapStyle} innerHTML={highlightLine(segment.content, props.lang)} />
+      </div>
+    );
   };
 
-  // Compute left-panel per-line highlights per hunk using createMemo
-  const leftPanelHighlights = createMemo(() => {
-    return props.diffResult.hunks.map((hunk) => {
-      const lines = hunk.lines
-        .filter((l) => l.kind !== 'addition')
-        .map((l) => l.content.replace(/\n$/, ''));
-      return highlightLines(lines, props.lang);
-    });
-  });
-
   return (
-    <div class="flex h-full">
-      {/* Left: old */}
-      <div ref={leftRef} class="w-1/2 overflow-auto border-r border-white/10" onScroll={() => handleScroll('left')}>
-        <div class="bg-white/5 px-3 py-1 text-xs text-red-400 font-semibold sticky top-0 z-10 flex items-center gap-2">
-          <span class="flex-1">旧版本</span>
-        </div>
-        <For each={props.diffResult.hunks}>
-          {(hunk, hunkIdx) => {
-            const leftHtml = leftPanelHighlights()[hunkIdx()];
-            let lineIdx = 0;
-            return (
-              <>
-                <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400/60 flex items-center gap-2">
-                  <span class="flex-1">{hunk.header}</span>
-                  <Show when={showStageButtons()}>
-                    <button
-                      class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-opacity shrink-0"
-                      onClick={() => handleStageHunk(hunkIdx())}
-                      disabled={stagingHunk() === hunkIdx()}
-                    >
-                      {stagingHunk() === hunkIdx() ? '...' : `+ ${tt('repo.stageHunk')}`}
-                    </button>
-                  </Show>
-                </div>
-                <For each={hunk.lines}>
-                  {(line) => {
-                    if (line.kind === 'addition') {
-                      return <div class="flex h-5 bg-black/20"><div class="w-12 shrink-0" /><span class="opacity-25">│</span><div class="w-12 shrink-0" /></div>;
-                    }
-                    const html = leftHtml[lineIdx++];
-                    return (
-                      <div class={`flex items-stretch ${line.kind === 'deletion' ? 'bg-red-500/10' : ''}`}>
-                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
-                          {line.kind === 'deletion' ? '' : '' /* will compute properly below */}
-                        </div>
-                        <span class="opacity-25 select-none leading-normal">│</span>
-                        <span class="whitespace-pre-wrap break-all leading-normal" innerHTML={html} />
-                      </div>
-                    );
-                  }}
-                </For>
-              </>
-            );
-          }}
-        </For>
+    <div class="flex flex-col h-full">
+      <div class="grid grid-cols-2 shrink-0 bg-white/5 border-b border-white/10 text-xs font-semibold">
+        <div class="px-3 py-1 text-red-400 border-r border-white/10">旧版本</div>
+        <div class="px-3 py-1 text-green-400">新版本</div>
       </div>
-
-      {/* Right: new */}
-      <div ref={rightRef} class="w-1/2 overflow-auto" onScroll={() => handleScroll('right')}>
-        <div class="bg-white/5 px-3 py-1 text-xs text-green-400 font-semibold sticky top-0 z-10">新版本</div>
-        <For each={rows()}>
-          {(row) => {
-            const seg = row.right;
-            if (!seg) {
-              return <div class="flex h-5 bg-black/20"><div class="w-12 shrink-0" /><span class="opacity-25">│</span><div class="w-12 shrink-0" /></div>;
-            }
-            return (
-              <div class={`flex items-stretch ${seg.kind === 'addition' ? 'bg-green-500/10' : ''}`}>
-                <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0 tabular-nums leading-normal">
-                  {seg.lineNum ?? ''}
-                </div>
-                <span class="opacity-25 select-none leading-normal">│</span>
-                <span class="whitespace-pre-wrap break-all leading-normal" innerHTML={highlightLine(seg.content, props.lang)} />
-              </div>
-            );
-          }}
-        </For>
+      <div class="flex-1 overflow-auto">
+        <div class="min-w-[900px]">
+          <For each={rows()}>
+            {(row) => (
+                  <Show
+                    when={row.type === 'line'}
+                    fallback={
+                      <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400/70 font-semibold flex items-center gap-2 border-b border-white/5">
+                        <span class="flex-1">{(row as Extract<SplitVirtualRow, { type: 'hunk' }>).header}</span>
+                        <Show when={showStageButtons()}>
+                          <button
+                            class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 transition-opacity shrink-0"
+                            onClick={() => handleStageHunk(row.hunkIndex)}
+                            disabled={stagingHunk() === row.hunkIndex}
+                          >
+                            {stagingHunk() === row.hunkIndex ? '...' : `+ ${tt('repo.stageHunk')}`}
+                          </button>
+                        </Show>
+                      </div>
+                    }
+                  >
+                    {(() => {
+                      const lineRow = row as Extract<SplitVirtualRow, { type: 'line' }>;
+                      return (
+                        <div class="grid grid-cols-2 border-b border-white/[0.02]">
+                          <div class="border-r border-white/10 min-w-0">
+                            {renderSplitCell(lineRow.left, 'left')}
+                          </div>
+                          <div class="min-w-0">
+                            {renderSplitCell(lineRow.right, 'right')}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </Show>
+            )}
+          </For>
+        </div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ pub mod commit;
 pub mod diff;
 pub mod gitee;
 pub mod github;
+pub mod git_ext;
 pub mod merge;
 pub mod remote;
 pub mod repo;

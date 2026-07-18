@@ -10,6 +10,27 @@
   - `validate_relative_path` 集成 DOS 设备名检查，直接拒绝操作
   - 新增 `VALIDATE_DOS_DEVICE_NAME` i18n 错误提示（12 种语言）
 
+## v1.2.9 - 2026-07-07
+
+### Added
+- 新增 CI、前后端测试基线、pre-commit 检查和 i18n drift 检查脚本
+- 新增统一 GitHub/Gitee 平台适配层与平台化 PR/仓库/用户组件
+- 新增标签、子模块、Blame、Reflog、LFS、SSH 连接测试等 Git 工具入口
+
+### Changed
+- 重构仓库主界面为 toolbar、左右面板、提交输入、弹窗容器和 repository store
+- 优化 Diff/FileList/CommitGraph 大内容显示，保留原提交图视图并修复 Diff 换行错位
+- 关闭 i18n 历史缺失 key，补齐 ar/de/es/fr/ja/ko/pt/ru/zh-TW 等语言
+
+### Fixed
+- 修复 Windows 终端启动乱码、重复 prompt、关闭后重开行为不一致的问题
+- 修复 PR 页面远程检测或详情加载可能一直 loading 的问题
+- 修复 Full File 大文件读取卡死：32KB+ 显示加载动画，128KB-256KB 仅读取前 128KB，256KB+ 显示过大提示
+
+### Security
+- 收紧教程临时目录删除范围，避免任意目录删除风险
+- 对 discard 操作增加确认流程，降低误删工作区变更风险
+
 ## v1.2.8 - 2026-06-18
 
 ### Added

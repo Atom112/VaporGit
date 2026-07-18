@@ -1,11 +1,15 @@
-import { A } from '@solidjs/router';
 import { Component, createSignal, createEffect, onCleanup, onMount, Show, For } from 'solid-js';
 import { open } from '@tauri-apps/plugin-dialog';
 import { repoStore, setRepoStore } from '../stores/repoStore';
 import { diffStore, setDiffStore } from '../stores/diffStore';
 import { commitStore, setCommitStore } from '../stores/commitStore';
-import { settingsStore } from '../stores/settingsStore';
 import { addToast } from '../stores/toastStore';
+import {
+  repositoryStore,
+  setRepositoryLeftMode,
+  setRepositoryLeftTab,
+  setRepositoryRightWidth,
+} from '../stores/repositoryStore';
 import {
   getStatus,
   stageFiles,
@@ -24,10 +28,6 @@ import {
   createBranch,
   deleteBranch,
   cherryPick,
-  undo as undoLast,
-  redo as redoLast,
-  fetch as fetchRemote,
-  pull as pullRemote,
   getRemotes,
   checkSubmodules,
   openTerminal,
@@ -36,32 +36,26 @@ import {
   searchCommitHistory,
 } from '../lib/tauriCommands';
 import type { CommitInfo, CommitDetail as CommitDetailType, FileStatus, RecentRepo } from '../lib/types';
-import FileList from '../components/git/FileList';
-import CommitDetail from '../components/git/CommitDetail';
-import CommitGraph from '../components/git/CommitGraph';
-import BranchList from '../components/git/BranchList';
-import DiffView from '../components/git/DiffView';
 import StatusBar from '../components/layout/StatusBar';
-import StashPanel from '../components/git/StashPanel';
-import RemoteManager from '../components/git/RemoteManager';
-import ConflictResolver from '../components/git/ConflictResolver';
-import PushDialog from '../components/git/PushDialog';
-import PRCreateDialog from '../components/github/PRCreateDialog';
-import GiteePRCreateDialog from '../components/gitee/GiteePRCreateDialog';
 import { githubStore } from '../stores/githubStore';
 import { giteeStore } from '../stores/giteeStore';
-import InteractiveRebase from '../components/git/InteractiveRebase';
-import MergeDialog from '../components/git/MergeDialog';
-import BranchCompareDialog from '../components/git/BranchCompareDialog';
 import KeyboardShortcuts from '../components/ui/KeyboardShortcuts';
 import TerminalPanel from '../components/terminal/TerminalPanel';
 import { tt, ttf } from '../i18n';
 import { describeError, describeErrorDetail } from '../lib/gitErrorDesc';
+import { parsePlatformRemote, PlatformKind } from '../lib/platformAdapter';
+import RightPanel from './repository/RightPanel';
+import LeftPanel from './repository/LeftPanel';
+import ModalsContainer from './repository/ModalsContainer';
+import { useRepositoryActions } from './repository/useRepositoryActions';
+import { useRepositoryModals } from './repository/useRepositoryModals';
 
 const Repository: Component = () => {
   // ── State ──
-  const [leftTab, setLeftTab] = createSignal<'graph' | 'branches'>('graph');
-  const [leftMode, setLeftMode] = createSignal<'tree' | 'detail' | 'diff'>('tree');
+  const leftTab = () => repositoryStore.panels.leftTab;
+  const setLeftTab = setRepositoryLeftTab;
+  const leftMode = () => repositoryStore.panels.leftMode;
+  const setLeftMode = setRepositoryLeftMode;
   const [commits, setCommits] = createSignal<CommitInfo[]>([]);
   const [commitPage, setCommitPage] = createSignal(0);
   const COMMIT_PAGE_SIZE = 200;
@@ -99,15 +93,26 @@ const Repository: Component = () => {
   };
 
   // M3: Modal & action state
-  const [remoteActionLoading, setRemoteActionLoading] = createSignal(false);
-  const [undoLoading, setUndoLoading] = createSignal(false);
-  const [showStashPanel, setShowStashPanel] = createSignal(false);
-  const [showConflictResolver, setShowConflictResolver] = createSignal(false);
-  const [showRebaseDialog, setShowRebaseDialog] = createSignal(false);
-  const [showMergeDialog, setShowMergeDialog] = createSignal(false);
-  const [showRemoteManager, setShowRemoteManager] = createSignal(false);
-  const [showBranchCompare, setShowBranchCompare] = createSignal(false);
-  const [showPushDialog, setShowPushDialog] = createSignal(false);
+  const {
+    remoteActionLoading,
+    undoLoading,
+    showStashPanel,
+    setShowStashPanel,
+    showConflictResolver,
+    setShowConflictResolver,
+    showRebaseDialog,
+    setShowRebaseDialog,
+    showMergeDialog,
+    setShowMergeDialog,
+    showRemoteManager,
+    setShowRemoteManager,
+    showBranchCompare,
+    setShowBranchCompare,
+    showPushDialog,
+    setShowPushDialog,
+    showGitTools,
+    setShowGitTools,
+  } = useRepositoryModals();
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal<CommitInfo[] | null>(null);
   const [searchLoading, setSearchLoading] = createSignal(false);
@@ -118,7 +123,8 @@ const Repository: Component = () => {
   const [showPRCreate, setShowPRCreate] = createSignal(false);
 
   // ── Resizable panels ──
-  const [rightWidth, setRightWidth] = createSignal(420);
+  const rightWidth = () => repositoryStore.panels.rightWidth;
+  const setRightWidth = setRepositoryRightWidth;
   const [dragging, setDragging] = createSignal<boolean>(false);
 
   createEffect(() => {
@@ -606,87 +612,47 @@ const Repository: Component = () => {
     }
   };
 
-  // ── M3 Handlers ──
-  const handleFetch = async () => {
-    const path = repoPath();
-    if (!path || remoteActionLoading()) return;
-    setRemoteActionLoading(true);
+  const [terminalPhase, setTerminalPhase] = createSignal<'enter' | 'exit' | null>(null);
+  const [terminalStarted, setTerminalStarted] = createSignal(false);
+
+  const handleCloseRepository = async () => {
+    if (terminalStarted()) {
+      setTerminalStarted(false);
+      setTerminalPhase(null);
+      closeTerminal().catch((e) => {
+        console.warn(`关闭终端失败: ${describeError(e)}`);
+      });
+    }
+    setSelectedCommit(null);
+    setSelectedCommitFile(null);
+    setCommitDetail(null);
+    setDiffStore({ selectedFile: null, diffResult: null, diffLoading: false });
+    setCommitStore({ selectedNode: null, graphData: null, branches: [] });
+    setLeftMode('tree');
+    setRepoStore({ repoPath: null, repoInfo: null });
     try {
-      await fetchRemote(path, settingsStore.defaultRemoteName);
-      addToast(tt('repo.fetchSuccess'), 'success');
-      await refreshGraph(true);
-    } catch (e) {
-      const { message, detail } = describeErrorDetail(e);
-      addToast(ttf('repo.fetchFailed', message), detail, 'error');
-    } finally {
-      setRemoteActionLoading(false);
+      const repos = await getRecentRepos();
+      setRecentRepos(repos);
+    } catch {
+      // 无最近打开的仓库
     }
   };
 
-  const handlePull = async () => {
-    const path = repoPath();
-    if (!path || remoteActionLoading()) return;
-    setRemoteActionLoading(true);
-    try {
-      const result = await pullRemote(path, settingsStore.defaultRemoteName);
-      // After pull, refresh to detect conflicts
-      await refreshAll();
-      const statuses = diffStore.fileStatuses;
-      const hasConflicts = statuses.some((f) => f.status === 'CONFLICTED');
-      if (hasConflicts) {
-        addToast(tt('repo.conflictPullDetected'), 'info');
-        setShowConflictResolver(true);
-      } else {
-        addToast(result, 'success');
-      }
-    } catch (e) {
-      const { message, detail } = describeErrorDetail(e);
-      addToast(ttf('repo.pullFailed', message), detail, 'error');
-      // Also check for conflicts on error (e.g. merge conflicts returned as errors)
-      await refreshStatus();
-      const statuses = diffStore.fileStatuses;
-      if (statuses.some((f) => f.status === 'CONFLICTED')) {
-        setShowConflictResolver(true);
-      }
-    } finally {
-      setRemoteActionLoading(false);
-    }
-  };
-
-  const handleUndo = async () => {
-    const path = repoPath();
-    if (!path || undoLoading()) return;
-    setUndoLoading(true);
-    try {
-      const msg = await undoLast(path);
-      addToast(`已撤销提交: ${msg.slice(0, 50)}`, 'success');
-      await refreshAll();
-    } catch (e) {
-      const { message, detail } = describeErrorDetail(e);
-      addToast(ttf('repo.undoFailed', message), detail, 'error');
-    } finally {
-      setUndoLoading(false);
-    }
-  };
-
-  const handleRedo = async () => {
-    const path = repoPath();
-    if (!path || undoLoading()) return;
-    setUndoLoading(true);
-    try {
-      const msg = await redoLast(path);
-      addToast(`已重做提交: ${msg.slice(0, 50)}`, 'success');
-      await refreshAll();
-    } catch (e) {
-      const { message, detail } = describeErrorDetail(e);
-      addToast(ttf('repo.redoFailed', message), detail, 'error');
-    } finally {
-      setUndoLoading(false);
-    }
-  };
+  const {
+    handleFetch,
+    handlePull,
+    handleUndo,
+    handleRedo,
+  } = useRepositoryActions({
+    repoPath,
+    refreshAll,
+    refreshStatus,
+    refreshGraph,
+    openConflictResolver: () => setShowConflictResolver(true),
+  });
 
   const handleStashRefresh = async () => {
-    await Promise.all([refreshStatus()]);
+    await refreshStatus();
   };
 
   const handleConflictRefresh = async () => {
@@ -698,7 +664,7 @@ const Repository: Component = () => {
   };
 
   // ── PR creation from commit detail ──
-  const [prCreatePlatform, setPrCreatePlatform] = createSignal<'github' | 'gitee'>('github');
+  const [prCreatePlatform, setPrCreatePlatform] = createSignal<PlatformKind>('github');
   const handleCreatePullRequest = async () => {
     const path = repoPath();
     if (!path) return;
@@ -709,17 +675,10 @@ const Repository: Component = () => {
         addToast('未找到 origin 远程仓库', 'error');
         return;
       }
-      const ghMatch = origin.url.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
-      if (ghMatch) {
-        setPrCreatePlatform('github');
-        setPrCreateInfo({ owner: ghMatch[1], repo: ghMatch[2].replace(/\.git$/, '') });
-        setShowPRCreate(true);
-        return;
-      }
-      const gtMatch = origin.url.match(/gitee\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
-      if (gtMatch) {
-        setPrCreatePlatform('gitee');
-        setPrCreateInfo({ owner: gtMatch[1], repo: gtMatch[2].replace(/\.git$/, '') });
+      const platformRemote = parsePlatformRemote(origin.url);
+      if (platformRemote) {
+        setPrCreatePlatform(platformRemote.kind);
+        setPrCreateInfo({ owner: platformRemote.owner, repo: platformRemote.repo });
         setShowPRCreate(true);
         return;
       }
@@ -821,8 +780,6 @@ const Repository: Component = () => {
     diffStore.fileStatuses.filter((f) => !f.staged);
 
   // ── Terminal ──
-  const [terminalPhase, setTerminalPhase] = createSignal<'enter' | 'exit' | null>(null);
-
   const handleOpenTerminal = async () => {
     const path = repoPath();
     if (!path) return;
@@ -830,7 +787,10 @@ const Repository: Component = () => {
     setTerminalPhase('enter');
     await new Promise((r) => setTimeout(r, 50));
     try {
-      await openTerminal(path);
+      if (!terminalStarted()) {
+        await openTerminal(path);
+        setTerminalStarted(true);
+      }
     } catch (e) {
       const { message, detail } = describeErrorDetail(e);
       addToast(ttf('repo.terminalOpenFailed', message), detail, 'error');
@@ -844,7 +804,10 @@ const Repository: Component = () => {
     setTerminalPhase('exit');
     setTimeout(() => {
       setTerminalPhase(null);
-      closeTerminal().catch(() => {});
+      setTerminalStarted(false);
+      closeTerminal().catch((e) => {
+        console.warn(`关闭终端失败: ${describeError(e)}`);
+      });
     }, 160);
   };
 
@@ -931,235 +894,39 @@ const Repository: Component = () => {
       }>
         {/* Main content area */}
         <div id="main-content" class="flex-1 flex overflow-hidden animate-tree-enter">
-        {/* Left: switches between tree/detail/diff */}
-        <div class="flex-1 flex flex-col bg-white/5 overflow-hidden">
-          {/* Back bar (detail/diff mode) */}
-          <Show when={leftMode() !== 'tree'}>
-            <div class="flex items-center gap-2 px-3 py-2 border-b border-white/10 bg-white/5 shrink-0">
-              <button
-                class="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-                onClick={handleBack}
-              >
-                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-{tt('repo.back')}
-              </button>
-              <Show when={leftMode() === 'detail'}>
-                <span class="text-xs opacity-40">{tt('repo.commitDetail')}</span>
-              </Show>
-            </div>
-          </Show>
-
-          {/* Tree: Tabs + CommitGraph / BranchList */}
-          <Show when={leftMode() === 'tree'}>
-            <div class="flex flex-col h-full overflow-hidden animate-tree-enter min-h-0">
-              {/* Tabs */}
-              <div class="flex items-center border-b border-white/10 shrink-0">
-                <button
-                  class="flex items-center gap-1 px-3 py-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors shrink-0"
-                  onClick={async () => {
-                    setSelectedCommit(null);
-                    setSelectedCommitFile(null);
-                    setCommitDetail(null);
-                    setDiffStore({ selectedFile: null, diffResult: null, diffLoading: false });
-                    setCommitStore({ selectedNode: null, graphData: null, branches: [] });
-                    setLeftMode('tree');
-                    setRepoStore({ repoPath: null, repoInfo: null });
-                    try {
-                      const repos = await getRecentRepos();
-                      setRecentRepos(repos);
-                    } catch {
-                      // 无最近打开的仓库
-                    }
-                  }}
-                >
-                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-  {tt('repo.back')}
-                </button>
-                <button
-                  class={`flex-1 py-2 text-xs font-medium transition-colors ${
-                    leftTab() === 'graph'
-                      ? 'text-cyan-400 border-b-2 border-b-cyan-400'
-                      : 'opacity-50 hover:opacity-80'
-                  }`}
-                  onClick={() => setLeftTab('graph')}
-                >
-                  {tt('repo.commitGraph')}
-                </button>
-                <button
-                  class={`flex-1 py-2 text-xs font-medium transition-colors ${
-                    leftTab() === 'branches'
-                      ? 'text-cyan-400 border-b-2 border-b-cyan-400'
-                      : 'opacity-50 hover:opacity-80'
-                  }`}
-                  onClick={() => setLeftTab('branches')}
-                >
-                  {tt('repo.branches')}
-                </button>
-              </div>
-
-              {/* Tab content */}
-              <Show when={leftTab() === 'graph'}>
-                <div class="flex-1 min-h-0 animate-content-enter flex flex-col">
-                  {/* Search bar */}
-                  <div class="shrink-0 px-3 py-2 border-b border-white/10">
-                    <div class="relative">
-                      <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                      <input
-                        class="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white/10 border border-white/10 text-white text-xs focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
-                        placeholder={tt('repo.searchCommitsPlaceholder')}
-                        value={searchQuery()}
-                        onInput={(e) => handleSearch(e.currentTarget.value)}
-                      />
-                      <Show when={searchLoading()}>
-                        <div class="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-cyan-400/50 border-t-transparent rounded-full animate-spin" />
-                      </Show>
-                    </div>
-                  </div>
-                  <Show
-                    when={!searchResults()}
-                    fallback={
-                      <div class="flex-1 flex flex-col min-h-0">
-                        <div class="shrink-0 px-3 py-1.5 text-xs text-white/50">
-                          {ttf('repo.searchResults', searchResults()!.length)}
-                        </div>
-                        <div class="flex-1 overflow-y-auto">
-                          <For each={searchResults()}>
-                            {(c) => (
-                              <div
-                                class="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-white/5 transition-colors border-b border-white/5"
-                                onClick={() => handleSelectCommit(c)}
-                              >
-                                <span class="font-mono text-cyan-400/70 shrink-0">{c.shortId}</span>
-                                <span class="truncate flex-1">{c.message}</span>
-                                <span class="text-white/40 shrink-0 text-[10px]">{c.author}</span>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </div>
-                    }
-                  >
-                  <Show
-                    when={!commitStore.graphLoading}
-                    fallback={
-                      <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('common.loading')}</div>
-                    }
-                  >
-                    <Show
-                      when={commitStore.graphData && commitStore.graphData.nodes.length > 0}
-                      fallback={
-                        <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('repo.noCommits')}</div>
-                      }
-                    >
-                      <div id="commit-graph-area" class="flex flex-col h-full">
-                        <CommitGraph
-                          graphData={commitStore.graphData!}
-                          selectedNodeId={commitStore.selectedNode?.id}
-                          onSelectNode={handleSelectGraphNode}
-                          repoPath={repoPath() ?? undefined}
-                          onCheckout={handleGraphCheckout}
-                          onCreateBranch={handleGraphCreateBranch}
-                          onCherryPick={handleGraphCherryPick}
-                          onCreatePullRequest={handleCreatePullRequest}
-                          onCheckoutBranch={handleGraphCheckoutBranch}
-                          onDeleteBranch={handleGraphDeleteBranch}
-                          onReset={handleGraphReset}
-                        />
-                        <Show when={commitStore.graphData?.truncated}>
-                          <div class="shrink-0 px-3 py-1.5 text-xs text-yellow-400/70 bg-yellow-400/5 border-t border-yellow-400/10 text-center">
-                            {tt('repo.graphTruncated')}
-                          </div>
-                        </Show>
-                      </div>
-                    </Show>
-                  </Show>
-                </Show>
-              </div>
-            </Show>
-
-            <Show when={leftTab() === 'branches'}>
-                <div class="flex-1 min-h-0 animate-content-enter">
-                  <Show
-                    when={!commitStore.branchesLoading}
-                    fallback={
-                      <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('common.loading')}</div>
-                    }
-                  >
-                    <Show
-                      when={commitStore.branches.length > 0}
-                      fallback={
-                        <div class="flex-1 flex items-center justify-center text-sm opacity-40">{tt('repo.noBranches')}</div>
-                      }
-                    >
-                      <BranchList
-                        branches={commitStore.branches}
-                        repoPath={repoPath()!}
-                        onRefresh={async () => {
-                          await Promise.all([
-                            refreshBranches(true),
-                            refreshGraph(true),
-                            refreshStatus(),
-                          ]);
-                        }}
-                      />
-                    </Show>
-                  </Show>
-                </div>
-              </Show>
-            </div>
-          </Show>
-
-          {/* Detail: Commit Detail */}
-          <Show when={leftMode() === 'detail'}>
-            <div class="flex-1 flex flex-col min-h-0 overflow-hidden animate-content-enter">
-              <Show
-                when={!commitLoading()}
-                fallback={
-                  <div class="flex-1 h-full flex items-center justify-center opacity-40 text-sm">
-                    {tt('common.loading')}
-                  </div>
-                }
-              >
-                <Show when={commitDetail() && selectedCommit()}>
-                  <CommitDetail
-                    detail={commitDetail()!}
-                    selectedFile={selectedCommitFile()}
-                    onSelectFile={handleSelectCommitFile}
-                    onNavigateCommit={handleNavigateCommit}
-                  />
-                </Show>
-              </Show>
-            </div>
-          </Show>
-
-          {/* Diff: File diff view */}
-          <Show when={leftMode() === 'diff'}>
-            <div class="flex-1 flex flex-col min-h-0 overflow-hidden animate-content-enter">
-              <Show
-                when={diffStore.diffResult || diffStore.diffLoading}
-                fallback={
-                  <div class="flex-1 h-full flex items-center justify-center opacity-40 text-sm">
-                    {tt('repo.noDiff')}
-                  </div>
-                }
-              >
-                <DiffView
-                  diffResult={diffStore.diffResult ?? undefined}
-                  loading={diffStore.diffLoading}
-                  filePath={diffStore.selectedFile ?? selectedCommit()?.shortId ?? ''}
-                  commitId={selectedCommit()?.id}
-                  repoPath={repoPath() ?? undefined}
-                />
-              </Show>
-            </div>
-          </Show>
-        </div>
+        <LeftPanel
+          repoPath={repoPath()}
+          leftMode={leftMode()}
+          leftTab={leftTab()}
+          searchQuery={searchQuery()}
+          searchResults={searchResults()}
+          searchLoading={searchLoading()}
+          commitLoading={commitLoading()}
+          commitDetail={commitDetail()}
+          selectedCommit={selectedCommit()}
+          selectedCommitFile={selectedCommitFile()}
+          onBack={handleBack}
+          onCloseRepository={handleCloseRepository}
+          onLeftTabChange={setLeftTab}
+          onSearch={handleSearch}
+          onSelectCommit={handleSelectCommit}
+          onSelectGraphNode={handleSelectGraphNode}
+          onGraphCheckout={handleGraphCheckout}
+          onGraphCreateBranch={handleGraphCreateBranch}
+          onGraphCherryPick={handleGraphCherryPick}
+          onCreatePullRequest={handleCreatePullRequest}
+          onGraphCheckoutBranch={handleGraphCheckoutBranch}
+          onGraphDeleteBranch={handleGraphDeleteBranch}
+          onBranchesRefresh={async () => {
+            await Promise.all([
+              refreshBranches(true),
+              refreshGraph(true),
+              refreshStatus(),
+            ]);
+          }}
+          onSelectCommitFile={handleSelectCommitFile}
+          onNavigateCommit={handleNavigateCommit}
+        />
 
         {/* Drag handle */}
         <div
@@ -1169,337 +936,87 @@ const Repository: Component = () => {
           <div class="absolute inset-y-0 -left-1 -right-1" />
         </div>
 
-        {/* Right: File changes + commit input (resizable) */}
-        <div
-          class="flex flex-col bg-white/5 overflow-hidden shrink-0"
-          style={{ width: `${rightWidth()}px` }}
-        >
-          {/* Toolbar (max 4 buttons per row) */}
-          <div id="toolbar" class="px-3 py-2 border-b border-white/10 shrink-0 space-y-1.5">
-            {/* Row 1: Remote ops */}
-            <div class="flex gap-1.5">
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
-                onClick={handleFetch}
-                disabled={remoteActionLoading()}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                {remoteActionLoading() ? tt('repo.fetching') : tt('repo.fetch')}
-              </button>
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
-                onClick={handlePull}
-                disabled={remoteActionLoading()}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-                </svg>
-                {remoteActionLoading() ? tt('repo.pulling') : tt('repo.pull')}
-              </button>
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
-                onClick={() => setShowPushDialog(true)}
-                disabled={remoteActionLoading()}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2" />
-                </svg>
-                {remoteActionLoading() ? tt('repo.pushing') : tt('repo.push')}
-              </button>
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
-                onClick={() => setShowRemoteManager(true)}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
-                {tt('repo.remotes')}
-              </button>
-            </div>
-            {/* Row 2: History ops */}
-            <div class="flex gap-1.5">
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
-                onClick={handleUndo}
-                disabled={undoLoading()}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a7 7 0 017 7v2M3 10l4-4m-4 4l4 4" />
-                </svg>
-                {undoLoading() ? '...' : tt('repo.undo')}
-              </button>
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors flex items-center justify-center gap-1"
-                onClick={handleRedo}
-                disabled={undoLoading()}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 10H11a7 7 0 00-7 7v2m17-9l-4-4m4 4l-4 4" />
-                </svg>
-                {undoLoading() ? '...' : tt('repo.redo')}
-              </button>
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
-                onClick={() => setShowStashPanel(true)}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                </svg>
-                {tt('repo.stash')}
-              </button>
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
-                onClick={() => setShowMergeDialog(true)}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-                {tt('repo.merge')}
-              </button>
-            </div>
-            {/* Row 3: Advanced ops */}
-            <div class="flex gap-1.5">
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
-                onClick={() => setShowRebaseDialog(true)}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {tt('repo.rebase')}
-              </button>
-              <button
-                class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
-                onClick={() => setShowBranchCompare(true)}
-              >
-                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-                </svg>
-                {tt('repo.compareBranches')}
-              </button>
-              {githubStore.authenticated && (
-                <A
-                  class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
-                  href="/pulls"
-                >
-                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                  </svg>
-                  {tt('repo.prs')}
-                </A>
-              )}
-              {giteeStore.authenticated && (
-                <A
-                  class="flex-1 py-2 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1"
-                  href="/gitee-pulls"
-                >
-                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                  </svg>
-                  {tt('repo.prs')}
-                </A>
-              )}
-            </div>
-          </div>
-
-          {/* Commit input */}
-          <div id="commit-area" class="p-3 border-b border-white/10 shrink-0">
-            <textarea
-              class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm resize-none focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
-              rows={3}
-              placeholder={tt('repo.commitPlaceholder')}
-              value={commitMessage()}
-              onInput={(e) => setCommitMessage(e.currentTarget.value)}
-            />
-            <div class="flex gap-2 mt-2 items-center">
-              <label class="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/70 cursor-pointer select-none" onClick={() => setAmendMode(!amendMode())}>
-                <div class={`w-3.5 h-3.5 rounded border ${amendMode() ? 'bg-cyan-500/40 border-cyan-400/60' : 'border-white/30'} flex items-center justify-center transition-colors`}>
-                  {amendMode() && (
-                    <svg class="w-2.5 h-2.5 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </div>
-                <span>{tt('repo.amend')}</span>
-                <span class="text-white/30">({tt('repo.amendDesc')})</span>
-              </label>
-              <button
-                class="flex-1 py-1.5 px-3 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-                onClick={handleCommit}
-                disabled={!commitMessage().trim() || stagedFiles().length === 0}
-              >
-                {amendMode() ? tt('repo.amend') : tt('repo.commit')}
-              </button>
-            </div>
-            {commitError() && (
-              <div class="mt-2 text-xs text-red-400">{commitError()}</div>
-            )}
-          </div>
-
-          {/* File list */}
-          <div id="file-list-area" class="flex-1 overflow-auto">
-            <FileList
-              stagedFiles={stagedFiles()}
-              unstagedFiles={unstagedFiles()}
-              selectedFile={diffStore.selectedFile ?? undefined}
-              onToggleStage={handleToggleStage}
-              onStageAll={handleStageAll}
-              onUnstageAll={handleUnstageAll}
-              onSelectFile={handleSelectFile}
-              onDiscard={handleDiscard}
-              onDiscardAll={handleDiscardAll}
-            />
-          </div>
-
-          {/* Terminal toggle */}
-          <div class="p-2 border-t border-white/10 shrink-0">
-            <button
-              class="w-full py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-1.5"
-              onClick={handleOpenTerminal}
-            >
-              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              {tt('repo.terminal')}
-            </button>
-          </div>
-        </div>
+        <RightPanel
+          width={rightWidth()}
+          remoteActionLoading={remoteActionLoading()}
+          undoLoading={undoLoading()}
+          githubAuthenticated={githubStore.authenticated}
+          giteeAuthenticated={giteeStore.authenticated}
+          commitMessage={commitMessage()}
+          amendMode={amendMode()}
+          stagedFiles={stagedFiles()}
+          unstagedFiles={unstagedFiles()}
+          selectedFile={diffStore.selectedFile ?? undefined}
+          commitError={commitError()}
+          onFetch={handleFetch}
+          onPull={handlePull}
+          onPush={() => setShowPushDialog(true)}
+          onRemoteManager={() => setShowRemoteManager(true)}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onStash={() => setShowStashPanel(true)}
+          onMerge={() => setShowMergeDialog(true)}
+          onRebase={() => setShowRebaseDialog(true)}
+          onBranchCompare={() => setShowBranchCompare(true)}
+          onGitTools={() => setShowGitTools(true)}
+          onCommitMessageChange={setCommitMessage}
+          onAmendModeChange={setAmendMode}
+          onCommit={handleCommit}
+          onToggleStage={handleToggleStage}
+          onStageAll={handleStageAll}
+          onUnstageAll={handleUnstageAll}
+          onSelectFile={handleSelectFile}
+          onDiscard={handleDiscard}
+          onDiscardAll={handleDiscardAll}
+          onOpenTerminal={handleOpenTerminal}
+        />
       </div>
     </Show>
 
       {/* Terminal panel */}
       <TerminalPanel phase={terminalPhase()} onClose={handleCloseTerminal} />
 
-      {/* M3 Modals */}
-      <Show when={showStashPanel() && repoPath()}>
-        <StashPanel
-          repoPath={repoPath()!}
-          onClose={() => setShowStashPanel(false)}
-          onRefresh={handleStashRefresh}
-        />
-      </Show>
-
-      <Show when={showRemoteManager() && repoPath()}>
-        <RemoteManager
-          repoPath={repoPath()!}
-          onClose={() => setShowRemoteManager(false)}
-          onRefresh={refreshStatus}
-        />
-      </Show>
-
-      <Show when={showConflictResolver() && repoPath()}>
-        <ConflictResolver
-          repoPath={repoPath()!}
-          onClose={() => setShowConflictResolver(false)}
-          onRefresh={handleConflictRefresh}
-        />
-      </Show>
-
-      <Show when={showRebaseDialog() && repoPath()}>
-        <InteractiveRebase
-          repoPath={repoPath()!}
-          onClose={() => setShowRebaseDialog(false)}
-          onRefresh={handleRebaseRefresh}
-        />
-      </Show>
-
-      <Show when={showMergeDialog() && repoPath()}>
-        <MergeDialog
-          repoPath={repoPath()!}
-          onClose={() => setShowMergeDialog(false)}
-          onRefresh={refreshAll}
-        />
-      </Show>
-
-      <Show when={showBranchCompare() && repoPath()}>
-        <BranchCompareDialog
-          repoPath={repoPath()!}
-          onClose={() => setShowBranchCompare(false)}
-        />
-      </Show>
-
-      <Show when={showPushDialog() && repoPath()}>
-        <PushDialog
-          repoPath={repoPath()!}
-          onClose={() => setShowPushDialog(false)}
-          onRefresh={refreshAll}
-        />
-      </Show>
-
-      {/* PR Create Dialog */}
-      <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'github' && githubStore.authenticated}>
-        <PRCreateDialog
-          owner={prCreateInfo()!.owner}
-          repo={prCreateInfo()!.repo}
-          defaultBase="main"
-          onClose={() => setShowPRCreate(false)}
-          onCreated={() => {
-            setShowPRCreate(false);
-            addToast(tt('pr.createdGeneric'), 'success');
-          }}
-        />
-      </Show>
-      <Show when={showPRCreate() && prCreateInfo() && prCreatePlatform() === 'gitee' && giteeStore.authenticated}>
-        <GiteePRCreateDialog
-          owner={prCreateInfo()!.owner}
-          repo={prCreateInfo()!.repo}
-          defaultBase="main"
-          onClose={() => setShowPRCreate(false)}
-          onCreated={() => {
-            setShowPRCreate(false);
-            addToast(tt('pr.createdGeneric'), 'success');
-          }}
-        />
-      </Show>
-
-      {/* Create branch from commit dialog */}
-      <Show when={createBranchDialog()}>
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div class="w-80 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
-            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
-              <h2 class="text-sm font-bold">{tt('commit.createBranchFrom')}</h2>
-              <button
-                class="text-xs opacity-50 hover:text-red-400 transition-colors"
-                onClick={() => setCreateBranchDialog(null)}
-              >
-                {tt('common.close')}
-              </button>
-            </div>
-            <div class="p-4 space-y-3">
-              <div>
-                <label class="block text-xs font-medium mb-1 opacity-70">{tt('repo.branchName')}</label>
-                <input
-                  class="w-full p-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:border-cyan-400/50 placeholder-white/30"
-                  placeholder={tt('repo.branchNamePlaceholder')}
-                  value={createBranchName()}
-                  onInput={(e) => setCreateBranchName(e.currentTarget.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateBranchSubmit()}
-                  disabled={createBranchLoading()}
-                  autofocus
-                />
-              </div>
-              <div class="flex gap-2">
-                <button
-                  class="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-xs transition-colors"
-                  onClick={() => setCreateBranchDialog(null)}
-                  disabled={createBranchLoading()}
-                >
-                  {tt('common.cancel')}
-                </button>
-                <button
-                  class="flex-1 py-2 rounded-lg bg-cyan-500/30 hover:bg-cyan-500/50 disabled:opacity-30 text-xs font-medium transition-colors"
-                  onClick={handleCreateBranchSubmit}
-                  disabled={!createBranchName().trim() || createBranchLoading()}
-                >
-                  {createBranchLoading() ? tt('repo.creatingBranch') : tt('common.create')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Show>
+      <ModalsContainer
+        repoPath={repoPath()}
+        selectedFile={diffStore.selectedFile ?? selectedCommitFile() ?? undefined}
+        showStashPanel={showStashPanel()}
+        showRemoteManager={showRemoteManager()}
+        showConflictResolver={showConflictResolver()}
+        showRebaseDialog={showRebaseDialog()}
+        showMergeDialog={showMergeDialog()}
+        showBranchCompare={showBranchCompare()}
+        showPushDialog={showPushDialog()}
+        showGitTools={showGitTools()}
+        showPRCreate={showPRCreate()}
+        prCreateInfo={prCreateInfo()}
+        prCreatePlatform={prCreatePlatform()}
+        createBranchDialog={createBranchDialog()}
+        createBranchName={createBranchName()}
+        createBranchLoading={createBranchLoading()}
+        onCloseStashPanel={() => setShowStashPanel(false)}
+        onCloseRemoteManager={() => setShowRemoteManager(false)}
+        onCloseConflictResolver={() => setShowConflictResolver(false)}
+        onCloseRebaseDialog={() => setShowRebaseDialog(false)}
+        onCloseMergeDialog={() => setShowMergeDialog(false)}
+        onCloseBranchCompare={() => setShowBranchCompare(false)}
+        onClosePushDialog={() => setShowPushDialog(false)}
+        onCloseGitTools={() => setShowGitTools(false)}
+        onClosePRCreate={() => setShowPRCreate(false)}
+        onPRCreated={() => {
+          setShowPRCreate(false);
+          addToast(tt('pr.createdGeneric'), 'success');
+        }}
+        onCloseCreateBranch={() => setCreateBranchDialog(null)}
+        onCreateBranchNameChange={setCreateBranchName}
+        onCreateBranchSubmit={handleCreateBranchSubmit}
+        onStashRefresh={handleStashRefresh}
+        onRemoteRefresh={refreshStatus}
+        onConflictRefresh={handleConflictRefresh}
+        onRebaseRefresh={handleRebaseRefresh}
+        onMergeRefresh={refreshAll}
+        onPushRefresh={refreshAll}
+        onGitToolsRefresh={refreshAll}
+      />
 
       {/* Keyboard shortcuts */}
       <KeyboardShortcuts
