@@ -152,6 +152,7 @@ mod tests {
     }
 
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_dos_device_name_detection() {
         assert!(is_dos_device_name("NUL"));
@@ -166,6 +167,7 @@ mod tests {
         assert!(!is_dos_device_name("null"));
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_dos_device_name_with_extension() {
         assert!(is_dos_device_name("nul.txt"));
@@ -173,6 +175,7 @@ mod tests {
         assert!(is_dos_device_name("CON.py"));
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_path_has_dos_device_name() {
         assert!(path_has_dos_device_name("nul"));
@@ -182,6 +185,7 @@ mod tests {
         assert!(!path_has_dos_device_name("README.md"));
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_validate_relative_path_rejects_dos_names() {
         assert!(validate_relative_path("nul").is_err());
