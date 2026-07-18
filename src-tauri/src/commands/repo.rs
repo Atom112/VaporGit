@@ -1,4 +1,5 @@
 use crate::git;
+use crate::git_err;
 use crate::models::conflict::{BlockResolution, ConflictBlockDetail, ConflictEntry};
 use crate::models::repo::{RecentRepo, RepoInfo};
 use serde::Deserialize;
@@ -27,7 +28,7 @@ fn config_dir() -> PathBuf {
 
 fn ensure_config_dir() -> Result<PathBuf, String> {
     let path = config_dir();
-    fs::create_dir_all(&path).map_err(|e| format!("无法创建配置目录: {}", e))?;
+    fs::create_dir_all(&path).map_err(|e| git_err!("REPO_CONFIG_CREATE_DIR", "Failed to create config directory: {}", e))?;
     Ok(path)
 }
 
@@ -40,7 +41,7 @@ pub async fn open_repo(path: String) -> Result<RepoInfo, String> {
         Ok::<_, String>(info)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?;
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?;
 
     save_repo_path_inner(&path_clone)?;
     info
@@ -71,7 +72,7 @@ pub async fn remove_recent_repo(path: String) -> Result<(), String> {
 
     let mut repos: Vec<RecentRepo> = if file_path.exists() {
         let content =
-            fs::read_to_string(&file_path).map_err(|e| format!("读取配置失败: {}", e))?;
+            fs::read_to_string(&file_path).map_err(|e| git_err!("REPO_CONFIG_READ_FAILED", "Failed to read config: {}", e))?;
         serde_json::from_str(&content).unwrap_or_default()
     } else {
         vec![]
@@ -80,8 +81,8 @@ pub async fn remove_recent_repo(path: String) -> Result<(), String> {
     repos.retain(|r| r.path != path);
 
     let content =
-        serde_json::to_string_pretty(&repos).map_err(|e| format!("序列化配置失败: {}", e))?;
-    fs::write(&file_path, content).map_err(|e| format!("写入配置失败: {}", e))?;
+        serde_json::to_string_pretty(&repos).map_err(|e| git_err!("REPO_CONFIG_SERIALIZE_FAILED", "Failed to serialize config: {}", e))?;
+    fs::write(&file_path, content).map_err(|e| git_err!("REPO_CONFIG_WRITE_FAILED", "Failed to write config: {}", e))?;
 
     Ok(())
 }
@@ -92,7 +93,7 @@ fn save_repo_path_inner(path: &str) -> Result<(), String> {
 
     let mut repos: Vec<RecentRepo> = if file_path.exists() {
         let content =
-            fs::read_to_string(&file_path).map_err(|e| format!("读取配置失败: {}", e))?;
+            fs::read_to_string(&file_path).map_err(|e| git_err!("REPO_CONFIG_READ_FAILED", "Failed to read config: {}", e))?;
         serde_json::from_str(&content).unwrap_or_default()
     } else {
         vec![]
@@ -119,9 +120,9 @@ fn save_repo_path_inner(path: &str) -> Result<(), String> {
     }
 
     let content =
-        serde_json::to_string_pretty(&repos).map_err(|e| format!("序列化配置失败: {}", e))?;
+        serde_json::to_string_pretty(&repos).map_err(|e| git_err!("REPO_CONFIG_SERIALIZE_FAILED", "Failed to serialize config: {}", e))?;
 
-    fs::write(&file_path, content).map_err(|e| format!("写入配置失败: {}", e))?;
+    fs::write(&file_path, content).map_err(|e| git_err!("REPO_CONFIG_WRITE_FAILED", "Failed to write config: {}", e))?;
 
     Ok(())
 }
@@ -133,7 +134,7 @@ pub async fn check_submodules(path: String) -> Result<Vec<String>, String> {
         git::repo::check_submodules(&repo)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -143,7 +144,7 @@ pub async fn get_status(path: String) -> Result<Vec<crate::models::status::FileS
         git::status::get_status(&repo)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -164,7 +165,7 @@ pub async fn stage_files(path: String, files: Vec<StageEntry>) -> Result<Vec<cra
         // get_status() now uses Diff API — rename detection is automatic
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -184,7 +185,7 @@ pub async fn unstage_files(path: String, files: Vec<StageEntry>) -> Result<Vec<c
         git::status::unstage_files(&repo, &all_paths)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -194,7 +195,7 @@ pub async fn get_conflicts(path: String) -> Result<Vec<ConflictEntry>, String> {
         git::status::get_conflicts(&repo)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -204,7 +205,7 @@ pub async fn get_conflict_content(path: String, file: String, stage: String) -> 
         git::status::get_conflict_content(&repo, &file, &stage)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -214,7 +215,7 @@ pub async fn discard_files(path: String, files: Vec<String>) -> Result<Vec<crate
         git::status::discard_files(&repo, &files)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -224,7 +225,7 @@ pub async fn resolve_conflict(path: String, file: String, resolution: String) ->
         git::status::resolve_conflict(&repo, &file, &resolution)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -234,7 +235,7 @@ pub async fn get_conflict_blocks(path: String, file: String) -> Result<Vec<Confl
         git::status::get_conflict_blocks(&repo, &file)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -244,14 +245,14 @@ pub async fn resolve_conflict_blocks(path: String, file: String, resolutions: Ve
         git::status::resolve_conflict_blocks(&repo, &file, &resolutions)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
 pub async fn init_repo(path: String, init_readme: bool) -> Result<RepoInfo, String> {
     let info = tokio::task::spawn_blocking(move || git::repo::init_repo(&path, init_readme))
         .await
-        .map_err(|e| format!("内部错误: {}", e))??;
+        .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))??;
 
     save_repo_path_inner(&info.path)?;
     Ok(info)
@@ -263,7 +264,7 @@ pub async fn clone_repo(url: String, path: String) -> Result<RepoInfo, String> {
         git::repo::clone_repo(&url, &path)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))??;
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))??;
 
     save_repo_path_inner(&info.path)?;
     Ok(info)

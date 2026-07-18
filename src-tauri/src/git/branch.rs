@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use git2::Repository;
+use crate::git_err;
 use crate::models::branch::{BranchInfo, BranchDiffSummary, BranchFileChange};
 
 pub fn get_branch_list(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
@@ -13,10 +14,10 @@ pub fn get_branch_list(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
     // Local branches
     if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
         for branch in branches {
-            let (branch, _branch_type) = branch.map_err(|e| format!("遍历分支失败: {}", e))?;
+            let (branch, _branch_type) = branch.map_err(|e| git_err!("BRANCH_LIST_LOCAL", "Failed to list local branches: {}", e))?;
             let name = branch
                 .name()
-                .map_err(|e| format!("获取分支名失败: {}", e))?
+                .map_err(|e| git_err!("BRANCH_GET_NAME", "Failed to get branch name: {}", e))?
                 .unwrap_or("unknown")
                 .to_string();
 
@@ -63,10 +64,10 @@ pub fn get_branch_list(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
     // Remote-tracking branches (origin/*)
     if let Ok(branches) = repo.branches(Some(git2::BranchType::Remote)) {
         for branch in branches {
-            let (branch, _branch_type) = branch.map_err(|e| format!("遍历远程分支失败: {}", e))?;
+            let (branch, _branch_type) = branch.map_err(|e| git_err!("BRANCH_LIST_REMOTE", "Failed to list remote branches: {}", e))?;
             let name = branch
                 .name()
-                .map_err(|e| format!("获取远程分支名失败: {}", e))?
+                .map_err(|e| git_err!("BRANCH_GET_REMOTE_NAME", "Failed to get remote branch name: {}", e))?
                 .unwrap_or("unknown")
                 .to_string();
 
@@ -99,19 +100,19 @@ pub fn create_branch(repo: &Repository, name: &str, from: Option<&str>) -> Resul
         Some(ref_name) => {
             let obj = repo
                 .revparse_single(ref_name)
-                .map_err(|e| format!("无法解析引用 {}: {}", ref_name, e))?;
+                .map_err(|e| git_err!("BRANCH_PARSE_REF", "Failed to parse reference {}: {}", ref_name, e))?;
             obj
         }
         None => {
-            let head = repo.head().map_err(|e| format!("无法获取 HEAD: {}", e))?;
+            let head = repo.head().map_err(|e| git_err!("BRANCH_GET_HEAD", "Failed to get HEAD: {}", e))?;
             head.peel_to_commit()
-                .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?
+                .map_err(|e| git_err!("BRANCH_GET_HEAD_COMMIT", "Failed to get HEAD commit: {}", e))?
                 .into_object()
         }
     };
 
-    repo.branch(name, &target.into_commit().map_err(|_| "无法转为提交".to_string())?, false)
-        .map_err(|e| format!("创建分支失败: {}", e))?;
+    repo.branch(name, &target.into_commit().map_err(|_| git_err!("BRANCH_INTO_COMMIT", "Failed to convert target to commit"))?, false)
+        .map_err(|e| git_err!("BRANCH_CREATE_FAILED", "Failed to create branch: {}", e))?;
 
     Ok(())
 }
@@ -119,16 +120,16 @@ pub fn create_branch(repo: &Repository, name: &str, from: Option<&str>) -> Resul
 pub fn checkout_branch(repo: &Repository, name: &str) -> Result<(), String> {
     let (object, reference) = repo
         .revparse_ext(name)
-        .map_err(|e| format!("无法解析分支 {}: {}", name, e))?;
+        .map_err(|e| git_err!("BRANCH_CHECKOUT_PARSE", "Failed to parse branch {}: {}", name, e))?;
 
     repo.checkout_tree(&object, None)
-        .map_err(|e| format!("切换失败: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_CHECKOUT_TREE", "Checkout failed: {}", e))?;
 
     match reference {
         Some(gref) => repo.set_head(gref.name().unwrap_or(name)),
         None => repo.set_head_detached(object.id()),
     }
-    .map_err(|e| format!("设置 HEAD 失败: {}", e))?;
+    .map_err(|e| git_err!("BRANCH_SET_HEAD", "Failed to set HEAD: {}", e))?;
 
     Ok(())
 }
@@ -139,9 +140,9 @@ pub fn checkout_remote_branch(repo: &Repository, remote_ref: &str) -> Result<(),
     // Parse remote branch ref to get the object
     let object = repo
         .revparse_single(remote_ref)
-        .map_err(|e| format!("无法解析远程分支 {}: {}", remote_ref, e))?
+        .map_err(|e| git_err!("BRANCH_PARSE_REMOTE", "Failed to parse remote branch {}: {}", remote_ref, e))?
         .peel_to_commit()
-        .map_err(|_| format!("无法获取远程分支 {} 的提交对象", remote_ref))?;
+        .map_err(|_| git_err!("BRANCH_REMOTE_COMMIT", "Failed to get commit for remote branch {}", remote_ref))?;
 
     // Derive local branch name: "origin/dev" → "dev"
     let local_name = remote_ref
@@ -151,7 +152,7 @@ pub fn checkout_remote_branch(repo: &Repository, remote_ref: &str) -> Result<(),
         .join("/");
 
     if local_name.is_empty() {
-        return Err(format!("无效的远程分支引用: {}", remote_ref));
+        return Err(git_err!("BRANCH_INVALID_REMOTE_REF", "Invalid remote branch reference: {}", remote_ref));
     }
 
     // Check if local branch already exists
@@ -163,20 +164,20 @@ pub fn checkout_remote_branch(repo: &Repository, remote_ref: &str) -> Result<(),
     // Create local branch at the remote's commit with tracking
     let mut branch = repo
         .branch(&local_name, &object, false)
-        .map_err(|e| format!("创建本地分支 {} 失败: {}", local_name, e))?;
+        .map_err(|e| git_err!("BRANCH_CREATE_LOCAL", "Failed to create local branch {}: {}", local_name, e))?;
 
     // Set upstream to the remote branch
     branch
         .set_upstream(Some(remote_ref))
-        .map_err(|e| format!("设置上游跟踪失败: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_SET_UPSTREAM", "Failed to set upstream tracking: {}", e))?;
 
     // Checkout the new branch
     repo.checkout_tree(object.as_object(), None)
-        .map_err(|e| format!("切换失败: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_CHECKOUT_TREE", "Checkout failed: {}", e))?;
 
     let full_ref = format!("refs/heads/{}", local_name);
     repo.set_head(&full_ref)
-        .map_err(|e| format!("设置 HEAD 失败: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_SET_HEAD", "Failed to set HEAD: {}", e))?;
 
     Ok(())
 }
@@ -184,21 +185,21 @@ pub fn checkout_remote_branch(repo: &Repository, remote_ref: &str) -> Result<(),
 pub fn delete_branch(repo: &Repository, name: &str) -> Result<(), String> {
     let mut branch = repo
         .find_branch(name, git2::BranchType::Local)
-        .map_err(|e| format!("无法找到分支 {}: {}", name, e))?;
+        .map_err(|e| git_err!("BRANCH_FIND_DELETE", "Failed to find branch {}: {}", name, e))?;
 
     // Check if this is the current branch
     let head = repo.head().ok();
     if let Some(h) = head {
         if let Some(shorthand) = h.shorthand() {
             if shorthand == name {
-                return Err(format!("无法删除当前检出的分支 '{}'，请先切换到其他分支", name));
+                return Err(git_err!("BRANCH_DELETE_CURRENT", "Cannot delete the currently checked out branch '{}'. Switch to another branch first.", name));
             }
         }
     }
 
     branch
         .delete()
-        .map_err(|e| format!("删除分支失败: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_DELETE_FAILED", "Failed to delete branch: {}", e))?;
 
     Ok(())
 }
@@ -206,7 +207,7 @@ pub fn delete_branch(repo: &Repository, name: &str) -> Result<(), String> {
 pub fn delete_remote_branch(repo: &Repository, remote_name: &str, branch_name: &str) -> Result<(), String> {
     let mut remote = repo
         .find_remote(remote_name)
-        .map_err(|e| format!("无法找到远程 {}: {}", remote_name, e))?;
+        .map_err(|e| git_err!("BRANCH_FIND_REMOTE", "Failed to find remote {}: {}", remote_name, e))?;
 
     let refspec = format!(":refs/heads/{}", branch_name);
 
@@ -241,11 +242,11 @@ pub fn delete_remote_branch(repo: &Repository, remote_name: &str, branch_name: &
 
     remote
         .push(&[&refspec], Some(&mut push_opts))
-        .map_err(|e| format!("删除远程分支失败: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_DELETE_REMOTE_FAILED", "Failed to delete remote branch: {}", e))?;
 
     remote
         .disconnect()
-        .map_err(|e| format!("断开远程连接失败: {}", e))?;
+        .map_err(|e| git_err!("REMOTE_DISCONNECT", "Failed to disconnect remote: {}", e))?;
 
     Ok(())
 }
@@ -258,42 +259,42 @@ pub fn compare_branches(
 ) -> Result<BranchDiffSummary, String> {
     let base_obj = repo
         .revparse_single(base_branch)
-        .map_err(|e| format!("无法解析分支 '{}': {}", base_branch, e))?;
+        .map_err(|e| git_err!("BRANCH_PARSE_BASE", "Failed to parse branch '{}': {}", base_branch, e))?;
     let target_obj = repo
         .revparse_single(target_branch)
-        .map_err(|e| format!("无法解析分支 '{}': {}", target_branch, e))?;
+        .map_err(|e| git_err!("BRANCH_PARSE_TARGET", "Failed to parse branch '{}': {}", target_branch, e))?;
 
     let base_commit = base_obj
         .peel_to_commit()
-        .map_err(|e| format!("无法获取分支 '{}' 的提交: {}", base_branch, e))?;
+        .map_err(|e| git_err!("BRANCH_GET_BASE_COMMIT", "Failed to get commit for branch '{}': {}", base_branch, e))?;
     let target_commit = target_obj
         .peel_to_commit()
-        .map_err(|e| format!("无法获取分支 '{}' 的提交: {}", target_branch, e))?;
+        .map_err(|e| git_err!("BRANCH_GET_TARGET_COMMIT", "Failed to get commit for branch '{}': {}", target_branch, e))?;
 
     // Find merge-base
     let merge_base_oid = repo
         .merge_base(base_commit.id(), target_commit.id())
-        .map_err(|e| format!("无法计算合并基础: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_MERGE_BASE", "Failed to calculate merge base: {}", e))?;
 
     // Ahead/behind counts (ahead = commits on target not on base, behind = commits on base not on target)
     let (ahead, behind) = repo
         .graph_ahead_behind(base_commit.id(), target_commit.id())
-        .map_err(|e| format!("无法计算 ahead/behind: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_AHEAD_BEHIND", "Failed to calculate ahead/behind: {}", e))?;
 
     // Diff between merge-base and target (what target has that base doesn't)
     let merge_base_tree = repo
         .find_commit(merge_base_oid)
-        .map_err(|e| format!("无法找到合并基础提交: {}", e))?
+        .map_err(|e| git_err!("BRANCH_FIND_MERGE_BASE_COMMIT", "Failed to find merge base commit: {}", e))?
         .tree()
-        .map_err(|e| format!("无法获取合并基础树: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_GET_MERGE_BASE_TREE", "Failed to get merge base tree: {}", e))?;
 
     let target_tree = target_commit
         .tree()
-        .map_err(|e| format!("无法获取目标分支树: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_GET_TARGET_TREE", "Failed to get target branch tree: {}", e))?;
 
     let diff = repo
         .diff_tree_to_tree(Some(&merge_base_tree), Some(&target_tree), None)
-        .map_err(|e| format!("无法生成 diff: {}", e))?;
+        .map_err(|e| git_err!("BRANCH_DIFF_FAILED", "Failed to generate diff: {}", e))?;
 
     let files = RefCell::new(Vec::<BranchFileChange>::new());
 
@@ -333,7 +334,7 @@ pub fn compare_branches(
             true
         }),
     )
-    .map_err(|e| format!("遍历 diff 失败: {}", e))?;
+    .map_err(|e| git_err!("BRANCH_DIFF_FOREACH", "Failed to walk diff: {}", e))?;
 
     Ok(BranchDiffSummary {
         ahead,

@@ -1,4 +1,5 @@
 use crate::git;
+use crate::git_err;
 use crate::models::branch::{BranchDiffSummary, BranchInfo};
 
 #[tauri::command]
@@ -8,7 +9,7 @@ pub async fn get_branch_list(path: String) -> Result<Vec<BranchInfo>, String> {
         git::branch::get_branch_list(&repo)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -18,7 +19,7 @@ pub async fn create_branch(path: String, name: String, from: Option<String>) -> 
         git::branch::create_branch(&repo, &name, from.as_deref())
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -28,7 +29,7 @@ pub async fn checkout_branch(path: String, name: String) -> Result<(), String> {
         git::branch::checkout_branch(&repo, &name)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -38,7 +39,7 @@ pub async fn checkout_remote_branch(path: String, name: String) -> Result<(), St
         git::branch::checkout_remote_branch(&repo, &name)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -48,7 +49,7 @@ pub async fn delete_branch(path: String, name: String) -> Result<(), String> {
         git::branch::delete_branch(&repo, &name)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -58,7 +59,7 @@ pub async fn delete_remote_branch(path: String, remote_name: String, branch_name
         git::branch::delete_remote_branch(&repo, &remote_name, &branch_name)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }
 
 #[tauri::command]
@@ -72,5 +73,5 @@ pub async fn compare_branches(
         git::branch::compare_branches(&repo, &base_branch, &target_branch)
     })
     .await
-    .map_err(|e| format!("内部错误: {}", e))?
+    .map_err(|e| git_err!("INTERNAL_SPAWN_BLOCKING", "Internal error: {}", e))?
 }

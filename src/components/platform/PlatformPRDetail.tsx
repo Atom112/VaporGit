@@ -9,6 +9,7 @@ import {
 import { parseGitHubPatch } from '../../lib/diffParser';
 import { addToast } from '../../stores/toastStore';
 import { tt, ttf } from '../../i18n';
+import { describeErrorDetail } from '../../lib/gitErrorDesc';
 import DiffView from '../git/DiffView';
 import CustomSelect from '../ui/CustomSelect';
 
@@ -90,7 +91,8 @@ const PlatformPRDetail: Component<PlatformPRDetailProps> = (props) => {
         addToast(`${tt('common.error')}: ${result.message}`, 'error');
       }
     } catch (e) {
-      addToast(`${tt('common.error')}: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`${tt('common.error')}: ${message}`, 'error', detail);
     } finally {
       setMerging(false);
       setShowMergeConfirm(false);

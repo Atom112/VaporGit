@@ -3,7 +3,7 @@ import { diffStore } from '../../stores/diffStore';
 import { settingsStore } from '../../stores/settingsStore';
 import { addToast } from '../../stores/toastStore';
 import { fetch as fetchRemote, pull as pullRemote, redo as redoLast, undo as undoLast } from '../../lib/tauriCommands';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeErrorDetail } from '../../lib/gitErrorDesc';
 import { tt, ttf } from '../../i18n';
 import { useRepositoryModals } from './useRepositoryModals';
 
@@ -32,7 +32,8 @@ export function useRepositoryActions(params: RepositoryActionsParams) {
       addToast(tt('repo.fetchSuccess'), 'success');
       await params.refreshGraph(true);
     } catch (e) {
-      addToast(ttf('repo.fetchFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.fetchFailed', message), detail, 'error');
     } finally {
       setRemoteActionLoading(false);
     }
@@ -53,7 +54,8 @@ export function useRepositoryActions(params: RepositoryActionsParams) {
         addToast(result, 'success');
       }
     } catch (e) {
-      addToast(ttf('repo.pullFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.pullFailed', message), detail, 'error');
       await params.refreshStatus();
       if (diffStore.fileStatuses.some((file) => file.status === 'CONFLICTED')) {
         params.openConflictResolver();
@@ -72,7 +74,8 @@ export function useRepositoryActions(params: RepositoryActionsParams) {
       addToast(ttf('repo.undoCommitSuccess', msg.slice(0, 50)), 'success');
       await params.refreshAll();
     } catch (e) {
-      addToast(ttf('repo.undoFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.undoFailed', message), detail, 'error');
     } finally {
       setUndoLoading(false);
     }
@@ -87,7 +90,8 @@ export function useRepositoryActions(params: RepositoryActionsParams) {
       addToast(ttf('repo.redoCommitSuccess', msg.slice(0, 50)), 'success');
       await params.refreshAll();
     } catch (e) {
-      addToast(ttf('repo.redoFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.redoFailed', message), detail, 'error');
     } finally {
       setUndoLoading(false);
     }

@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use git2::{ApplyLocation, Diff, DiffOptions, Repository};
+use crate::git_err;
 
 /// Stage a specific hunk from the working tree for a given file.
 /// `file_path` is relative to the repo root.
@@ -12,7 +13,7 @@ pub fn stage_hunk(repo: &Repository, file_path: &str, hunk_index: usize) -> Resu
 
     let diff = repo
         .diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts))
-        .map_err(|e| format!("无法生成 diff: {}", e))?;
+        .map_err(|e| git_err!("STAGE_DIFF_FAILED", "Failed to generate diff: {}", e))?;
 
     let current_hunk = Cell::new(0usize);
     let found = Cell::new(false);
@@ -59,10 +60,10 @@ pub fn stage_hunk(repo: &Repository, file_path: &str, hunk_index: usize) -> Resu
             true
         }),
     )
-    .map_err(|e| format!("遍历 diff 失败: {}", e))?;
+    .map_err(|e| git_err!("STAGE_DIFF_FOREACH_FAILED", "Failed to traverse diff: {}", e))?;
 
     if !found.get() {
-        return Err(format!("未找到 hunk 索引 {}", hunk_index));
+        return Err(git_err!("STAGE_HUNK_NOT_FOUND", "Hunk index {} not found", hunk_index));
     }
 
     let file_old = {
@@ -84,10 +85,10 @@ pub fn stage_hunk(repo: &Repository, file_path: &str, hunk_index: usize) -> Resu
     let patch_bytes = format!("{}{}", patch_bytes, target_hunk_text.borrow());
 
     let patch_diff = Diff::from_buffer(patch_bytes.as_bytes())
-        .map_err(|e| format!("无法解析 patch: {}", e))?;
+        .map_err(|e| git_err!("STAGE_PARSE_PATCH_FAILED", "Failed to parse patch: {}", e))?;
 
     repo.apply(&patch_diff, ApplyLocation::Index, None)
-        .map_err(|e| format!("应用 hunk 到暂存区失败: {}", e))?;
+        .map_err(|e| git_err!("STAGE_HUNK_FAILED", "Failed to apply hunk to index: {}", e))?;
 
     Ok(())
 }
@@ -106,7 +107,7 @@ pub fn stage_line(
 
     let diff = repo
         .diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts))
-        .map_err(|e| format!("无法生成 diff: {}", e))?;
+        .map_err(|e| git_err!("STAGE_DIFF_FAILED", "Failed to generate diff: {}", e))?;
 
     let current_hunk = Cell::new(0usize);
     let current_line = Cell::new(0usize);
@@ -159,13 +160,10 @@ pub fn stage_line(
             true
         }),
     )
-    .map_err(|e| format!("遍历 diff 失败: {}", e))?;
+    .map_err(|e| git_err!("STAGE_DIFF_FOREACH_FAILED", "Failed to traverse diff: {}", e))?;
 
     if !found.get() {
-        return Err(format!(
-            "未找到行索引 {} (hunk {} 中只有上下文行，无法单独暂存)",
-            line_index, hunk_index
-        ));
+        return Err(git_err!("STAGE_LINE_NOT_FOUND", "Line index {} not found (hunk {} has only context lines, cannot stage individually)", line_index, hunk_index));
     }
 
     let file_old = {
@@ -183,10 +181,10 @@ pub fn stage_line(
     );
 
     let patch_diff = Diff::from_buffer(patch_bytes.as_bytes())
-        .map_err(|e| format!("无法解析 patch: {}", e))?;
+        .map_err(|e| git_err!("STAGE_PARSE_PATCH_FAILED", "Failed to parse patch: {}", e))?;
 
     repo.apply(&patch_diff, ApplyLocation::Index, None)
-        .map_err(|e| format!("应用行到暂存区失败: {}", e))?;
+        .map_err(|e| git_err!("STAGE_LINE_FAILED", "Failed to apply line to index: {}", e))?;
 
     Ok(())
 }

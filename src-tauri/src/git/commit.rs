@@ -1,20 +1,21 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use git2::{Oid, Repository, Sort};
+use crate::git_err;
 use crate::models::commit::{CommitInfo, CommitDetail, FileChange, CommitGraphData, GraphNode, GraphEdge, RebaseEntry};
 
 pub fn commit(repo: &Repository, message: &str) -> Result<CommitInfo, String> {
     let signature = repo
         .signature()
-        .map_err(|e| format!("无法获取签名: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_SIGNATURE_FAILED", "Failed to get signature: {}", e))?;
 
-    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let mut index = repo.index().map_err(|e| git_err!("COMMIT_INDEX_FAILED", "Failed to get index: {}", e))?;
     let tree_oid = index
         .write_tree()
-        .map_err(|e| format!("无法写入树: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_WRITE_TREE", "Failed to write tree: {}", e))?;
     let tree = repo
         .find_tree(tree_oid)
-        .map_err(|e| format!("无法找到树: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_FIND_TREE", "Failed to find tree: {}", e))?;
 
     let head = repo.head().ok();
     let parent_commits: Vec<_> = head
@@ -32,11 +33,11 @@ pub fn commit(repo: &Repository, message: &str) -> Result<CommitInfo, String> {
             &tree,
             parents.as_slice(),
         )
-        .map_err(|e| format!("提交失败: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_FAILED", "Commit failed: {}", e))?;
 
     let commit = repo
         .find_commit(commit_oid)
-        .map_err(|e| format!("无法找到提交: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_FIND_CREATED", "Failed to find created commit: {}", e))?;
 
     commit_to_info(&commit)
 }
@@ -51,12 +52,12 @@ pub fn search_commit_history(
 ) -> Result<Vec<CommitInfo>, String> {
     let mut revwalk = repo
         .revwalk()
-        .map_err(|e| format!("无法创建 revwalk: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_REVWALK_FAILED", "Failed to create revwalk: {}", e))?;
 
-    revwalk.set_sorting(Sort::TIME).map_err(|e| format!("无法设置排序: {}", e))?;
+    revwalk.set_sorting(Sort::TIME).map_err(|e| git_err!("COMMIT_SORT_FAILED", "Failed to set sort order: {}", e))?;
     revwalk
         .push_head()
-        .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_PUSH_HEAD", "Failed to push HEAD: {}", e))?;
 
     let query_lower = query.to_lowercase();
 
@@ -64,8 +65,8 @@ pub fn search_commit_history(
     let query = query_lower;
     let mut matching: Vec<CommitInfo> = Vec::new();
     for oid_result in revwalk {
-        let oid = oid_result.map_err(|e| format!("遍历提交失败: {}", e))?;
-        let commit = repo.find_commit(oid).map_err(|e| format!("无法找到提交: {}", e))?;
+        let oid = oid_result.map_err(|e| git_err!("COMMIT_WALK_FAILED", "Failed to walk commits: {}", e))?;
+        let commit = repo.find_commit(oid).map_err(|e| git_err!("COMMIT_FIND_DURING_SEARCH", "Failed to find commit: {}", e))?;
 
         let msg = commit.message().unwrap_or("").to_lowercase();
         let author = commit.author().name().unwrap_or("").to_lowercase();
@@ -89,12 +90,12 @@ pub fn get_commit_history(
 ) -> Result<Vec<CommitInfo>, String> {
     let mut revwalk = repo
         .revwalk()
-        .map_err(|e| format!("无法创建 revwalk: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_REVWALK_FAILED", "Failed to create revwalk: {}", e))?;
 
-    revwalk.set_sorting(Sort::TIME).map_err(|e| format!("无法设置排序: {}", e))?;
+    revwalk.set_sorting(Sort::TIME).map_err(|e| git_err!("COMMIT_SORT_FAILED", "Failed to set sort order: {}", e))?;
     revwalk
         .push_head()
-        .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_PUSH_HEAD", "Failed to push HEAD: {}", e))?;
 
     let skip = (page * page_size) as usize;
     let take = page_size as usize;
@@ -109,7 +110,7 @@ pub fn get_commit_history(
     for oid in oids {
         let commit = repo
             .find_commit(oid)
-            .map_err(|e| format!("无法找到提交: {}", e))?;
+            .map_err(|e| git_err!("COMMIT_FIND_IN_HISTORY", "Failed to find commit: {}", e))?;
         commits.push(commit_to_info(&commit)?);
     }
 
@@ -117,17 +118,17 @@ pub fn get_commit_history(
 }
 
 pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDetail, String> {
-    let oid = Oid::from_str(commit_id).map_err(|e| format!("无效的提交 ID: {}", e))?;
+    let oid = Oid::from_str(commit_id).map_err(|e| git_err!("COMMIT_INVALID_ID", "Invalid commit ID: {}", e))?;
     let commit = repo
         .find_commit(oid)
-        .map_err(|e| format!("无法找到提交: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
 
     let parent_tree = commit
         .parent(0)
         .ok()
         .and_then(|p| p.tree().ok());
 
-    let current_tree = commit.tree().map_err(|e| format!("无法获取树: {}", e))?;
+    let current_tree = commit.tree().map_err(|e| git_err!("COMMIT_TREE_FAILED", "Failed to get tree: {}", e))?;
 
     let diff = repo
         .diff_tree_to_tree(
@@ -135,7 +136,7 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
             Some(&current_tree),
             None,
         )
-        .map_err(|e| format!("无法生成 diff: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_DIFF_FAILED", "Failed to generate diff: {}", e))?;
 
     let changed_files = RefCell::new(Vec::<FileChange>::new());
 
@@ -177,7 +178,7 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
             true
         }),
     )
-    .map_err(|e| format!("遍历 diff 失败: {}", e))?;
+    .map_err(|e| git_err!("COMMIT_DIFF_FOREACH", "Failed to walk diff: {}", e))?;
 
     let changed_files = changed_files.into_inner();
 
@@ -198,10 +199,10 @@ pub fn get_commit_detail(repo: &Repository, commit_id: &str) -> Result<CommitDet
 pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
     let mut revwalk = repo
         .revwalk()
-        .map_err(|e| format!("无法创建 revwalk: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_REVWALK_FAILED", "Failed to create revwalk: {}", e))?;
     revwalk
         .set_sorting(Sort::TIME)
-        .map_err(|e| format!("无法设置排序: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_SORT_FAILED", "Failed to set sort order: {}", e))?;
 
     // Push all local + remote-tracking branch tips so the commit graph
     // shows every branch. Use TIME sort so commits appear newest-first,
@@ -212,7 +213,7 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
         if let Ok(branches) = repo.branches(branch_type) {
             for branch_result in branches.flatten() {
                 if let Some(oid) = branch_result.0.get().target() {
-                    revwalk.push(oid).map_err(|e| format!("无法推送分支: {}", e))?;
+                    revwalk.push(oid).map_err(|e| git_err!("COMMIT_PUSH_BRANCH", "Failed to push branch: {}", e))?;
                     pushed_any = true;
                 }
             }
@@ -221,7 +222,7 @@ pub fn get_commit_graph(repo: &Repository) -> Result<CommitGraphData, String> {
     if !pushed_any {
         revwalk
             .push_head()
-            .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+            .map_err(|e| git_err!("COMMIT_PUSH_HEAD", "Failed to push HEAD: {}", e))?;
     }
 
     // Limit to max 2000 commits for performance on large repos
@@ -441,25 +442,25 @@ fn commit_to_info(commit: &git2::Commit) -> Result<CommitInfo, String> {
 pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
     let onto_commit = repo
         .revparse_single(onto)
-        .map_err(|e| format!("无法解析目标 '{}': {}", onto, e))?
+        .map_err(|e| git_err!("REBASE_PARSE_TARGET", "Failed to parse target '{}': {}", onto, e))?
         .peel_to_commit()
-        .map_err(|e| format!("无法获取目标提交: {}", e))?;
+        .map_err(|e| git_err!("REBASE_GET_TARGET_COMMIT", "Failed to get target commit: {}", e))?;
 
     let onto_annotated = repo
         .find_annotated_commit(onto_commit.id())
-        .map_err(|e| format!("无法创建 annotated commit: {}", e))?;
+        .map_err(|e| git_err!("REBASE_ANNOTATED", "Failed to create annotated commit: {}", e))?;
 
     let head = repo
         .head()
-        .map_err(|e| format!("无法获取 HEAD: {}", e))?;
+        .map_err(|e| git_err!("REBASE_GET_HEAD", "Failed to get HEAD: {}", e))?;
 
     let head_commit = head
         .peel_to_commit()
-        .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+        .map_err(|e| git_err!("REBASE_GET_HEAD_COMMIT", "Failed to get HEAD commit: {}", e))?;
 
     let head_annotated = repo
         .find_annotated_commit(head_commit.id())
-        .map_err(|e| format!("无法创建 HEAD annotated commit: {}", e))?;
+        .map_err(|e| git_err!("REBASE_ANNOTATED_HEAD", "Failed to create HEAD annotated commit: {}", e))?;
 
     let mut rebase_opts = git2::RebaseOptions::new();
     rebase_opts.checkout_options(git2::build::CheckoutBuilder::new());
@@ -471,7 +472,7 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
             None,
             Some(&mut rebase_opts),
         )
-        .map_err(|e| format!("无法初始化变基: {}", e))?;
+        .map_err(|e| git_err!("REBASE_INIT", "Failed to initialize rebase: {}", e))?;
 
     let mut commit_count = 0;
     loop {
@@ -483,7 +484,7 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
                     if index.has_conflicts() {
                         // Collect conflicted files for the user
                         let conflict_files: Vec<String> = index.conflicts()
-                            .map_err(|e| format!("无法读取冲突: {}", e))?
+                            .map_err(|e| git_err!("REBASE_READ_CONFLICTS", "Failed to read conflicts: {}", e))?
                             .filter_map(|c| c.ok())
                             .filter_map(|c| {
                                 c.ancestor.as_ref()
@@ -494,9 +495,9 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
                             })
                             .collect();
                         rebase.abort().ok();
-                        let files_str = conflict_files.join("、");
+                        let files_str = conflict_files.join(", ");
                         return Ok(format!(
-                            "变基过程中出现冲突，已中止。已处理 {} 个提交。\n冲突文件：{}\n请解决冲突后，使用终端手动执行 git rebase --continue",
+                            "Rebase encountered conflicts and was aborted. Processed {} commits.\nConflicted files: {}\nResolve conflicts and run `git rebase --continue` in terminal.",
                             commit_count, files_str
                         ));
                     }
@@ -504,7 +505,7 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
             }
             Some(Err(e)) => {
                 rebase.abort().ok();
-                return Err(format!("变基失败: {}", e));
+                return Err(git_err!("REBASE_OP_FAILED", "Rebase operation failed: {}", e));
             }
             None => break,
         }
@@ -512,57 +513,57 @@ pub fn rebase(repo: &Repository, onto: &str) -> Result<String, String> {
 
     rebase
         .finish(None)
-        .map_err(|e| format!("变基完成失败: {}", e))?;
+        .map_err(|e| git_err!("REBASE_FINISH_FAILED", "Failed to finish rebase: {}", e))?;
 
-    Ok(format!("变基完成，共处理 {} 个提交", commit_count))
+    Ok(format!("Rebase completed, processed {} commits", commit_count))
 }
 
 /// Continue a rebase after resolving conflicts (not yet implemented, use terminal).
 #[allow(dead_code)]
 pub fn continue_rebase(_repo: &Repository) -> Result<String, String> {
-    Err("暂不支持图形界面继续变基，请使用终端执行 git rebase --continue".to_string())
+    Err(git_err!("REBASE_CONTINUE_NOT_SUPPORTED", "Resuming rebase via GUI is not supported. Please use `git rebase --continue` in terminal."))
 }
 
 pub fn cherry_pick(repo: &Repository, commit_id: &str) -> Result<String, String> {
     let oid = Oid::from_str(commit_id)
-        .map_err(|e| format!("无效的提交 ID: {}", e))?;
+        .map_err(|e| git_err!("CHERRY_PICK_INVALID_ID", "Invalid commit ID: {}", e))?;
 
     let commit = repo
         .find_commit(oid)
-        .map_err(|e| format!("无法找到提交: {}", e))?;
+        .map_err(|e| git_err!("CHERRY_PICK_COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
 
     let mut opts = git2::CherrypickOptions::new();
     opts.checkout_builder(git2::build::CheckoutBuilder::new());
     repo.cherrypick(&commit, Some(&mut opts))
-        .map_err(|e| format!("Cherry-pick 失败: {}", e))?;
+        .map_err(|e| git_err!("CHERRY_PICK_FAILED", "Cherry-pick failed: {}", e))?;
 
     // Check for conflicts
-    let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let index = repo.index().map_err(|e| git_err!("CHERRY_PICK_INDEX", "Failed to get index: {}", e))?;
     if index.has_conflicts() {
-        return Ok("Cherry-pick 出现冲突，解决后可在终端执行 git cherry-pick --continue 或直接提交".to_string());
+        return Ok("Cherry-pick has conflicts. Resolve them and run `git cherry-pick --continue` or commit directly.".to_string());
     }
     drop(index);
 
     // Create the commit
     let signature = repo
         .signature()
-        .map_err(|e| format!("无法获取签名: {}", e))?;
+        .map_err(|e| git_err!("CHERRY_PICK_SIGNATURE", "Failed to get signature: {}", e))?;
 
     let tree_oid = repo
         .index()
-        .map_err(|e| format!("无法获取索引: {}", e))?
+        .map_err(|e| git_err!("CHERRY_PICK_INDEX", "Failed to get index: {}", e))?
         .write_tree()
-        .map_err(|e| format!("无法写入树: {}", e))?;
+        .map_err(|e| git_err!("CHERRY_PICK_WRITE_TREE", "Failed to write tree: {}", e))?;
 
     let tree = repo
         .find_tree(tree_oid)
-        .map_err(|e| format!("无法找到树: {}", e))?;
+        .map_err(|e| git_err!("CHERRY_PICK_FIND_TREE", "Failed to find tree: {}", e))?;
 
     let head_commit = repo
         .head()
-        .map_err(|e| format!("无法获取 HEAD: {}", e))?
+        .map_err(|e| git_err!("CHERRY_PICK_HEAD", "Failed to get HEAD: {}", e))?
         .peel_to_commit()
-        .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+        .map_err(|e| git_err!("CHERRY_PICK_HEAD_COMMIT", "Failed to get HEAD commit: {}", e))?;
 
     let msg = commit
         .message()
@@ -579,53 +580,53 @@ pub fn cherry_pick(repo: &Repository, commit_id: &str) -> Result<String, String>
         &tree,
         &[&head_commit],
     )
-    .map_err(|e| format!("Cherry-pick 提交失败: {}", e))?;
+    .map_err(|e| git_err!("CHERRY_PICK_COMMIT_FAILED", "Cherry-pick commit failed: {}", e))?;
 
     repo.cleanup_state()
-        .map_err(|e| format!("清理状态失败: {}", e))?;
+        .map_err(|e| git_err!("CHERRY_PICK_CLEANUP", "Failed to cleanup state: {}", e))?;
 
-    Ok("Cherry-pick 成功".to_string())
+    Ok("Cherry-pick successful".to_string())
 }
 
 /// Revert a commit by creating a new commit that undoes its changes.
 pub fn revert_commit(repo: &Repository, commit_id: &str) -> Result<String, String> {
-    let oid = Oid::from_str(commit_id).map_err(|e| format!("无效的提交 ID: {}", e))?;
+    let oid = Oid::from_str(commit_id).map_err(|e| git_err!("REVERT_INVALID_ID", "Invalid commit ID: {}", e))?;
     let commit = repo
         .find_commit(oid)
-        .map_err(|e| format!("无法找到提交: {}", e))?;
+        .map_err(|e| git_err!("REVERT_COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
 
     let mut opts = git2::RevertOptions::new();
     opts.checkout_builder(git2::build::CheckoutBuilder::new());
     repo.revert(&commit, Some(&mut opts))
-        .map_err(|e| format!("Revert 失败: {}", e))?;
+        .map_err(|e| git_err!("REVERT_FAILED", "Revert failed: {}", e))?;
 
     // Check for conflicts
-    let index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let index = repo.index().map_err(|e| git_err!("REVERT_INDEX", "Failed to get index: {}", e))?;
     if index.has_conflicts() {
-        return Ok("Revert 出现冲突，解决后可在终端执行 git revert --continue 或直接提交".to_string());
+        return Ok("Revert has conflicts. Resolve them and run `git revert --continue` or commit directly.".to_string());
     }
     drop(index);
 
     // Create the revert commit
     let signature = repo
         .signature()
-        .map_err(|e| format!("无法获取签名: {}", e))?;
+        .map_err(|e| git_err!("REVERT_SIGNATURE", "Failed to get signature: {}", e))?;
 
     let tree_oid = repo
         .index()
-        .map_err(|e| format!("无法获取索引: {}", e))?
+        .map_err(|e| git_err!("REVERT_INDEX", "Failed to get index: {}", e))?
         .write_tree()
-        .map_err(|e| format!("无法写入树: {}", e))?;
+        .map_err(|e| git_err!("REVERT_WRITE_TREE", "Failed to write tree: {}", e))?;
 
     let tree = repo
         .find_tree(tree_oid)
-        .map_err(|e| format!("无法找到树: {}", e))?;
+        .map_err(|e| git_err!("REVERT_FIND_TREE", "Failed to find tree: {}", e))?;
 
     let head_commit = repo
         .head()
-        .map_err(|e| format!("无法获取 HEAD: {}", e))?
+        .map_err(|e| git_err!("REVERT_HEAD", "Failed to get HEAD: {}", e))?
         .peel_to_commit()
-        .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+        .map_err(|e| git_err!("REVERT_HEAD_COMMIT", "Failed to get HEAD commit: {}", e))?;
 
     let msg = commit
         .message()
@@ -644,30 +645,30 @@ pub fn revert_commit(repo: &Repository, commit_id: &str) -> Result<String, Strin
         &tree,
         &[&head_commit],
     )
-    .map_err(|e| format!("Revert 提交失败: {}", e))?;
+    .map_err(|e| git_err!("REVERT_COMMIT_FAILED", "Revert commit failed: {}", e))?;
 
     repo.cleanup_state()
-        .map_err(|e| format!("清理状态失败: {}", e))?;
+        .map_err(|e| git_err!("REVERT_CLEANUP", "Failed to cleanup state: {}", e))?;
 
-    Ok(format!("成功 revert 提交 {}", msg))
+    Ok(format!("Successfully reverted commit {}", msg))
 }
 
 /// Amend the last commit (replace HEAD with a new commit using the current index).
 pub fn amend_commit(repo: &Repository, message: &str) -> Result<CommitInfo, String> {
-    let head = repo.head().map_err(|e| format!("无法获取 HEAD: {}", e))?;
-    let head_commit = head.peel_to_commit().map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+    let head = repo.head().map_err(|e| git_err!("AMEND_HEAD", "Failed to get HEAD: {}", e))?;
+    let head_commit = head.peel_to_commit().map_err(|e| git_err!("AMEND_HEAD_COMMIT", "Failed to get HEAD commit: {}", e))?;
 
     let signature = repo
         .signature()
-        .map_err(|e| format!("无法获取签名: {}", e))?;
+        .map_err(|e| git_err!("AMEND_SIGNATURE", "Failed to get signature: {}", e))?;
 
-    let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+    let mut index = repo.index().map_err(|e| git_err!("AMEND_INDEX", "Failed to get index: {}", e))?;
     let tree_oid = index
         .write_tree()
-        .map_err(|e| format!("无法写入树: {}", e))?;
+        .map_err(|e| git_err!("AMEND_WRITE_TREE", "Failed to write tree: {}", e))?;
     let tree = repo
         .find_tree(tree_oid)
-        .map_err(|e| format!("无法找到树: {}", e))?;
+        .map_err(|e| git_err!("AMEND_FIND_TREE", "Failed to find tree: {}", e))?;
 
     let new_oid = head_commit
         .amend(
@@ -678,11 +679,11 @@ pub fn amend_commit(repo: &Repository, message: &str) -> Result<CommitInfo, Stri
             Some(message),
             Some(&tree),
         )
-        .map_err(|e| format!("修改提交失败: {}", e))?;
+        .map_err(|e| git_err!("AMEND_COMMIT_FAILED", "Failed to amend commit: {}", e))?;
 
     let new_commit = repo
         .find_commit(new_oid)
-        .map_err(|e| format!("无法找到新提交: {}", e))?;
+        .map_err(|e| git_err!("AMEND_FIND_NEW", "Failed to find new commit: {}", e))?;
 
     commit_to_info(&new_commit)
 }
@@ -694,25 +695,25 @@ pub fn amend_commit(repo: &Repository, message: &str) -> Result<CommitInfo, Stri
 /// If you modify files after undo, the original tree is lost from the
 /// index (but still available in git reflog).
 pub fn undo(repo: &Repository) -> Result<String, String> {
-    let head = repo.head().map_err(|e| format!("无法获取 HEAD: {}", e))?;
-    let head_commit = head.peel_to_commit().map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+    let head = repo.head().map_err(|e| git_err!("UNDO_HEAD", "Failed to get HEAD: {}", e))?;
+    let head_commit = head.peel_to_commit().map_err(|e| git_err!("UNDO_HEAD_COMMIT", "Failed to get HEAD commit: {}", e))?;
 
     // Check there is at least one parent to reset to
     if head_commit.parents().len() == 0 {
-        return Err("没有可撤销的提交（已经是第一个提交）".to_string());
+        return Err(git_err!("UNDO_NO_PARENT", "Nothing to undo — this is the first commit"));
     }
 
     let msg = head_commit.message().unwrap_or("").to_string();
 
     // Get the parent's OID
-    let parent = head_commit.parent(0).map_err(|e| format!("无法获取父提交: {}", e))?;
+    let parent = head_commit.parent(0).map_err(|e| git_err!("UNDO_PARENT", "Failed to get parent commit: {}", e))?;
     let parent_oid = parent.id();
 
     // Soft reset to the parent
     let mut checkout = git2::build::CheckoutBuilder::new();
     // --soft: only move HEAD, don't touch index/worktree
-    repo.reset(&repo.find_object(parent_oid, None).map_err(|e| format!("无法解析父提交: {}", e))?, git2::ResetType::Soft, Some(&mut checkout))
-        .map_err(|e| format!("重置失败: {}", e))?;
+    repo.reset(&repo.find_object(parent_oid, None).map_err(|e| git_err!("UNDO_PARSE_PARENT", "Failed to resolve parent commit: {}", e))?, git2::ResetType::Soft, Some(&mut checkout))
+        .map_err(|e| git_err!("UNDO_RESET_FAILED", "Reset failed: {}", e))?;
 
     Ok(msg)
 }
@@ -723,25 +724,25 @@ pub fn undo(repo: &Repository) -> Result<String, String> {
 /// commit using the **original tree** (not the current index), ensuring the
 /// restored commit is identical in content to the one that was undone.
 pub fn redo(repo: &Repository) -> Result<String, String> {
-    let reflog = repo.reflog("HEAD").map_err(|e| format!("无法读取 reflog: {}", e))?;
+    let reflog = repo.reflog("HEAD").map_err(|e| git_err!("REDO_REFLOG", "Failed to read reflog: {}", e))?;
 
     if reflog.len() < 2 {
-        return Err("没有可重做的操作".to_string());
+        return Err(git_err!("REDO_NOTHING", "Nothing to redo"));
     }
 
     // reflog.get(1) contains the entry for the state BEFORE the undo.
     // id_new() gives the OID of the commit at that point (the one we want to restore).
-    let prev_entry = reflog.get(1).ok_or("没有可重做的操作".to_string())?;
+    let prev_entry = reflog.get(1).ok_or_else(|| git_err!("REDO_NO_ENTRY", "Nothing to redo"))?;
     let prev_oid = prev_entry.id_new();
     let prev_msg = prev_entry.message().unwrap_or("redo");
 
     // Get the original commit to restore its tree
     let prev_commit = repo.find_commit(prev_oid)
-        .map_err(|_| "无法找到之前的提交，可能已被垃圾回收".to_string())?;
+        .map_err(|_| git_err!("REDO_COMMIT_NOT_FOUND", "Previous commit not found, may have been garbage collected"))?;
 
     // Use the original tree from the undone commit
     let original_tree = prev_commit.tree()
-        .map_err(|e| format!("无法获取原始提交树: {}", e))?;
+        .map_err(|e| git_err!("REDO_TREE", "Failed to get original commit tree: {}", e))?;
 
     // Extract commit message from reflog
     let commit_msg = if let Some(msg) = prev_msg.strip_prefix("commit: ") {
@@ -753,10 +754,10 @@ pub fn redo(repo: &Repository) -> Result<String, String> {
         prev_commit.message().unwrap_or("redo").to_string()
     };
 
-    let signature = repo.signature().map_err(|e| format!("无法获取签名: {}", e))?;
+    let signature = repo.signature().map_err(|e| git_err!("REDO_SIGNATURE", "Failed to get signature: {}", e))?;
 
-    let head = repo.head().map_err(|e| format!("无法获取 HEAD: {}", e))?;
-    let head_commit = head.peel_to_commit().map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+    let head = repo.head().map_err(|e| git_err!("REDO_HEAD", "Failed to get HEAD: {}", e))?;
+    let head_commit = head.peel_to_commit().map_err(|e| git_err!("REDO_HEAD_COMMIT", "Failed to get HEAD commit: {}", e))?;
 
     // Commit using the original tree — this ensures the restored commit
     // has the exact same content as the one that was undone
@@ -768,16 +769,51 @@ pub fn redo(repo: &Repository) -> Result<String, String> {
         &original_tree,
         &[&head_commit],
     )
-    .map_err(|e| format!("重做提交失败: {}", e))?;
+    .map_err(|e| git_err!("REDO_COMMIT_FAILED", "Redo commit failed: {}", e))?;
 
     // Reset index to match the restored commit (so the working state reflects it)
     let obj = repo.find_object(new_oid, None)
-        .map_err(|e| format!("无法找到重做提交: {}", e))?;
+        .map_err(|e| git_err!("REDO_FIND_OBJECT", "Failed to find redo commit: {}", e))?;
     let mut checkout = git2::build::CheckoutBuilder::new();
     repo.reset(&obj, git2::ResetType::Mixed, Some(&mut checkout))
-        .map_err(|e| format!("重置索引失败: {}", e))?;
+        .map_err(|e| git_err!("REDO_RESET_INDEX", "Failed to reset index: {}", e))?;
 
     Ok(commit_msg)
+}
+
+/// Reset the current branch to a specified commit (mixed reset).
+///
+/// Git operation: `git reset --mixed <commit_id>`
+/// - HEAD is moved to the target commit
+/// - Index (staging area) is reset to match the target commit
+/// - Working tree files are preserved (safe)
+///
+/// Safety: refuses to reset to the commit that is already HEAD.
+pub fn reset_to_commit(repo: &Repository, commit_id: &str) -> Result<String, String> {
+    let oid = Oid::from_str(commit_id).map_err(|e| git_err!("RESET_INVALID_ID", "Invalid commit ID: {}", e))?;
+    let commit = repo
+        .find_commit(oid)
+        .map_err(|e| git_err!("RESET_COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
+
+    // Safety check: refuse to reset to HEAD (no-op)
+    let head = repo.head().map_err(|e| git_err!("RESET_HEAD", "Failed to get HEAD: {}", e))?;
+    if let Some(head_oid) = head.target() {
+        if head_oid == oid {
+            return Err(git_err!("RESET_ALREADY_HEAD", "Already at this commit, nothing to reset"));
+        }
+    }
+
+    let short_id = &commit_id[..8.min(commit_id.len())];
+
+    // Mixed reset: move HEAD + reset index, keep working tree
+    repo.reset(
+        commit.as_object(),
+        git2::ResetType::Mixed,
+        None,
+    )
+    .map_err(|e| git_err!("RESET_FAILED", "Reset failed: {}", e))?;
+
+    Ok(format!("Reset to commit {}", short_id))
 }
 
 /// List commits that will be affected by a rebase from current HEAD onto `onto_branch`.
@@ -788,44 +824,44 @@ pub fn list_rebase_commits(
 ) -> Result<Vec<RebaseEntry>, String> {
     let onto_obj = repo
         .revparse_single(onto_branch)
-        .map_err(|e| format!("无法解析目标分支 '{}': {}", onto_branch, e))?;
+        .map_err(|e| git_err!("REBASE_PARSE_TARGET", "Failed to parse target '{}': {}", onto_branch, e))?;
     let onto_commit = onto_obj
         .peel_to_commit()
-        .map_err(|e| format!("无法获取目标分支提交: {}", e))?;
+        .map_err(|e| git_err!("REBASE_GET_TARGET_COMMIT", "Failed to get target commit: {}", e))?;
 
     let head = repo
         .head()
-        .map_err(|e| format!("无法获取 HEAD: {}", e))?;
+        .map_err(|e| git_err!("REBASE_GET_HEAD", "Failed to get HEAD: {}", e))?;
     let head_commit = head
         .peel_to_commit()
-        .map_err(|e| format!("无法获取 HEAD 提交: {}", e))?;
+        .map_err(|e| git_err!("REBASE_GET_HEAD_COMMIT", "Failed to get HEAD commit: {}", e))?;
 
     // Find merge base
     let merge_base_oid = repo
         .merge_base(onto_commit.id(), head_commit.id())
-        .map_err(|e| format!("无法计算合并基础: {}", e))?;
+        .map_err(|e| git_err!("REBASE_MERGE_BASE", "Failed to calculate merge base: {}", e))?;
 
     // Walk from HEAD to merge_base (exclusive)
     let mut revwalk = repo
         .revwalk()
-        .map_err(|e| format!("无法创建 revwalk: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_REVWALK_FAILED", "Failed to create revwalk: {}", e))?;
     revwalk
         .push(head_commit.id())
-        .map_err(|e| format!("无法推送 HEAD: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_PUSH_HEAD", "Failed to push HEAD: {}", e))?;
     revwalk.set_sorting(Sort::TOPOLOGICAL)
-        .map_err(|e| format!("无法设置排序: {}", e))?;
+        .map_err(|e| git_err!("COMMIT_SORT_FAILED", "Failed to set sort order: {}", e))?;
 
     // Collect commits until we hit the merge base
     let mut entries: Vec<RebaseEntry> = Vec::new();
     for oid_result in revwalk {
-        let oid = oid_result.map_err(|e| format!("遍历提交失败: {}", e))?;
+        let oid = oid_result.map_err(|e| git_err!("COMMIT_WALK_FAILED", "Failed to walk commits: {}", e))?;
         if oid == merge_base_oid {
             break;
         }
 
         let commit = repo
             .find_commit(oid)
-            .map_err(|e| format!("无法找到提交: {}", e))?;
+            .map_err(|e| git_err!("COMMIT_FIND_IN_HISTORY", "Failed to find commit: {}", e))?;
 
         let id_str = oid.to_string();
         let short_id = id_str[..8.min(id_str.len())].to_string();
@@ -853,7 +889,7 @@ pub fn list_rebase_commits(
     entries.reverse();
 
     if entries.is_empty() {
-        return Err("当前分支已基于目标分支的最新提交，无需变基".to_string());
+        return Err(git_err!("REBASE_NOTHING_TO_DO", "Current branch is already up to date with target"));
     }
 
     Ok(entries)
@@ -869,14 +905,14 @@ pub fn perform_interactive_rebase(
 ) -> Result<String, String> {
     let onto_obj = repo
         .revparse_single(onto_branch)
-        .map_err(|e| format!("无法解析目标分支 '{}': {}", onto_branch, e))?;
+        .map_err(|e| git_err!("REBASE_PARSE_TARGET", "Failed to parse target '{}': {}", onto_branch, e))?;
     let onto_commit = onto_obj
         .peel_to_commit()
-        .map_err(|e| format!("无法获取目标分支提交: {}", e))?;
+        .map_err(|e| git_err!("REBASE_GET_TARGET_COMMIT", "Failed to get target commit: {}", e))?;
 
     let signature = repo
         .signature()
-        .map_err(|e| format!("无法获取签名: {}", e))?;
+        .map_err(|e| git_err!("AMEND_SIGNATURE", "Failed to get signature: {}", e))?;
 
     // Soft reset HEAD to the onto branch (this moves HEAD, keeps index + worktree)
     let mut checkout = git2::build::CheckoutBuilder::new();
@@ -885,7 +921,7 @@ pub fn perform_interactive_rebase(
         git2::ResetType::Soft,
         Some(&mut checkout),
     )
-    .map_err(|e| format!("重置到目标分支失败: {}", e))?;
+    .map_err(|e| git_err!("REBASE_RESET_TARGET", "Failed to reset to target branch: {}", e))?;
 
     let mut last_commit_oid: Option<git2::Oid> = None;
     let mut squashed_tree: Option<git2::Tree> = None;
@@ -896,10 +932,10 @@ pub fn perform_interactive_rebase(
             "drop" => continue,
             "pick" | "squash" | "fixup" | "reword" => {
                 let commit_oid = git2::Oid::from_str(&entry.commit_id)
-                    .map_err(|e| format!("无效的提交 ID: {}", e))?;
+                    .map_err(|e| git_err!("COMMIT_INVALID_ID", "Invalid commit ID: {}", e))?;
                 let commit = repo
                     .find_commit(commit_oid)
-                    .map_err(|e| format!("无法找到提交: {}", e))?;
+                    .map_err(|e| git_err!("COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
 
                 let is_squash = entry.action == "squash" || entry.action == "fixup";
 
@@ -907,27 +943,28 @@ pub fn perform_interactive_rebase(
                 let mut cp_opts = git2::CherrypickOptions::new();
                 cp_opts.checkout_builder(git2::build::CheckoutBuilder::new());
                 repo.cherrypick(&commit, Some(&mut cp_opts))
-                    .map_err(|e| format!("Cherry-pick 提交 {} 失败: {}", entry.short_id, e))?;
+                    .map_err(|e| git_err!("REBASE_CHERRY_PICK_FAILED", "Cherry-pick commit {} failed: {}", entry.short_id, e))?;
 
                 // Check for conflicts
-                let mut index = repo.index().map_err(|e| format!("无法获取索引: {}", e))?;
+                let mut index = repo.index().map_err(|e| git_err!("REBASE_INDEX", "Failed to get index: {}", e))?;
                 if index.has_conflicts() {
                     repo.cleanup_state().ok();
                     repo.reset(onto_commit.as_object(), git2::ResetType::Hard, None).ok();
-                    return Err(format!(
-                        "变基过程中出现冲突 (提交 {})，已中止。工作区已重置到目标分支。",
+                    return Err(git_err!(
+                        "REBASE_CONFLICT",
+                        "Rebase encountered conflicts (commit {}), aborted. Working tree reset to target branch.",
                         entry.short_id
                     ));
                 }
 
                 let tree_oid = index
                     .write_tree()
-                    .map_err(|e| format!("无法写入树: {}", e))?;
+                    .map_err(|e| git_err!("REBASE_WRITE_TREE", "Failed to write tree: {}", e))?;
                 drop(index);
 
                 let tree = repo
                     .find_tree(tree_oid)
-                    .map_err(|e| format!("无法找到树: {}", e))?;
+                    .map_err(|e| git_err!("REBASE_FIND_TREE", "Failed to find tree: {}", e))?;
 
                 if is_squash {
                     // For squash/fixup: store the tree and keep the last commit
@@ -948,7 +985,7 @@ pub fn perform_interactive_rebase(
 
                 let head_commit = repo
                     .head()
-                    .map_err(|e| format!("无法获取 HEAD: {}", e))?
+                    .map_err(|e| git_err!("REBASE_HEAD", "Failed to get HEAD: {}", e))?
                     .peel_to_commit()
                     .ok();
 
@@ -956,12 +993,12 @@ pub fn perform_interactive_rebase(
 
                 let new_oid = repo
                     .commit(Some("HEAD"), &signature, &signature, msg, &tree, parents.as_slice())
-                    .map_err(|e| format!("创建提交失败: {}", e))?;
+                    .map_err(|e| git_err!("REBASE_COMMIT_FAILED", "Failed to create commit: {}", e))?;
 
                 last_commit_oid = Some(new_oid);
                 total_applied += 1;
             }
-            _ => return Err(format!("未知的操作: {}", entry.action)),
+            _ => return Err(git_err!("REBASE_UNKNOWN_ACTION", "Unknown action: {}", entry.action)),
         }
     }
 
@@ -971,7 +1008,7 @@ pub fn perform_interactive_rebase(
             // Amend the last commit with the combined tree
             let prev_commit = repo
                 .find_commit(prev_oid)
-                .map_err(|e| format!("无法找到前一个提交: {}", e))?;
+                .map_err(|e| git_err!("REBASE_FIND_PREVIOUS", "Failed to find previous commit: {}", e))?;
             let parent_refs: Vec<git2::Commit> = prev_commit.parents().collect();
             let parents: Vec<&git2::Commit> = parent_refs.iter().collect();
 
@@ -1005,7 +1042,7 @@ pub fn perform_interactive_rebase(
                 &tree,
                 parents.as_slice(),
             )
-            .map_err(|e| format!("创建组合提交失败: {}", e))?;
+            .map_err(|e| git_err!("REBASE_SQUASH_COMMIT", "Failed to create combined commit: {}", e))?;
 
             total_applied += 1;
         } else {
@@ -1018,17 +1055,17 @@ pub fn perform_interactive_rebase(
 
             let head_commit = repo
                 .head()
-                .map_err(|e| format!("无法获取 HEAD: {}", e))?
+                .map_err(|e| git_err!("REBASE_HEAD", "Failed to get HEAD: {}", e))?
                 .peel_to_commit()
                 .ok();
             let parents: Vec<&git2::Commit> = head_commit.iter().collect();
 
             repo.commit(Some("HEAD"), &signature, &signature, &msg, &tree, parents.as_slice())
-                .map_err(|e| format!("创建提交失败: {}", e))?;
+                .map_err(|e| git_err!("REBASE_COMMIT_FAILED", "Failed to create commit: {}", e))?;
 
             total_applied += 1;
         }
     }
 
-    Ok(format!("变基完成，共处理 {} 个提交", total_applied))
+    Ok(format!("Rebase completed, processed {} commits", total_applied))
 }

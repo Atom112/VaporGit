@@ -20,7 +20,10 @@ export default function ToastContainer() {
               if (!toast.exiting) markExiting(toast.id);
             }}
           >
-            {toast.message}
+            <div>{toast.message}</div>
+            {toast.type === 'error' && toast.detail && (
+              <div class="text-xs opacity-60 mt-1 leading-relaxed break-all">{toast.detail}</div>
+            )}
           </div>
         )}
       </For>

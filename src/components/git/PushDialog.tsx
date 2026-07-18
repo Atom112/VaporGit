@@ -3,7 +3,7 @@ import { getBranchList, pushWithAutoCreate } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { settingsStore } from '../../stores/settingsStore';
 import { tt, ttf } from '../../i18n';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeErrorDetail } from '../../lib/gitErrorDesc';
 import type { BranchInfo } from '../../lib/types';
 
 interface Props {
@@ -38,7 +38,8 @@ const PushDialog: Component<Props> = (props) => {
         }
       })
       .catch((e) => {
-        addToast(`加载分支列表失败: ${describeError(e)}`, 'error');
+        const { message, detail } = describeErrorDetail(e);
+        addToast(`加载分支列表失败: ${message}`, detail, 'error');
       })
       .finally(() => setBranchesLoading(false));
   });
@@ -57,9 +58,10 @@ const PushDialog: Component<Props> = (props) => {
       props.onRefresh();
       handleClose();
     } catch (e) {
-      const msg = ttf('repo.pushFailed', describeError(e));
+      const { message, detail } = describeErrorDetail(e);
+      const msg = ttf('repo.pushFailed', message);
       setResult(msg);
-      addToast(msg, 'error');
+      addToast(msg, detail, 'error');
     } finally {
       setLoading(false);
     }

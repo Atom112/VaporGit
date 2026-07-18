@@ -1,5 +1,6 @@
 use std::{io::Read, path::Path};
 use git2::{DiffOptions, Repository, Oid};
+use crate::git_err;
 use crate::models::diff::{DiffHunk, DiffLine, DiffLineKind, DiffResult};
 use base64::Engine;
 
@@ -32,7 +33,7 @@ pub fn get_file_diff(
 
     let diff = repo
         .diff_tree_to_tree(tree_from.as_ref(), tree_to.as_ref(), Some(&mut opts))
-        .map_err(|e| format!("无法生成 diff: {}", e))?;
+        .map_err(|e| git_err!("DIFF_FAILED", "Failed to generate diff: {}", e))?;
 
     let mut hunks: Vec<DiffHunk> = Vec::new();
     let mut total_size: usize = 0;
@@ -84,7 +85,7 @@ pub fn get_file_diff(
             true
         }),
     )
-    .map_err(|e| format!("解析 diff 失败: {}", e))?;
+    .map_err(|e| git_err!("DIFF_PARSE_FAILED", "Failed to parse diff: {}", e))?;
 
     Ok(DiffResult {
         file_path: file_path.to_string(),
@@ -113,21 +114,21 @@ pub fn get_file_content(
 ) -> Result<String, String> {
     match commit_id {
         Some(id) => {
-            let oid = Oid::from_str(id).map_err(|e| format!("无效的提交 ID: {}", e))?;
+            let oid = Oid::from_str(id).map_err(|e| git_err!("DIFF_INVALID_COMMIT_ID", "Invalid commit ID: {}", e))?;
             let commit = repo
                 .find_commit(oid)
-                .map_err(|e| format!("无法找到提交: {}", e))?;
+                .map_err(|e| git_err!("DIFF_COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
             let tree = commit
                 .tree()
-                .map_err(|e| format!("无法获取树: {}", e))?;
+                .map_err(|e| git_err!("DIFF_TREE_FAILED", "Failed to get tree: {}", e))?;
             let entry = tree
                 .get_path(Path::new(file_path))
-                .map_err(|e| format!("无法在提交中找到文件: {}", e))?;
+                .map_err(|e| git_err!("DIFF_FILE_NOT_FOUND_IN_COMMIT", "File not found in commit: {}", e))?;
             let blob = entry
                 .to_object(repo)
-                .map_err(|e| format!("无法获取文件对象: {}", e))?
+                .map_err(|e| git_err!("DIFF_OBJECT_FAILED", "Failed to get file object: {}", e))?
                 .peel_to_blob()
-                .map_err(|e| format!("无法读取文件内容: {}", e))?;
+                .map_err(|e| git_err!("DIFF_READ_CONTENT_FAILED", "Failed to read file content: {}", e))?;
             let content = blob.content();
             if content.len() > FULL_FILE_HARD_LIMIT {
                 return Ok(FULL_FILE_TOO_LARGE_MESSAGE.to_string());
@@ -137,21 +138,21 @@ pub fn get_file_content(
         None => {
             let workdir = repo
                 .workdir()
-                .ok_or_else(|| "无法获取工作目录".to_string())?;
+                .ok_or_else(|| git_err!("DIFF_NO_WORKDIR", "Failed to get working directory"))?;
             let full_path = workdir.join(file_path);
             let metadata = std::fs::metadata(&full_path)
-                .map_err(|e| format!("无法读取文件信息: {}", e))?;
+                .map_err(|e| git_err!("DIFF_METADATA_FAILED", "Failed to read file metadata: {}", e))?;
             let total_len = metadata.len() as usize;
             if total_len > FULL_FILE_HARD_LIMIT {
                 return Ok(FULL_FILE_TOO_LARGE_MESSAGE.to_string());
             }
             let mut file = std::fs::File::open(&full_path)
-                .map_err(|e| format!("无法读取文件: {}", e))?;
+                .map_err(|e| git_err!("DIFF_READ_FAILED", "Failed to read file: {}", e))?;
             let mut buf = Vec::new();
             file.by_ref()
                 .take(FULL_FILE_LIMIT as u64)
                 .read_to_end(&mut buf)
-                .map_err(|e| format!("无法读取文件: {}", e))?;
+                .map_err(|e| git_err!("DIFF_READ_FAILED", "Failed to read file: {}", e))?;
             Ok(format_full_file_content(&buf, total_len))
         }
     }
@@ -188,32 +189,32 @@ pub fn get_file_base64(
 ) -> Result<Option<String>, String> {
     let content: Vec<u8> = match commit_id {
         Some(id) => {
-            let oid = Oid::from_str(id).map_err(|e| format!("无效的提交 ID: {}", e))?;
+            let oid = Oid::from_str(id).map_err(|e| git_err!("DIFF_INVALID_COMMIT_ID", "Invalid commit ID: {}", e))?;
             let commit = repo
                 .find_commit(oid)
-                .map_err(|e| format!("无法找到提交: {}", e))?;
+                .map_err(|e| git_err!("DIFF_COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
             let tree = commit
                 .tree()
-                .map_err(|e| format!("无法获取树: {}", e))?;
+                .map_err(|e| git_err!("DIFF_TREE_FAILED", "Failed to get tree: {}", e))?;
             let entry = tree
                 .get_path(Path::new(file_path))
-                .map_err(|e| format!("无法在提交中找到文件: {}", e))?;
+                .map_err(|e| git_err!("DIFF_FILE_NOT_FOUND_IN_COMMIT", "File not found in commit: {}", e))?;
             let blob = entry
                 .to_object(repo)
-                .map_err(|e| format!("无法获取文件对象: {}", e))?
+                .map_err(|e| git_err!("DIFF_OBJECT_FAILED", "Failed to get file object: {}", e))?
                 .peel_to_blob()
-                .map_err(|e| format!("无法读取文件内容: {}", e))?;
+                .map_err(|e| git_err!("DIFF_READ_CONTENT_FAILED", "Failed to read file content: {}", e))?;
             blob.content().to_vec()
         }
         None => {
             let workdir = repo
                 .workdir()
-                .ok_or_else(|| "无法获取工作目录".to_string())?;
+                .ok_or_else(|| git_err!("DIFF_NO_WORKDIR", "Failed to get working directory"))?;
             let full_path = workdir.join(file_path);
             if !full_path.exists() {
                 return Ok(None);
             }
-            std::fs::read(&full_path).map_err(|e| format!("无法读取文件: {}", e))?
+            std::fs::read(&full_path).map_err(|e| git_err!("DIFF_READ_FAILED", "Failed to read file: {}", e))?
         }
     };
 
@@ -240,7 +241,7 @@ pub fn get_file_base64(
 /// Check if a file in the working directory is tracked by git-lfs by checking
 /// if its content matches the LFS pointer format.
 pub fn check_lfs(repo: &Repository, file_path: &str) -> Result<bool, String> {
-    let workdir = repo.workdir().ok_or_else(|| "无法获取工作目录".to_string())?;
+    let workdir = repo.workdir().ok_or_else(|| git_err!("DIFF_NO_WORKDIR", "Failed to get working directory"))?;
     let full_path = workdir.join(file_path);
     if !full_path.exists() {
         return Ok(false);
@@ -257,13 +258,13 @@ fn resolve_tree<'a>(
     match commit_id {
         Some(id) => {
             let oid =
-                git2::Oid::from_str(id).map_err(|e| format!("无效的提交 ID: {}", e))?;
+                git2::Oid::from_str(id).map_err(|e| git_err!("DIFF_INVALID_COMMIT_ID", "Invalid commit ID: {}", e))?;
             let commit = repo
                 .find_commit(oid)
-                .map_err(|e| format!("无法找到提交: {}", e))?;
+                .map_err(|e| git_err!("DIFF_COMMIT_NOT_FOUND", "Commit not found: {}", e))?;
             let tree = commit
                 .tree()
-                .map_err(|e| format!("无法获取树: {}", e))?;
+                .map_err(|e| git_err!("DIFF_TREE_FAILED", "Failed to get tree: {}", e))?;
             Ok(Some(tree))
         }
         None => Ok(None),

@@ -5,6 +5,7 @@ use reqwest::Client;
 use sha2::{Digest, Sha256};
 use tokio::sync::oneshot;
 use url::Url;
+use crate::git_err;
 
 pub struct ProviderConfig {
     pub provider_name: &'static str,
@@ -119,7 +120,7 @@ pub async fn start_auth_code_flow(
                         .query_pairs()
                         .find(|(k, _)| k == "error_description")
                         .map(|(_, v)| v.to_string())
-                        .unwrap_or_else(|| "授权被拒绝".to_string());
+                        .unwrap_or_else(|| git_err!("OAUTH_ACCESS_DENIED", "Authorization was denied"));
                     let _ = tx.send(Err(msg));
                 }
             }
@@ -127,7 +128,7 @@ pub async fn start_auth_code_flow(
             false
         })
         .build()
-        .map_err(|e| format!("无法打开授权窗口: {e}"))?;
+        .map_err(|e| git_err!("OAUTH_OPEN_WINDOW_FAILED", "Failed to open authorization window: {e}"))?;
 
     let code = match rx.await {
         Ok(Ok(code)) => code,
@@ -137,7 +138,7 @@ pub async fn start_auth_code_flow(
         }
         Err(_) => {
             let _ = webview.close();
-            return Err("用户取消了授权".to_string());
+            return Err(git_err!("OAUTH_USER_CANCELLED", "User cancelled authorization"));
         }
     };
 
@@ -215,14 +216,14 @@ pub async fn fetch_current_user(
         .map_err(|e| format!("Network error fetching user: {e}"))?;
 
     let status = resp.status();
-    let text = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    let text = resp.text().await.map_err(|e| git_err!("OAUTH_READ_RESPONSE_FAILED", "Failed to read response: {}", e))?;
 
     if !status.is_success() {
         return Err(format!("HTTP {}: {}", status, text));
     }
 
     let mut json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("返回数据格式错误: {}", e))?;
+        serde_json::from_str(&text).map_err(|e| git_err!("OAUTH_PARSE_RESPONSE_FAILED", "Failed to parse response: {}", e))?;
 
     crate::oauth::response::keys_snake_to_camel(&mut json);
 

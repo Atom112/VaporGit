@@ -3,7 +3,7 @@ import type { DiffHunk, DiffResult } from '../../lib/types';
 import { getFileContent, getFileBase64, checkLfs, stageHunk, stageLine } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt } from '../../i18n';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeError, describeErrorDetail } from '../../lib/gitErrorDesc';
 import 'highlight.js/styles/github-dark.css';
 import { detectLanguage, highlightLine, highlightLines, highlightFull } from '../../lib/syntax';
 import { settingsStore } from '../../stores/settingsStore';
@@ -325,7 +325,8 @@ const UnifiedView: Component<StageableViewProps> = (props) => {
       addToast(tt('repo.hunkStaged'), 'success');
       props.onRefreshStatus?.();
     } catch (e) {
-      addToast(`暂存 hunk 失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`暂存 hunk 失败: ${message}`, 'error', detail);
     } finally {
       setStagingHunk(null);
     }
@@ -339,7 +340,8 @@ const UnifiedView: Component<StageableViewProps> = (props) => {
       addToast(tt('repo.lineStaged'), 'success');
       props.onRefreshStatus?.();
     } catch (e) {
-      addToast(`暂存行失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`暂存行失败: ${message}`, 'error', detail);
     } finally {
       setStagingLine(null);
     }
@@ -525,7 +527,8 @@ const SplitView: Component<StageableViewProps> = (props) => {
       addToast(tt('repo.hunkStaged'), 'success');
       props.onRefreshStatus?.();
     } catch (e) {
-      addToast(`暂存 hunk 失败: ${describeError(e)}`, 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(`暂存 hunk 失败: ${message}`, 'error', detail);
     } finally {
       setStagingHunk(null);
     }

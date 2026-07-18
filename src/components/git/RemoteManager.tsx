@@ -2,7 +2,7 @@ import { Component, createSignal, createEffect, Show, For } from 'solid-js';
 import { getRemotes, addRemote, setRemoteUrl, deleteRemote } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt, ttf } from '../../i18n';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeError, describeErrorDetail } from '../../lib/gitErrorDesc';
 import type { RemoteInfo } from '../../lib/types';
 
 interface Props {
@@ -69,7 +69,8 @@ const RemoteManager: Component<Props> = (props) => {
       await loadRemotes();
       props.onRefresh?.();
     } catch (e) {
-      addToast(ttf('repo.remoteActionFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.remoteActionFailed', message), 'error', detail);
       setError(describeError(e));
     } finally {
       setAddLoading(false);
@@ -92,7 +93,8 @@ const RemoteManager: Component<Props> = (props) => {
       setEditingRemote(null);
       await loadRemotes();
     } catch (e) {
-      addToast(ttf('repo.remoteActionFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.remoteActionFailed', message), 'error', detail);
       setError(describeError(e));
     } finally {
       setEditLoading(false);
@@ -109,7 +111,8 @@ const RemoteManager: Component<Props> = (props) => {
       await loadRemotes();
       props.onRefresh?.();
     } catch (e) {
-      addToast(ttf('repo.remoteActionFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.remoteActionFailed', message), 'error', detail);
       setError(describeError(e));
     } finally {
       setDeleteLoading(false);

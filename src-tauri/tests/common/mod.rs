@@ -34,6 +34,8 @@ pub fn init_repo() -> TestRepo {
         config
             .set_str("user.email", "vaporgit-test@example.com")
             .expect("user.email");
+        // Disable autocrlf to prevent CRLF/LF conversion during tests
+        config.set_str("core.autocrlf", "false").expect("core.autocrlf");
     }
     write_and_commit(&repo, temp.path(), "README.md", "hello\n", "initial");
     TestRepo { _temp: temp, repo }

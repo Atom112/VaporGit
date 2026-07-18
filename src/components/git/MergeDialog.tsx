@@ -2,7 +2,7 @@ import { Component, createSignal, createEffect, Show, For } from 'solid-js';
 import { mergeBranch, getBranchList } from '../../lib/tauriCommands';
 import { addToast } from '../../stores/toastStore';
 import { tt, ttf } from '../../i18n';
-import { describeError } from '../../lib/gitErrorDesc';
+import { describeError, describeErrorDetail } from '../../lib/gitErrorDesc';
 import type { BranchInfo } from '../../lib/types';
 
 interface Props {
@@ -37,7 +37,8 @@ const MergeDialog: Component<Props> = (props) => {
         setBranches(list.filter((b) => !b.isHead));
       })
       .catch((e) => {
-        addToast(`加载分支列表失败: ${describeError(e)}`, 'error');
+        const { message, detail } = describeErrorDetail(e);
+        addToast(`加载分支列表失败: ${message}`, 'error', detail);
       })
       .finally(() => setBranchesLoading(false));
   });
@@ -52,7 +53,8 @@ const MergeDialog: Component<Props> = (props) => {
       addToast(tt('repo.mergeSuccess'), 'success');
       props.onRefresh();
     } catch (e) {
-      addToast(ttf('repo.mergeFailed', describeError(e)), 'error');
+      const { message, detail } = describeErrorDetail(e);
+      addToast(ttf('repo.mergeFailed', message), 'error', detail);
       setResult(`错误: ${describeError(e)}`);
     } finally {
       setLoading(false);
