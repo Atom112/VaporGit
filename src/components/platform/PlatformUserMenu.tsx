@@ -72,7 +72,7 @@ const PlatformUserMenu: Component<PlatformUserMenuProps> = (props) => {
       </button>
 
       {open() && (
-        <div class="absolute right-0 top-full mt-1 w-52 p-2 rounded-xl bg-[#505054]/95 backdrop-blur-xl border border-white/15 shadow-2xl z-50 animate-context-menu-enter">
+        <div class="absolute right-0 top-full mt-1 w-52 p-2 rounded-xl bg-[#505054] border border-white/15 shadow-2xl z-50 animate-context-menu-enter">
           <div class="px-2 py-1.5 border-b border-white/10 mb-1">
             <p class="text-sm text-white font-medium truncate">{displayName()}</p>
             <p class="text-xs text-gray-400 truncate">{props.user.login}</p>

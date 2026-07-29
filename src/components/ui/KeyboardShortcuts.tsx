@@ -111,7 +111,7 @@ export default function KeyboardShortcuts(props: KeyboardShortcutsProps) {
   return (
     <Show when={showHelp()}>
       <div
-        class="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60"
         onClick={() => setShowHelp(false)}
       >
         <div

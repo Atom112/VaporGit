@@ -7,7 +7,7 @@ export default function ToastContainer() {
       <For each={toasts.items}>
         {(toast) => (
           <div
-            class={`px-4 py-3 rounded-xl shadow-lg backdrop-blur border text-sm font-medium cursor-pointer ${
+            class={`px-4 py-3 rounded-xl shadow-lg border text-sm font-medium cursor-pointer bg-[#3a3a3e]/90 ${
               toast.exiting ? 'animate-toast-out' : 'animate-toast-in'
             } ${
               toast.type === 'success'

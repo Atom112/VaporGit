@@ -205,7 +205,7 @@ const TutorialOverlay: Component = () => {
   return (
     <Show when={tutorialStore.active}>
       {/* Backdrop */}
-      <div class="fixed inset-0 z-[200] bg-black/30 backdrop-blur-[1px]" />
+      <div class="fixed inset-0 z-[200] bg-black/40" />
 
       {/* Highlight overlay (immune to parent overflow:hidden) */}
       <Show when={highlightBox()}>
