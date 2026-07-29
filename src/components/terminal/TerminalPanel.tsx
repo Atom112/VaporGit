@@ -2,7 +2,6 @@ import { Component, createEffect, createSignal, onCleanup, onMount } from 'solid
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { CanvasAddon } from '@xterm/addon-canvas';
 import '@xterm/xterm/css/xterm.css';
 import { resizeTerminal, writeTerminal } from '../../lib/tauriCommands';
 import { listen } from '@tauri-apps/api/event';
@@ -70,15 +69,11 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       fitSafely(fit);
     });
 
-    // Load WebGL renderer for GPU-accelerated terminal rendering; fall back to Canvas, then DOM
+    // Load WebGL renderer for GPU-accelerated terminal rendering; fall back to DOM renderer
     try {
       term.loadAddon(new WebglAddon());
     } catch {
-      try {
-        term.loadAddon(new CanvasAddon());
-      } catch {
-        // fall back to default DOM renderer
-      }
+      // fall back to default DOM renderer
     }
 
     // Listen for terminal data from backend
