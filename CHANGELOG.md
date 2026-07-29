@@ -1,5 +1,18 @@
 # Changelog / 已实现功能
 
+
+## v1.2.11 - 2026-07-29
+
+### Changed
+- Linux 性能优化：移除主窗口 `transparent: true` 恢复 WebKitGTK GPU 合成（帧率从 30-40 提升至 55-60 FPS）
+- 全局替换 `backdrop-filter: blur()` 为纯色背景（24 处），消除 WebKitGTK CPU 卷积模糊开销
+- 终端面板：集成 WebGL 渲染器（`@xterm/addon-webgl`），Canvas 渲染器作为回退，关闭 `allowTransparency`
+- 终端 ResizeObserver 增加 rAF 节流，消除 CSS 动画期间的布局抖动
+- 提交图悬停动画改为即时状态切换，移除 150ms rAF 循环导致的每帧画布重绘
+- 仓库面板拖拽 resize 增加 rAF 合并，减少 SolidJS store 更新频率
+- Diff 视图超过 500 行自动折叠，点击"显示全部"展开
+- 主内容区和 Canvas 元素添加 `will-change: transform` GPU 图层提示
+
 ## v1.2.10 - 2026-07-15
 
 ### Fixed
