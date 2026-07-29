@@ -1,7 +1,7 @@
 # Changelog / 已实现功能
 
 
-## v1.2.11 - 2026-07-29
+## v1.2.11 - 2026-07-30
 
 ### Changed
 - Linux 性能优化：移除主窗口 `transparent: true` 恢复 WebKitGTK GPU 合成（帧率从 30-40 提升至 55-60 FPS）
