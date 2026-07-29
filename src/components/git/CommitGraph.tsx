@@ -50,25 +50,10 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
     phase: 'enter' | 'exit';
   } | null>(null);
 
-  let hoverAnimId: number | null = null;
 
   function animateHover(targetProgress: number) {
-    if (hoverAnimId !== null) cancelAnimationFrame(hoverAnimId);
-    const start = hoverProgress();
-    const startTime = performance.now();
-    function tick() {
-      const elapsed = performance.now() - startTime;
-      const t = Math.min(elapsed / 150, 1);
-      const eased = 1 - (1 - t) * (1 - t);
-      setHoverProgress(start + (targetProgress - start) * eased);
-      if (t < 1) {
-        hoverAnimId = requestAnimationFrame(tick);
-      } else {
-        hoverAnimId = null;
-        if (targetProgress === 0) setHoveredNodeId(null);
-      }
-    }
-    hoverAnimId = requestAnimationFrame(tick);
+    setHoverProgress(targetProgress);
+    if (targetProgress === 0) setHoveredNodeId(null);
   }
 
   const maxLane = () => Math.max(...props.graphData.nodes.map((n) => n.lane), 0);
@@ -772,7 +757,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
                   el.style.top = `${top}px`;
                 });
               }}
-              class={`fixed min-w-56 py-1 rounded-xl bg-white/10 backdrop-blur-2xl border border-white/10 shadow-2xl text-sm overflow-hidden ${
+              class={`fixed min-w-56 py-1 rounded-xl bg-[#2a2a3e] border border-white/10 shadow-2xl text-sm overflow-hidden ${
                 menu().phase === 'enter'
                   ? 'animate-context-menu-enter'
                   : 'animate-context-menu-exit'
@@ -904,7 +889,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
 
     {/* ── Revert confirmation dialog ── */}
     <Show when={showRevert()}>
-      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
         <div class="w-96 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
           <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <h2 class="text-sm font-bold">{tt('commit.revert')}</h2>
@@ -944,7 +929,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
 
     {/* ── Reset confirmation dialog ── */}
     <Show when={showReset()}>
-      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
         <div class={`w-96 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
           showReset() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
         }`}>
@@ -987,7 +972,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
 
     {/* ── Tag creation dialog ── */}
     <Show when={showTag()}>
-      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
         <div class="w-96 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
           <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <h2 class="text-sm font-bold">{tt('commit.createTag')}</h2>
@@ -1037,7 +1022,7 @@ const CommitGraph: Component<CommitGraphProps> = (props) => {
 
     {/* ── Delete branch dialog ── */}
     <Show when={deleteBranchPhase() && deleteBranchTarget()}>
-      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
         <div class={`w-96 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
           deleteBranchPhase() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
         }`}>

@@ -1,6 +1,8 @@
 import { Component, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { CanvasAddon } from '@xterm/addon-canvas';
 import '@xterm/xterm/css/xterm.css';
 import { resizeTerminal, writeTerminal } from '../../lib/tauriCommands';
 import { listen } from '@tauri-apps/api/event';
@@ -19,7 +21,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
     cursorStyle: 'block',
     fontSize: 13,
     fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
-    allowTransparency: true,
+    allowTransparency: false,
     theme: {
       background: 'rgba(30, 30, 46, 0.3)',
       foreground: '#cdd6f4',
@@ -68,6 +70,17 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       fitSafely(fit);
     });
 
+    // Load WebGL renderer for GPU-accelerated terminal rendering; fall back to Canvas, then DOM
+    try {
+      term.loadAddon(new WebglAddon());
+    } catch {
+      try {
+        term.loadAddon(new CanvasAddon());
+      } catch {
+        // fall back to default DOM renderer
+      }
+    }
+
     // Listen for terminal data from backend
     const cleanupFns: (() => void)[] = [];
 
@@ -89,11 +102,17 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
       resizeTerminal(cols, rows).catch((e) => logTerminalError('Terminal resize failed', e));
     });
 
-    // Resize observer
+    // Resize observer — throttled with rAF to avoid layout thrashing during CSS animations
+    let fitPending = false;
     const ro = new ResizeObserver(() => {
-      fitSafely(fit);
+      if (!fitPending) {
+        fitPending = true;
+        requestAnimationFrame(() => {
+          fitPending = false;
+          fitSafely(fit);
+        });
+      }
     });
-    ro.observe(containerRef);
 
     onCleanup(() => {
       ro.disconnect();
@@ -123,9 +142,7 @@ const TerminalPanel: Component<TerminalPanelProps> = (props) => {
           opacity: 0,
           transform: 'translateY(100%)',
         } : {}),
-        background: 'rgba(30, 30, 46, 0.18)',
-        'backdrop-filter': 'blur(24px)',
-        '-webkit-backdrop-filter': 'blur(24px)',
+        background: 'linear-gradient(135deg, rgba(30, 30, 46, 0.85) 0%, rgba(30, 30, 46, 0.75) 100%)',
       }}
     >
       {/* Subtle gradient overlay for acrylic depth */}

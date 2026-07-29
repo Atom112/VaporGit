@@ -126,6 +126,7 @@ const Repository: Component = () => {
   const rightWidth = () => repositoryStore.panels.rightWidth;
   const setRightWidth = setRepositoryRightWidth;
   const [dragging, setDragging] = createSignal<boolean>(false);
+  let resizeRAF: number | null = null;
 
   createEffect(() => {
     if (!dragging()) return;
@@ -133,10 +134,14 @@ const Repository: Component = () => {
     document.body.classList.add('select-none');
 
     const onMouseMove = (e: MouseEvent) => {
-      const container = document.getElementById('main-content');
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      setRightWidth(Math.max(180, Math.min(500, rect.width - e.clientX)));
+      if (resizeRAF) return;
+      resizeRAF = requestAnimationFrame(() => {
+        resizeRAF = null;
+        const container = document.getElementById('main-content');
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        setRightWidth(Math.max(180, Math.min(500, rect.width - e.clientX)));
+      });
     };
 
     const onMouseUp = () => {
@@ -147,6 +152,7 @@ const Repository: Component = () => {
     document.addEventListener('mouseup', onMouseUp);
 
     onCleanup(() => {
+      if (resizeRAF) cancelAnimationFrame(resizeRAF);
       document.body.classList.remove('select-none');
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
@@ -833,7 +839,7 @@ const Repository: Component = () => {
             </div>
 
             <div
-              class={`p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm mb-6 text-center shrink-0 ${
+              class={`p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg mb-6 text-center shrink-0 ${
                 repoStore.loading ? 'opacity-50 pointer-events-none' : ''
               }`}
               onClick={handleOpenRepo}

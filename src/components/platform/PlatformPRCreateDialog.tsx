@@ -80,7 +80,7 @@ const PlatformPRCreateDialog: Component<PlatformPRCreateDialogProps> = (props) =
   };
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div class="w-110 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl animate-modal-enter">
         <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <h2 class="text-sm font-bold">{tt('pr.createTitle')}</h2>

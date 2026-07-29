@@ -62,7 +62,7 @@ const MergeDialog: Component<Props> = (props) => {
   };
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div class={`w-96 max-h-[80vh] flex flex-col rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
           phase() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
         }`}>
