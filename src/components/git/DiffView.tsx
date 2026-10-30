@@ -316,6 +316,7 @@ interface StageableViewProps {
 const UnifiedView: Component<StageableViewProps> = (props) => {
   const [stagingHunk, setStagingHunk] = createSignal<number | null>(null);
   const [stagingLine, setStagingLine] = createSignal<{ hunk: number; line: number } | null>(null);
+  const [diffExpanded, setDiffExpanded] = createSignal(false);
 
   const handleStageHunk = async (hunkIndex: number) => {
     if (!props.repoPath) return;
@@ -378,83 +379,96 @@ const UnifiedView: Component<StageableViewProps> = (props) => {
     return result;
   });
 
+  const totalRows = () => rows().length;
+  const COLLAPSE_THRESHOLD = 500;
+  const visibleRows = () => {
+    if (diffExpanded() || totalRows() <= COLLAPSE_THRESHOLD) return rows();
+    return rows().slice(0, 100);
+  };
+
   return (
     <div class="h-full overflow-auto">
-      <div class="min-w-[640px]">
-        <For each={rows()}>
-          {(row) => (
-                <Show
-                  when={row.type === 'line'}
-                  fallback={
-                    <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400 font-semibold flex items-center gap-2 group border-b border-white/5">
-                      <span class="flex-1">{(row as Extract<UnifiedRow, { type: 'hunk' }>).header}</span>
-                      <Show when={showStageButtons()}>
-                        <button
-                          class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                          onClick={() => handleStageHunk(row.hunkIndex)}
-                          disabled={stagingHunk() === row.hunkIndex}
-                        >
-                          {stagingHunk() === row.hunkIndex ? '...' : `+ ${tt('repo.stageHunk')}`}
-                        </button>
-                      </Show>
-                    </div>
-                  }
-                >
-                  {(() => {
-                    const lineRow = row as Extract<UnifiedRow, { type: 'line' }>;
-                    const line = props.diffResult.hunks[lineRow.hunkIndex]?.lines[lineRow.lineIndex];
-                    const nums = hunkLineNums()[lineRow.hunkIndex]?.[lineRow.lineIndex];
-                    const html = hunkHighlights()[lineRow.hunkIndex]?.[lineRow.lineIndex] ?? '';
-                    if (!line || !nums) return null;
-
-                    let bgClass = '';
-                    let prefix = ' ';
-                    let prefixColor = 'opacity-30';
-                    if (line.kind === 'addition') {
-                      bgClass = 'bg-green-500/10';
-                      prefix = '+';
-                      prefixColor = 'text-green-400';
-                    } else if (line.kind === 'deletion') {
-                      bgClass = 'bg-red-500/10';
-                      prefix = '-';
-                      prefixColor = 'text-red-400';
-                    }
-                    const isStagingLine = showStageButtons() && (line.kind === 'addition' || line.kind === 'deletion');
-
-                    return (
-                      <div class={`flex items-start ${bgClass} group/line border-b border-white/[0.02]`}>
-                        <Show when={isStagingLine}>
-                          <div class="w-4 shrink-0 flex items-start justify-center opacity-0 group-hover/line:opacity-100 transition-opacity pt-0.5">
-                            <button
-                              class="text-[10px] leading-none text-green-400 hover:text-green-300"
-                              onClick={() => handleStageLine(lineRow.hunkIndex, lineRow.lineIndex)}
-                              disabled={stagingLine()?.hunk === lineRow.hunkIndex && stagingLine()?.line === lineRow.lineIndex}
-                              title={tt('repo.stageLine')}
-                              aria-label={tt('repo.stageLine')}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </Show>
-                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0.5 tabular-nums leading-5">
-                          {nums.oldLine ?? ''}
-                        </div>
-                        <span class="opacity-25 select-none leading-5 py-0.5">│</span>
-                        <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0.5 tabular-nums leading-5">
-                          {nums.newLine ?? ''}
-                        </div>
-                        <span class="opacity-25 select-none leading-5 py-0.5 mx-1">│</span>
-                        <span class={`w-5 shrink-0 text-right select-none leading-5 py-0.5 ${prefixColor}`}>
-                          {prefix}
-                        </span>
-                        <span class="block min-w-0 flex-1 whitespace-pre-wrap break-words leading-5 py-0.5" style={wrapStyle} innerHTML={html} />
-                      </div>
-                    );
-                  })()}
+      <For each={visibleRows()}>
+        {(row) => (
+          <Show
+            when={row.type === 'line'}
+            fallback={
+              <div class="bg-white/5 px-3 py-1 text-xs text-cyan-400 font-semibold flex items-center gap-2 group border-b border-white/5">
+                <span class="flex-1">{(row as Extract<UnifiedRow, { type: 'hunk' }>).header}</span>
+                <Show when={showStageButtons()}>
+                  <button
+                    class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    onClick={() => handleStageHunk(row.hunkIndex)}
+                    disabled={stagingHunk() === row.hunkIndex}
+                  >
+                    {stagingHunk() === row.hunkIndex ? '...' : `+ ${tt('repo.stageHunk')}`}
+                  </button>
                 </Show>
-          )}
-        </For>
-      </div>
+              </div>
+            }
+          >
+            {(() => {
+              const lineRow = row as Extract<UnifiedRow, { type: 'line' }>;
+              const line = props.diffResult.hunks[lineRow.hunkIndex]?.lines[lineRow.lineIndex];
+              const nums = hunkLineNums()[lineRow.hunkIndex]?.[lineRow.lineIndex];
+              const html = hunkHighlights()[lineRow.hunkIndex]?.[lineRow.lineIndex] ?? '';
+              if (!line || !nums) return null;
+
+              let bgClass = '';
+              let prefix = ' ';
+              let prefixColor = 'opacity-30';
+              if (line.kind === 'addition') {
+                bgClass = 'bg-green-500/10';
+                prefix = '+';
+                prefixColor = 'text-green-400';
+              } else if (line.kind === 'deletion') {
+                bgClass = 'bg-red-500/10';
+                prefix = '-';
+                prefixColor = 'text-red-400';
+              }
+              const isStagingLine = showStageButtons() && (line.kind === 'addition' || line.kind === 'deletion');
+
+              return (
+                <div class={`flex items-start ${bgClass} group/line border-b border-white/[0.02]`}>
+                  <Show when={isStagingLine}>
+                    <div class="w-4 shrink-0 flex items-start justify-center opacity-0 group-hover/line:opacity-100 transition-opacity pt-0.5">
+                      <button
+                        class="text-[10px] leading-none text-green-400 hover:text-green-300"
+                        onClick={() => handleStageLine(lineRow.hunkIndex, lineRow.lineIndex)}
+                        disabled={stagingLine()?.hunk === lineRow.hunkIndex && stagingLine()?.line === lineRow.lineIndex}
+                        title={tt('repo.stageLine')}
+                        aria-label={tt('repo.stageLine')}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </Show>
+                  <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0.5 tabular-nums leading-5">
+                    {nums.oldLine ?? ''}
+                  </div>
+                  <span class="opacity-25 select-none leading-5 py-0.5">│</span>
+                  <div class="w-12 shrink-0 text-right text-xs opacity-35 select-none px-1 py-0.5 tabular-nums leading-5">
+                    {nums.newLine ?? ''}
+                  </div>
+                  <span class="opacity-25 select-none leading-5 py-0.5 mx-1">│</span>
+                  <span class={`w-5 shrink-0 text-right select-none leading-5 py-0.5 ${prefixColor}`}>
+                    {prefix}
+                  </span>
+                  <span class="block min-w-0 flex-1 whitespace-pre-wrap break-words leading-5 py-0.5" style={wrapStyle} innerHTML={html} />
+                </div>
+              );
+            })()}
+          </Show>
+        )}
+      </For>
+      <Show when={totalRows() > COLLAPSE_THRESHOLD && !diffExpanded()}>
+        <div
+          class="text-center py-2 text-xs opacity-50 cursor-pointer hover:opacity-80 border-t border-white/10"
+          onClick={() => setDiffExpanded(true)}
+        >
+          差异较大（共 {totalRows()} 行），点击显示全部
+        </div>
+      </Show>
     </div>
   );
 };

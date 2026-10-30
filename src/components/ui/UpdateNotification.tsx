@@ -70,7 +70,7 @@ export default function UpdateNotification() {
   return (
     <Show when={updateStore.available}>
       <div class="fixed bottom-4 left-4 z-100 max-w-sm animate-toast-in">
-        <div class="bg-amber-500/15 border border-amber-500/40 rounded-xl shadow-lg backdrop-blur p-4">
+        <div class="bg-amber-500/15 border border-amber-500/40 rounded-xl shadow-lg p-4">
           {/* Title */}
           <p class="text-sm font-medium text-amber-200">
             {updateStore.downloadPhase === 'installing'

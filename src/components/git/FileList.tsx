@@ -389,7 +389,7 @@ const FileList: Component<FileListProps> = (props) => {
 
       {/* Discard confirmation dialog */}
       <Show when={discardPhase() && discardTarget()}>
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div class={`w-80 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
             discardPhase() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
           }`}>

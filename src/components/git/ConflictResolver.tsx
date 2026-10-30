@@ -292,7 +292,7 @@ const ConflictResolver: Component<Props> = (props) => {
   });
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div class="w-[90vw] h-[85vh] flex flex-col rounded-xl bg-[#3a3a3e] border border-white/10 shadow-2xl">
         {/* Header */}
         <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">

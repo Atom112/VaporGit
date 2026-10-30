@@ -138,7 +138,7 @@ const Home: Component = () => {
 
           <div class="grid grid-cols-3 gap-4">
             <div
-              class={`p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm ${
+              class={`p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg ${
                 repoStore.loading ? 'opacity-50 pointer-events-none' : ''
               }`}
               onClick={handleOpenRepo}
@@ -150,7 +150,7 @@ const Home: Component = () => {
               </Show>
             </div>
             <div
-              class={`p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm ${
+              class={`p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg ${
                 repoStore.loading ? 'opacity-50 pointer-events-none' : ''
               }`}
               onClick={handleClone}
@@ -159,7 +159,7 @@ const Home: Component = () => {
               <p class="opacity-70 text-sm">{tt('home.cloneDesc')}</p>
             </div>
             <div
-              class={`p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg backdrop-blur-sm ${
+              class={`p-6 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg ${
                 repoStore.loading ? 'opacity-50 pointer-events-none' : ''
               }`}
               onClick={handleCreateOpen}
@@ -215,7 +215,7 @@ const Home: Component = () => {
 
       {/* Clone dialog */}
       <Show when={clonePhase() !== 'closed'}>
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div
             class={`w-110 rounded-xl bg-[#5a5a5e] border border-white/15 shadow-2xl ${
               clonePhase() === 'enter' ? 'animate-modal-enter' : 'animate-modal-exit'
